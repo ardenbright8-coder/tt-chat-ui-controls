@@ -1,30 +1,12 @@
 /*
- * 聊天显示控制 v1.4
+ * 聊天显示控制 v1.5
  * - 聊天正文颜色独立
  * - 聊天正文字体下拉
- * - 两款开源字体直接联网加载
+ * - 四款开源字体随扩展提供
  * - 背景图片模糊与 UI 毛玻璃分离
  */
 
-/*
- * 霞鹜文楷 GB / 霞鹜臻楷 GB
- * 均为 SIL OFL 1.1。许可证副本见 fonts/。
- */
-@font-face {
-    font-family: "TT LXGW WenKai GB";
-    src: url("https://cdn.jsdelivr.net/gh/lxgw/LxgwWenkaiGB@main/fonts/TTF/LXGWWenKaiGB-Regular.ttf") format("truetype");
-    font-style: normal;
-    font-weight: 400;
-    font-display: swap;
-}
-
-@font-face {
-    font-family: "TT LXGW ZhenKai GB";
-    src: url("https://github.com/lxgw/LxgwZhenKai/releases/download/v0.825/LXGWZhenKaiGB-Regular.ttf") format("truetype");
-    font-style: normal;
-    font-weight: 400;
-    font-display: swap;
-}
+/* Bundled OFL fonts are loaded on demand by index.js. See fonts/. */
 
 :root {
     --ChatTextColor: var(--SmartThemeBodyColor);
