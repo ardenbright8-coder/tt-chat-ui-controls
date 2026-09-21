@@ -1,0 +1,60 @@
+/*
+ * 聊天显示控制 v1.3
+ * 1) 聊天正文颜色与全局“主要文本”分离。
+ * 2) 新增聊天正文字体下拉选择，只影响消息正文。
+ * 3) 最底层背景图片模糊与聊天正文卡片 / UI 毛玻璃彻底分离。
+ */
+
+:root {
+    --ChatTextColor: var(--SmartThemeBodyColor);
+    --ChatTextFontFamily: inherit;
+    --BackgroundImageBlurPx: 0px;
+    --BackgroundImageScale: 1;
+}
+
+/* 只覆盖聊天消息正文普通文字。 */
+#chat .mes .mes_text {
+    color: var(--ChatTextColor, var(--SmartThemeBodyColor)) !important;
+    font-family: var(--ChatTextFontFamily, inherit) !important;
+}
+
+/* 最底层背景图片。 */
+#bg1 {
+    filter: blur(var(--BackgroundImageBlurPx, 0px)) !important;
+    transform: scale(var(--BackgroundImageScale, 1)) !important;
+    transform-origin: center center !important;
+    will-change: filter, transform;
+}
+
+/* 聊天阅读区保持清晰前景，不跟随 UI 模糊。 */
+#chat,
+#chat .mes {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+}
+
+/* 新增设置项沿用 SillyTavern / TauriTavern 原生布局。 */
+#chat-text-color-row,
+#chat-text-font-row {
+    align-items: center;
+}
+
+#chat-text-font-row {
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+#chat-text-font-row > span {
+    min-width: 7em;
+    user-select: none;
+}
+
+#chat-text-font-select {
+    flex: 1 1 12rem;
+    min-width: 0;
+}
+
+#chat-text-color-row > span,
+#background-image-blur-control small > span {
+    user-select: none;
+}
