@@ -5,6 +5,7 @@ const COLOR_PICKER_ID = 'chat-text-color-picker';
 
 const FONT_ROW_ID = 'chat-text-font-row';
 const FONT_SELECT_ID = 'chat-text-font-select';
+const FONT_HINT_ID = 'chat-text-font-hint';
 
 const BG_BLUR_CONTROL_ID = 'background-image-blur-control';
 const BG_BLUR_SLIDER_ID = 'background-image-blur-strength';
@@ -16,61 +17,31 @@ const BG_BLUR_CSS_VAR = '--BackgroundImageBlurPx';
 const BG_SCALE_CSS_VAR = '--BackgroundImageScale';
 
 const FONT_OPTIONS = [
-    {
-        value: 'theme',
-        label: '跟随主题（默认）',
-        family: 'inherit',
-    },
-    {
-        value: 'wenyuan',
-        label: '文渊宋体',
-        family: 'var(--mor-font-main, "WenYuan Serif SC"), "Noto Serif SC", serif',
-    },
-    {
-        value: 'noto-serif',
-        label: '思源宋体 / Noto Serif SC',
-        family: '"Noto Serif SC", "Source Han Serif SC", serif',
-    },
-    {
-        value: 'lxgw-wenkai',
-        label: '霞鹜文楷',
-        family: '"LXGW WenKai GB", "LXGW WenKai", KaiTi, serif',
-    },
-    {
-        value: 'stkaiti',
-        label: '华文楷体',
-        family: '"STKaiti", "华文楷体", KaiTi, serif',
-    },
-    {
-        value: 'fzkaiti',
-        label: '方正楷体简体',
-        family: '"方正楷体简体", "FZKai-Z03", KaiTi, serif',
-    },
-    {
-        value: 'fzxinkaiti',
-        label: '方正新楷体_GBK',
-        family: '"方正新楷体_GBK", "FZXinKai-Z03S", KaiTi, serif',
-    },
-    {
-        value: 'hanyi-shusong',
-        label: '汉仪书宋一简',
-        family: '"汉仪书宋一简", "HYShuSongYiJ", serif',
-    },
-    {
-        value: 'fz-beiwei',
-        label: '方正北魏楷书_GBK',
-        family: '"方正北魏楷书_GBK", "FZBeiWeiKaiShu-S19S", KaiTi, serif',
-    },
-    {
-        value: 'aa-yingluo',
-        label: 'Aa恋恋樱落',
-        family: '"Aa恋恋樱落", "AaLianlianyingluo", KaiTi, cursive',
-    },
-    {
-        value: 'hanyi-shikai',
-        label: '汉仪诗楷简',
-        family: '"汉仪诗楷简", "HanYSKJG", KaiTi, serif',
-    },
+    { value: 'theme', label: '跟随主题（默认）', family: 'inherit' },
+
+    // 扩展直接联网加载：开源字体
+    { value: 'lxgw-wenkai-gb', label: '霞鹜文楷 GB（内置）', family: '"TT LXGW WenKai GB", "LXGW WenKai GB", KaiTi, serif' },
+    { value: 'lxgw-zhenkai-gb', label: '霞鹜臻楷 GB（内置）', family: '"TT LXGW ZhenKai GB", "LXGW ZhenKai GB", KaiTi, serif' },
+
+    // 主题 / 常见系统字体
+    { value: 'wenyuan', label: '文渊宋体', family: 'var(--mor-font-main, "WenYuan Serif SC"), "Noto Serif SC", serif' },
+    { value: 'noto-serif', label: '思源宋体 / Noto Serif SC', family: '"Noto Serif SC", "Source Han Serif SC", serif' },
+    { value: 'stkaiti', label: '华文楷体', family: '"STKaiti", "华文楷体", KaiTi, serif' },
+
+    // 你指定的字体：若主题/系统中存在则直接使用
+    { value: 'aa-yingluo', label: 'Aa恋恋樱落', family: '"Aa恋恋樱落", "AaLianlianyingluo", KaiTi, cursive' },
+    { value: 'yingluo-shikai', label: '樱落诗楷', family: '"樱落诗楷", KaiTi, cursive' },
+    { value: 'hanyi-shikai', label: '汉仪诗楷简', family: '"汉仪诗楷简", "HanYSKJG", KaiTi, serif' },
+    { value: 'hanyi-shusong', label: '汉仪书宋一简', family: '"汉仪书宋一简", "HYShuSongYiJ", serif' },
+    { value: 'huakang-kaiti-w5', label: '华康楷体W5', family: '"华康楷体W5", "DFKai-SB", KaiTi, serif' },
+    { value: 'fzkaiti', label: '方正楷体简体', family: '"方正楷体简体", "FZKai-Z03", KaiTi, serif' },
+    { value: 'fzxinkaiti', label: '方正新楷体_GBK', family: '"方正新楷体_GBK", "FZXinKai-Z03S", KaiTi, serif' },
+    { value: 'fz-dabiaosong', label: '方正大标宋简体', family: '"方正大标宋简体", "FZDaBiaoSong-B06S", serif' },
+    { value: 'fz-cukai', label: '方正粗楷简体', family: '"方正粗楷简体", "FZCuKai-Z03S", KaiTi, serif' },
+    { value: 'fz-yaoti', label: '方正姚体_GBK', family: '"方正姚体_GBK", "FZYaoTi-M06S", serif' },
+    { value: 'fz-beiwei', label: '方正北魏楷书_GBK', family: '"方正北魏楷书_GBK", "FZBeiWeiKaiShu-S19S", KaiTi, serif' },
+    { value: 'lanmi-cukai', label: '兰米粗楷简体', family: '"兰米粗楷简体", KaiTi, serif' },
+    { value: 'sanjipu-song', label: '三级朴宋简体', family: '"三级朴宋简体", serif' },
 ];
 
 let retryTimer = null;
@@ -235,7 +206,7 @@ function mountFontSelector(state) {
     const row = document.createElement('div');
     row.id = FONT_ROW_ID;
     row.className = 'flex-container';
-    row.title = '只更换聊天消息正文的字体。若某个字体没有被主题、扩展或系统加载，会自动回退到后备字体。';
+    row.title = '只更换聊天消息正文的字体。标注“内置”的字体由扩展联网加载；其他字体需主题或系统本身已有。';
 
     const label = document.createElement('span');
     label.textContent = '聊天正文字体';
@@ -251,8 +222,17 @@ function mountFontSelector(state) {
         select.appendChild(element);
     }
 
+    const hint = document.createElement('small');
+    hint.id = FONT_HINT_ID;
+    hint.textContent = '“内置”字体可直接用；其余字体若设备没有，会自动回退。';
+
     select.value = applyFontPreset(settings.fontPreset);
-    row.append(label, select);
+
+    const right = document.createElement('div');
+    right.className = 'chat-font-select-stack';
+    right.append(select, hint);
+
+    row.append(label, right);
     colorRow.insertAdjacentElement('afterend', row);
 
     fontChangeHandler = () => {
