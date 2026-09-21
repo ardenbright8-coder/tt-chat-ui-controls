@@ -1,0 +1,82 @@
+name: Build bundled WOFF2 fonts
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/build-fonts.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-fonts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install font conversion tools
+        run: python -m pip install --disable-pip-version-check fonttools brotli
+
+      - name: Download official source fonts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/fontsrc fonts
+          curl -fL --retry 3 -o /tmp/fontsrc/wenkai.ttf "https://raw.githubusercontent.com/lxgw/LxgwWenkaiGB/6ceaf966f41aec8cae1e865167acc2bb7b5ae368/fonts/TTF/LXGWWenKaiGB-Regular.ttf"
+          curl -fL --retry 3 -o /tmp/fontsrc/zhenkai.ttf "https://github.com/lxgw/LxgwZhenKai/releases/download/v0.825/LXGWZhenKaiGB-Regular.ttf"
+          curl -fL --retry 3 -o /tmp/fontsrc/xiaolai.ttf "https://github.com/lxgw/kose-font/releases/download/v3.126/Xiaolai-Regular.ttf"
+          curl -fL --retry 3 -o /tmp/fontsrc/yozai.ttf "https://github.com/lxgw/yozai-font/releases/download/v0.868/Yozai-Regular.ttf"
+
+      - name: Convert TTF to WOFF2 without subsetting
+        shell: bash
+        run: |
+          python - <<'PY'
+          from fontTools.ttLib import TTFont
+          jobs = [
+              ("/tmp/fontsrc/wenkai.ttf", "fonts/wenkai.woff2"),
+              ("/tmp/fontsrc/zhenkai.ttf", "fonts/zhenkai.woff2"),
+              ("/tmp/fontsrc/xiaolai.ttf", "fonts/xiaolai.woff2"),
+              ("/tmp/fontsrc/yozai.ttf", "fonts/yozai.woff2"),
+          ]
+          for src, dst in jobs:
+              font = TTFont(src, recalcTimestamp=False)
+              font.flavor = "woff2"
+              font.save(dst)
+              print(dst)
+          PY
+          sha256sum fonts/wenkai.woff2 fonts/zhenkai.woff2 fonts/xiaolai.woff2 fonts/yozai.woff2 | tee fonts/SHA256SUMS.txt
+          ls -lh fonts/*.woff2
+
+      - name: Compare with supplied v1.5 hashes
+        shell: bash
+        continue-on-error: true
+        run: |
+          cat > /tmp/expected.sha256 <<'EOF'
+          f52151e964f61ab33ac936642871adfd4472652d49ce912ac71afb9a4a2ea033  fonts/wenkai.woff2
+          1a7a9b3bd22bf9b4ec2242527705a6a8c2b4f025b571ba2401a363f85817de2c  fonts/zhenkai.woff2
+          50e579bb80c7e8f5e3b4523232baac3bf83ae3b21cf8890a5137153f4677b50a  fonts/xiaolai.woff2
+          d29b56a65a8150006a5ab7cf9a1c979437e177f9704501914316d4b1c9952894  fonts/yozai.woff2
+          EOF
+          sha256sum -c /tmp/expected.sha256
+
+      - name: Commit bundled fonts
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add fonts/wenkai.woff2 fonts/zhenkai.woff2 fonts/xiaolai.woff2 fonts/yozai.woff2 fonts/SHA256SUMS.txt
+          if git diff --cached --quiet; then
+            echo "No font changes to commit."
+          else
+            git commit -m "Bundle four OFL WOFF2 fonts for v1.5 [skip ci]"
+            git push
+          fi
