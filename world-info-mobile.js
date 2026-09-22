@@ -13,6 +13,7 @@ let globalCleanup = [];
 let helpOverlay = null;
 let activeEntry = null;
 let listReturnState = null;
+let stopListRestore = null;
 const entryCleanup = new WeakMap();
 const entrySnapshots = new WeakMap();
 const movedNodes = new WeakMap();
@@ -224,46 +225,68 @@ function clearEntrySnapshot(entry) {
 }
 
 function rememberListReturn(entry, force = false) {
-    if (!list || !entry) return;
+    if (!list || !entry || activeEntry) return;
     if (listReturnState && !force) return;
+    stopListRestore?.();
 
+    // Mobile themes can scroll the outer popup, the list, or both.
+    const containers = [];
+    for (let node = list; node; node = node.parentElement) {
+        if (node === document.scrollingElement
+            || /(auto|scroll)/.test(getComputedStyle(node).overflowY)
+            || node.scrollTop !== 0) {
+            containers.push({ node, top: node.scrollTop });
+        }
+    }
     listReturnState = {
+        list,
         uid: entry.getAttribute('uid') ?? '',
-        scrollTop: list.scrollTop,
-        topOffset: entry.getBoundingClientRect().top - list.getBoundingClientRect().top,
+        top: entry.getBoundingClientRect().top,
+        containers,
     };
 }
 
 function restoreListReturn() {
     if (!list || !listReturnState) return;
-
     const state = listReturnState;
     listReturnState = null;
-
-    const restore = () => {
-        if (!list?.isConnected) return;
-
-        list.scrollTop = state.scrollTop;
-
-        if (!state.uid) return;
-        const safeUid = globalThis.CSS?.escape ? CSS.escape(state.uid) : state.uid.replace(/"/g, '\\"');
-        const entry = list.querySelector(`.world_entry[uid="${safeUid}"]`);
-        if (!entry) return;
-
-        const expectedTop = list.getBoundingClientRect().top + state.topOffset;
-        const currentTop = entry.getBoundingClientRect().top;
-        const delta = currentTop - expectedTop;
-
-        if (Math.abs(delta) > 2) {
-            list.scrollTop += delta;
+    stopListRestore?.();
+    let frame = null;
+    let cancelled = false;
+    const started = performance.now();
+    const stop = () => {
+        cancelled = true;
+        cancelAnimationFrame(frame);
+        for (const type of ['pointerdown', 'touchstart', 'wheel', 'keydown']) {
+            document.removeEventListener(type, stop, true);
         }
+        if (stopListRestore === stop) stopListRestore = null;
     };
+    stopListRestore = stop;
+    for (const type of ['pointerdown', 'touchstart', 'wheel', 'keydown']) {
+        document.addEventListener(type, stop, { capture: true, passive: true });
+    }
+    const restore = () => {
+        if (cancelled) return;
+        if (list !== state.list || !list.isConnected || activeEntry) return stop();
+        const entry = [...list.children].find(node => node.getAttribute('uid') === state.uid);
+        if (!entry) return stop();
 
-    // TauriTavern collapses the drawer and relayouts the list asynchronously.
-    // Restore more than once so a later reflow cannot throw the user back to the top.
-    requestAnimationFrame(() => requestAnimationFrame(restore));
-    globalThis.setTimeout(restore, 60);
-    globalThis.setTimeout(restore, 180);
+        for (const { node, top } of state.containers) {
+            if (node.isConnected) node.scrollTop = top;
+        }
+        // Anchor to the viewport, not the list: the outer popup may have moved.
+        for (const { node } of state.containers) {
+            if (!node.isConnected) continue;
+            const delta = entry.getBoundingClientRect().top - state.top;
+            if (Math.abs(delta) <= 1) break;
+            node.scrollTop += delta;
+        }
+        // Cover drawer animation and delayed textarea layout, but never fight user input.
+        if (performance.now() - started < 600) frame = requestAnimationFrame(restore);
+        else stop();
+    };
+    frame = requestAnimationFrame(restore);
 }
 
 
@@ -1068,6 +1091,7 @@ export function cleanupWorldInfoMobile() {
     if (!initialized) return;
     initialized = false;
     closeFieldHelp();
+    stopListRestore?.();
     activeEntry = null;
     listReturnState = null;
 
