@@ -1,4 +1,4 @@
-name: Build bundled WOFF2 fonts
+name: Build bundled fonts
 
 on:
   push:
@@ -17,68 +17,34 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install font conversion tools
-        run: python -m pip install --disable-pip-version-check fonttools brotli
-
-      - name: Download official source fonts
+      - name: Download v1.6 reading fonts
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p /tmp/fontsrc fonts
 
-          # Existing v1.5 fonts
-          curl -fL --retry 3 -o /tmp/fontsrc/wenkai.ttf "https://raw.githubusercontent.com/lxgw/LxgwWenkaiGB/6ceaf966f41aec8cae1e865167acc2bb7b5ae368/fonts/TTF/LXGWWenKaiGB-Regular.ttf"
-          curl -fL --retry 3 -o /tmp/fontsrc/zhenkai.ttf "https://github.com/lxgw/LxgwZhenKai/releases/download/v0.825/LXGWZhenKaiGB-Regular.ttf"
-          curl -fL --retry 3 -o /tmp/fontsrc/xiaolai.ttf "https://github.com/lxgw/kose-font/releases/download/v3.126/Xiaolai-Regular.ttf"
-          curl -fL --retry 3 -o /tmp/fontsrc/yozai.ttf "https://github.com/lxgw/yozai-font/releases/download/v0.868/Yozai-Regular.ttf"
-
-          # v1.6 reading fonts
-          curl -fL --retry 3 -o /tmp/fontsrc/sourcehanserif.otf "https://raw.githubusercontent.com/adobe-fonts/source-han-serif/release/SubsetOTF/CN/SourceHanSerifCN-Regular.otf"
-          curl -fL --retry 3 -o /tmp/fontsrc/wenjin.ttf "https://raw.githubusercontent.com/takushun-wu/WenJinMincho/main/ttf/WenJinMinchoP0-Regular.ttf"
-          curl -fL --retry 3 -o /tmp/fontsrc/qingsong.ttf "https://raw.githubusercontent.com/jasonhandwriting/JasonHandwriting/master/JasonHandwriting1.ttf"
+          # Keep the four v1.5 WOFF2 files already committed.
+          # Add four verified reading fonts in their original OpenType/TrueType format.
+          curl -fL --retry 3 -o fonts/sourcehanserif.otf "https://raw.githubusercontent.com/adobe-fonts/source-han-serif/release/SubsetOTF/CN/SourceHanSerifCN-Regular.otf"
+          curl -fL --retry 3 -o fonts/wenjin.ttf "https://raw.githubusercontent.com/takushun-wu/WenJinMincho/main/ttf/WenJinMinchoP0-Regular.ttf"
+          curl -fL --retry 3 -o fonts/qingsong.ttf "https://raw.githubusercontent.com/jasonhandwriting/JasonHandwriting/master/JasonHandwriting1.ttf"
           curl -fL --retry 3 -o /tmp/fontsrc/chilljinshu.zip "https://raw.githubusercontent.com/Warren2060/ChillJinshuSong/main/%E5%AF%92%E8%9D%89%E9%94%A6%E4%B9%A6%E5%AE%8BCC_v1.7/ChillJinshuSongCCRegular.otf.zip"
 
           python - <<'PY'
           from zipfile import ZipFile
           from pathlib import Path
-          z = Path("/tmp/fontsrc/chilljinshu.zip")
-          with ZipFile(z) as archive:
-              fonts = [n for n in archive.namelist() if n.lower().endswith((".otf", ".ttf"))]
-              if not fonts:
-                  raise SystemExit("No font found inside ChillJinshuSong archive")
-              data = archive.read(fonts[0])
-          Path("/tmp/fontsrc/chilljinshu.otf").write_bytes(data)
-          print("Extracted", fonts[0])
+          with ZipFile("/tmp/fontsrc/chilljinshu.zip") as archive:
+              candidates = [n for n in archive.namelist() if n.lower().endswith((".otf", ".ttf"))]
+              if not candidates:
+                  raise SystemExit("No font file found inside ChillJinshuSong archive")
+              name = candidates[0]
+              Path("fonts/chilljinshu.otf").write_bytes(archive.read(name))
+              print("Extracted:", name)
           PY
 
-      - name: Convert source fonts to WOFF2
-        shell: bash
-        run: |
-          python - <<'PY'
-          from fontTools.ttLib import TTFont
-          jobs = [
-              ("/tmp/fontsrc/sourcehanserif.otf", "fonts/sourcehanserif.woff2"),
-              ("/tmp/fontsrc/chilljinshu.otf", "fonts/chilljinshu.woff2"),
-              ("/tmp/fontsrc/wenjin.ttf", "fonts/wenjin.woff2"),
-              ("/tmp/fontsrc/wenkai.ttf", "fonts/wenkai.woff2"),
-              ("/tmp/fontsrc/zhenkai.ttf", "fonts/zhenkai.woff2"),
-              ("/tmp/fontsrc/qingsong.ttf", "fonts/qingsong.woff2"),
-              ("/tmp/fontsrc/xiaolai.ttf", "fonts/xiaolai.woff2"),
-              ("/tmp/fontsrc/yozai.ttf", "fonts/yozai.woff2"),
-          ]
-          for src, dst in jobs:
-              font = TTFont(src, recalcTimestamp=False)
-              font.flavor = "woff2"
-              font.save(dst)
-              print(dst)
-          PY
-          sha256sum fonts/*.woff2 | sort | tee fonts/SHA256SUMS.txt
-          ls -lh fonts/*.woff2
+          sha256sum             fonts/wenkai.woff2             fonts/zhenkai.woff2             fonts/xiaolai.woff2             fonts/yozai.woff2             fonts/sourcehanserif.otf             fonts/chilljinshu.otf             fonts/wenjin.ttf             fonts/qingsong.ttf | sort > fonts/SHA256SUMS.txt
+
+          ls -lh fonts/*.{woff2,otf,ttf} 2>/dev/null || true
 
       - name: Commit bundled fonts
         shell: bash
@@ -86,10 +52,10 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add fonts/*.woff2 fonts/SHA256SUMS.txt
+          git add             fonts/sourcehanserif.otf             fonts/chilljinshu.otf             fonts/wenjin.ttf             fonts/qingsong.ttf             fonts/SHA256SUMS.txt
           if git diff --cached --quiet; then
             echo "No font changes to commit."
           else
-            git commit -m "Bundle eight reading fonts for v1.6 [skip ci]"
+            git commit -m "Bundle four additional reading fonts for v1.6 [skip ci]"
             git push
           fi
