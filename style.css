@@ -1,5 +1,5 @@
 /*
- * 聊天显示控制 v1.8.5
+ * 聊天显示控制 v1.8.6
  * - 聊天正文颜色独立
  * - 聊天正文字体下拉
  * - 八款开源字体随扩展提供
@@ -1537,4 +1537,120 @@
     padding: 1px 4px;
     border-radius: 5px;
     background: rgba(255,255,255,.08);
+}
+
+
+/* v1.8.6 World Info navigation and edit-flow fixes */
+@media (pointer: coarse) {
+    /* Toolbar exists on every entry for reuse, but is visible only while editing that entry. */
+    #world_popup.tt-wi-mobile .tt-wi-entry-toolbar {
+        display: none !important;
+    }
+
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-active-entry > .tt-wi-entry-toolbar {
+        display: grid !important;
+    }
+
+    /* List-only action row must not leak into the edit page. */
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-active-entry .tt-wi-list-actions,
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-active-entry > .world_entry_form > .inline-drawer > .inline-drawer-header > .drag-handle {
+        display: none !important;
+    }
+
+    /* The title card stays at top; parameters are moved below content into 常用参数. */
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-active-entry
+        > .world_entry_form > .inline-drawer > .inline-drawer-header {
+        padding-bottom: 8px;
+    }
+
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-active-entry
+        .world_entry_thin_controls > .flex-container.alignitemscenter.wide100p {
+        display: block !important;
+    }
+
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-active-entry
+        .WIEntryTitleAndStatus {
+        display: flex !important;
+        flex-direction: column;
+        width: 100% !important;
+    }
+
+    #world_popup.tt-wi-mobile .tt-wi-common-header-controls {
+        display: grid !important;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        width: 100% !important;
+    }
+
+    #world_popup.tt-wi-mobile .tt-wi-common-header-controls > [name="PositionBlock"] {
+        grid-column: 1 / -1;
+    }
+
+    #world_popup.tt-wi-mobile .tt-wi-common-header-controls > .tt-wi-strategy-control {
+        grid-column: 1 / -1;
+    }
+
+    #world_popup.tt-wi-mobile .tt-wi-content-block {
+        order: 1;
+        margin-top: 0;
+    }
+
+    #world_popup.tt-wi-mobile .tt-wi-content-block textarea[name="content"] {
+        min-height: 46dvh !important;
+        max-height: none !important;
+    }
+
+    #world_popup.tt-wi-mobile .tt-wi-content-block .cm-editor,
+    #world_popup.tt-wi-mobile .tt-wi-content-block .CodeMirror {
+        min-height: 46dvh;
+        max-height: none;
+    }
+
+    #world_popup.tt-wi-mobile .tt-wi-common {
+        order: 2;
+    }
+
+    /* Bottom actions: official fields still autosave; Cancel restores the open-time snapshot. */
+    #world_popup.tt-wi-mobile .tt-wi-edit-actions {
+        position: sticky;
+        bottom: max(6px, env(safe-area-inset-bottom));
+        z-index: 45;
+        display: none;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        width: 100%;
+        padding: 8px 4px 2px;
+        box-sizing: border-box;
+        background: linear-gradient(
+            to top,
+            color-mix(in srgb, var(--SmartThemeBlurTintColor, rgba(40,40,40,.96)) 96%, transparent) 64%,
+            transparent
+        );
+    }
+
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-active-entry > .tt-wi-edit-actions {
+        display: grid;
+    }
+
+    #world_popup.tt-wi-mobile .tt-wi-edit-actions button {
+        min-height: 46px;
+        border: 1px solid var(--tt-wi-border);
+        border-radius: 13px;
+        font-size: 1em;
+        font-weight: 700;
+        color: inherit;
+    }
+
+    #world_popup.tt-wi-mobile .tt-wi-edit-cancel {
+        background: color-mix(in srgb, var(--SmartThemeBodyColor, #ddd) 8%, transparent);
+    }
+
+    #world_popup.tt-wi-mobile .tt-wi-edit-confirm {
+        background: linear-gradient(
+            135deg,
+            var(--tt-wi-accent),
+            color-mix(in srgb, var(--tt-wi-accent) 70%, #ff62c7)
+        );
+        color: white !important;
+    }
 }
