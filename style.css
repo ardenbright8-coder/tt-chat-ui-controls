@@ -1,5 +1,5 @@
 /*
- * 聊天显示控制 v1.8.1
+ * 聊天显示控制 v1.8.2
  * - 聊天正文颜色独立
  * - 聊天正文字体下拉
  * - 八款开源字体随扩展提供
@@ -1151,5 +1151,157 @@
         border-radius: 8px;
         background: var(--tt-wi-soft-bg);
         color: var(--tt-wi-accent);
+    }
+}
+
+
+/* v1.8.2 World Info title-space and depth-state fixes */
+@media (pointer: coarse) {
+    /*
+     * List cards: title owns the first row.
+     * Drag handle + four original action controls sit on a compact second row.
+     */
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-card:not(.tt-wi-active-entry)
+        > .world_entry_form > .inline-drawer > .inline-drawer-header {
+        display: grid !important;
+        grid-template-columns: 18px minmax(0, 1fr);
+        grid-template-areas:
+            'main main'
+            'drag actions';
+        align-items: center;
+        gap: 3px 6px;
+        min-height: 0;
+        padding: 6px 8px 7px;
+    }
+
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-card:not(.tt-wi-active-entry)
+        .world_entry_thin_controls {
+        grid-area: main;
+        display: grid !important;
+        grid-template-columns: minmax(0, 1fr) 16px;
+        align-items: center;
+        gap: 6px !important;
+        width: 100% !important;
+        min-width: 0;
+    }
+
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-card:not(.tt-wi-active-entry)
+        .world_entry_thin_controls > .flex-container.alignitemscenter.wide100p {
+        grid-column: 1;
+        grid-row: 1;
+        min-width: 0;
+        width: 100% !important;
+    }
+
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-card:not(.tt-wi-active-entry)
+        .world_entry_thin_controls > div[name="entryKillSwitch"] {
+        grid-column: 2;
+        grid-row: 1;
+        justify-self: end;
+        margin: 0 !important;
+    }
+
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-card:not(.tt-wi-active-entry)
+        .drag-handle {
+        grid-area: drag;
+        align-self: center;
+        justify-self: start;
+        margin: 0;
+        opacity: .38;
+        font-size: 15px;
+    }
+
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-card:not(.tt-wi-active-entry)
+        .tt-wi-list-actions {
+        grid-area: actions;
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 4px;
+        min-width: 0;
+        margin-left: auto;
+    }
+
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-card:not(.tt-wi-active-entry)
+        .tt-wi-list-actions > * {
+        flex: 0 0 auto;
+        margin: 0 !important;
+    }
+
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-card:not(.tt-wi-active-entry)
+        .tt-wi-list-actions .inline-drawer-toggle.inline-drawer-icon,
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-card:not(.tt-wi-active-entry)
+        .tt-wi-list-actions .move_entry_button,
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-card:not(.tt-wi-active-entry)
+        .tt-wi-list-actions .duplicate_entry_button,
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-card:not(.tt-wi-active-entry)
+        .tt-wi-list-actions .delete_entry_button {
+        display: inline-flex !important;
+        align-items: center;
+        justify-content: center;
+        width: 25px;
+        height: 25px;
+        min-width: 25px;
+        min-height: 25px;
+        padding: 0 !important;
+        border-radius: 7px;
+        font-size: 13px;
+        line-height: 1;
+    }
+
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-card:not(.tt-wi-active-entry)
+        .WIEntryTitleAndStatus {
+        width: 100% !important;
+        min-width: 0;
+    }
+
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-card:not(.tt-wi-active-entry)
+        .WIEntryTitleAndStatus > .flex-container.flex1 {
+        width: 100% !important;
+        min-width: 0;
+        flex: 1 1 auto !important;
+    }
+
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-card:not(.tt-wi-active-entry)
+        textarea[name="comment"] {
+        width: 100% !important;
+        max-width: none !important;
+        min-width: 0 !important;
+        margin: 0 !important;
+        padding: 2px 2px !important;
+        line-height: 1.32;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+    }
+
+    /*
+     * Official World Info semantics:
+     * depth only applies to @Depth positions. When the host disables/hides it,
+     * hide the whole card instead of leaving a dead empty box.
+     */
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-active-entry
+        .WIEnteryHeaderControls > .tt-wi-depth-inactive {
+        display: none !important;
+    }
+
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-active-entry
+        .WIEnteryHeaderControls > .world_entry_form_control:has(input[name="depth"]:not(:disabled)) {
+        display: flex !important;
+    }
+
+    /*
+     * With depth inactive: order + probability share a row, strategy gets a full row.
+     * With @Depth active: depth + order share a row, probability + strategy share next row.
+     */
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-active-entry
+        .WIEnteryHeaderControls > .tt-wi-strategy-control {
+        grid-column: 1 / -1;
+        min-height: 70px;
+    }
+
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-active-entry
+        .WIEnteryHeaderControls:has(input[name="depth"]:not(:disabled))
+        > .tt-wi-strategy-control {
+        grid-column: auto;
     }
 }
