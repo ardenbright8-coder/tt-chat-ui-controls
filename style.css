@@ -1,5 +1,5 @@
 /*
- * 聊天显示控制 v1.8.2
+ * 聊天显示控制 v1.8.3
  * - 聊天正文颜色独立
  * - 聊天正文字体下拉
  * - 八款开源字体随扩展提供
@@ -537,7 +537,7 @@
     }
 
     #world_popup.tt-wi-mobile .world_entry.tt-wi-active-entry .WIEnteryHeaderControls .world_entry_form_control:has(input[name="probability"]) > label::after {
-        content: '激活概率';
+        content: '激活概率（触发后生效率）';
         font-size: calc(var(--mainFontSize) * .82);
     }
 
@@ -1303,5 +1303,46 @@
         .WIEnteryHeaderControls:has(input[name="depth"]:not(:disabled))
         > .tt-wi-strategy-control {
         grid-column: auto;
+    }
+}
+
+
+/* v1.8.3 World Info field meaning labels */
+@media (pointer: coarse) {
+    /* Keep the official controls; only make the three ambiguous labels self-explanatory. */
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-active-entry
+        .tt-wi-order-control > label {
+        font-size: 0 !important;
+    }
+
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-active-entry
+        .tt-wi-order-control > label::after {
+        content: '顺序（插入优先级）';
+        font-size: calc(var(--mainFontSize) * .82);
+    }
+
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-active-entry
+        .tt-wi-probability-control > label {
+        font-size: 0 !important;
+    }
+
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-active-entry
+        .tt-wi-probability-control > label::after {
+        content: '激活概率（触发后生效率）';
+        font-size: calc(var(--mainFontSize) * .82);
+    }
+
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-active-entry
+        .tt-wi-strategy-label {
+        font-size: calc(var(--mainFontSize) * .82) !important;
+        opacity: .76;
+        white-space: nowrap;
+    }
+
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-active-entry
+        .tt-wi-field-note {
+        font-size: .92em;
+        opacity: .78;
+        font-weight: 400;
     }
 }
