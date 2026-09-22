@@ -294,6 +294,72 @@ function organizeEditor(entry, edit) {
 }
 
 
+
+function makeListActionBar(entry) {
+    if (entry.querySelector(':scope > form > .inline-drawer > .inline-drawer-header > .tt-wi-list-actions')) {
+        return;
+    }
+
+    const header = entry.querySelector(':scope > form > .inline-drawer > .inline-drawer-header');
+    const thin = header?.querySelector(':scope > .world_entry_thin_controls');
+    const toggle = thin?.querySelector(':scope > .inline-drawer-toggle.inline-drawer-icon');
+    const moveButton = header?.querySelector(':scope > .move_entry_button');
+    const duplicateButton = header?.querySelector(':scope > .duplicate_entry_button');
+    const deleteButton = header?.querySelector(':scope > .delete_entry_button');
+
+    if (!header || !toggle) return;
+
+    const actions = document.createElement('div');
+    actions.className = 'tt-wi-list-actions';
+
+    for (const node of [toggle, moveButton, duplicateButton, deleteButton]) {
+        if (!node) continue;
+        rememberMove(node);
+        actions.appendChild(node);
+    }
+
+    header.appendChild(actions);
+
+    const cleanup = entryCleanup.get(entry) ?? [];
+    cleanup.push(() => {
+        for (const node of [toggle, moveButton, duplicateButton, deleteButton]) {
+            if (node && movedNodes.has(node)) restoreMovedNode(node);
+        }
+        actions.remove();
+    });
+    entryCleanup.set(entry, cleanup);
+}
+
+function syncDepthControl(entry) {
+    const depthInput = entry.querySelector('input[name="depth"]');
+    const control = depthInput?.closest('.world_entry_form_control');
+    if (!depthInput || !control) return;
+
+    const hidden = depthInput.disabled || depthInput.style.visibility === 'hidden';
+    control.classList.toggle('tt-wi-depth-inactive', hidden);
+}
+
+function bindDepthVisibility(entry) {
+    if (entry.dataset.ttWiDepthBound === '1') {
+        syncDepthControl(entry);
+        return;
+    }
+
+    const position = entry.querySelector('select[name="position"]');
+    if (!position) return;
+
+    entry.dataset.ttWiDepthBound = '1';
+
+    const sync = () => requestAnimationFrame(() => syncDepthControl(entry));
+    const cleanup = entryCleanup.get(entry) ?? [];
+    cleanup.push(on(position, 'input', sync));
+    cleanup.push(on(position, 'change', sync));
+    cleanup.push(() => delete entry.dataset.ttWiDepthBound);
+    entryCleanup.set(entry, cleanup);
+
+    sync();
+}
+
 function decorateEntry(entry) {
     if (!(entry instanceof HTMLElement) || entry.dataset[WI_ENTRY_MARK] === '1') return;
     entry.dataset[WI_ENTRY_MARK] = '1';
@@ -327,6 +393,8 @@ function decorateEntry(entry) {
     }));
 
     entryCleanup.set(entry, cleanup);
+    makeListActionBar(entry);
+    bindDepthVisibility(entry);
     requestAnimationFrame(() => syncCardTitleHeight(entry));
 
     const edit = entry.querySelector('.world_entry_edit');
