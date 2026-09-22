@@ -45,6 +45,14 @@ let bgBlurCounterHandler = null;
 let originalBlurLabel = null;
 let originalBlurInfoTitle = null;
 
+let bgBlurSliderChangeHandler = null;
+let bgBlurCounterCommitHandler = null;
+let bgBlurCounterKeyHandler = null;
+let mobileTouchGuardCleanup = null;
+
+const MOBILE_GESTURE_THRESHOLD = 10;
+const MOBILE_SLIDER_DOMINANCE = 1.2;
+
 function getContext() {
     return globalThis.SillyTavern?.getContext?.() ?? null;
 }
@@ -166,6 +174,309 @@ function applyBackgroundImageBlur(value) {
     document.documentElement.style.setProperty(BG_SCALE_CSS_VAR, String(scale));
 
     return normalized;
+}
+
+function isCoarsePointerEnvironment() {
+    return globalThis.matchMedia?.('(pointer: coarse)')?.matches === true;
+}
+
+function installMobileTouchGuards() {
+    if (mobileTouchGuardCleanup || !isCoarsePointerEnvironment()) {
+        return;
+    }
+
+    const activeRanges = new Map();
+    const syntheticEvents = new WeakSet();
+    const clickRestore = new WeakMap();
+
+    let booleanMenu = null;
+    let booleanMenuCheckbox = null;
+    let booleanMenuTimer = null;
+
+    const dispatchSynthetic = (element, type) => {
+        const event = new Event(type, { bubbles: true });
+        syntheticEvents.add(event);
+        element.dispatchEvent(event);
+    };
+
+    const isTouchRange = (element) =>
+        element instanceof HTMLInputElement
+        && element.type === 'range'
+        && !element.disabled;
+
+    const isTouchBoolean = (element) =>
+        element instanceof HTMLInputElement
+        && element.type === 'checkbox'
+        && !element.disabled
+        && !element.closest('.tt-touch-bool-menu');
+
+    const decimalPlaces = (value) => {
+        const text = String(value);
+        const eIndex = text.toLowerCase().indexOf('e-');
+        if (eIndex >= 0) return Number(text.slice(eIndex + 2)) || 0;
+        const dot = text.indexOf('.');
+        return dot < 0 ? 0 : text.length - dot - 1;
+    };
+
+    const normalizeRangeValue = (slider, rawValue) => {
+        const min = Number(slider.min || 0);
+        const max = Number(slider.max || 100);
+        const finiteRaw = Number.isFinite(rawValue) ? rawValue : Number(slider.value);
+        const clamped = Math.min(max, Math.max(min, finiteRaw));
+
+        if (!slider.step || slider.step === 'any') {
+            return clamped;
+        }
+
+        const step = Number(slider.step);
+        if (!Number.isFinite(step) || step <= 0) {
+            return clamped;
+        }
+
+        const stepped = min + Math.round((clamped - min) / step) * step;
+        const precision = Math.min(12, Math.max(decimalPlaces(min), decimalPlaces(step)));
+        return Number(stepped.toFixed(precision));
+    };
+
+    const closeBooleanMenu = () => {
+        if (booleanMenuTimer !== null) {
+            globalThis.clearTimeout(booleanMenuTimer);
+            booleanMenuTimer = null;
+        }
+        booleanMenu?.remove();
+        booleanMenu = null;
+        booleanMenuCheckbox = null;
+    };
+
+    const positionBooleanMenu = (menu, checkbox) => {
+        const rect = checkbox.getBoundingClientRect();
+        const menuRect = menu.getBoundingClientRect();
+        const margin = 8;
+
+        let left = rect.left + rect.width / 2 - menuRect.width / 2;
+        left = Math.max(margin, Math.min(left, globalThis.innerWidth - menuRect.width - margin));
+
+        let top = rect.bottom + margin;
+        if (top + menuRect.height > globalThis.innerHeight - margin) {
+            top = Math.max(margin, rect.top - menuRect.height - margin);
+        }
+
+        menu.style.left = `${Math.round(left)}px`;
+        menu.style.top = `${Math.round(top)}px`;
+    };
+
+    const openBooleanMenu = (checkbox) => {
+        closeBooleanMenu();
+
+        const menu = document.createElement('div');
+        menu.className = 'tt-touch-bool-menu';
+        menu.setAttribute('role', 'dialog');
+        menu.setAttribute('aria-label', '选择开关状态');
+
+        const enable = document.createElement('button');
+        enable.type = 'button';
+        enable.className = 'tt-touch-bool-choice tt-touch-bool-on';
+        enable.title = '开启';
+        enable.setAttribute('aria-label', '开启');
+        enable.textContent = '●';
+
+        const disable = document.createElement('button');
+        disable.type = 'button';
+        disable.className = 'tt-touch-bool-choice tt-touch-bool-off';
+        disable.title = '关闭';
+        disable.setAttribute('aria-label', '关闭');
+        disable.textContent = '●';
+
+        const choose = (nextValue) => {
+            const changed = checkbox.checked !== nextValue;
+            checkbox.checked = nextValue;
+            closeBooleanMenu();
+
+            if (changed) {
+                dispatchSynthetic(checkbox, 'input');
+                dispatchSynthetic(checkbox, 'change');
+            }
+        };
+
+        enable.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            choose(true);
+        });
+
+        disable.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            choose(false);
+        });
+
+        menu.append(enable, disable);
+        document.body.appendChild(menu);
+        booleanMenu = menu;
+        booleanMenuCheckbox = checkbox;
+        positionBooleanMenu(menu, checkbox);
+
+        booleanMenuTimer = globalThis.setTimeout(closeBooleanMenu, 5000);
+    };
+
+    const onPointerDown = (event) => {
+        const target = event.target;
+
+        if (booleanMenu && !booleanMenu.contains(target) && target !== booleanMenuCheckbox) {
+            closeBooleanMenu();
+        }
+
+        if (!isTouchRange(target) || event.pointerType === 'mouse' || !event.isPrimary) {
+            return;
+        }
+
+        const startValue = Number(target.value);
+        activeRanges.set(event.pointerId, {
+            slider: target,
+            startX: event.clientX,
+            startY: event.clientY,
+            startValue,
+            currentValue: startValue,
+            mode: 'pending',
+        });
+    };
+
+    const onPointerMove = (event) => {
+        const state = activeRanges.get(event.pointerId);
+        if (!state) return;
+
+        const dx = event.clientX - state.startX;
+        const dy = event.clientY - state.startY;
+
+        if (state.mode === 'pending') {
+            if (Math.hypot(dx, dy) < MOBILE_GESTURE_THRESHOLD) {
+                state.slider.value = String(state.startValue);
+                return;
+            }
+
+            if (Math.abs(dx) > Math.abs(dy) * MOBILE_SLIDER_DOMINANCE) {
+                state.mode = 'slider';
+                state.slider.classList.add('tt-touch-slider-dragging');
+            } else {
+                state.mode = 'scroll';
+                state.slider.value = String(state.startValue);
+                return;
+            }
+        }
+
+        if (state.mode === 'scroll') {
+            state.slider.value = String(state.startValue);
+            return;
+        }
+
+        if (state.mode !== 'slider') return;
+
+        if (event.cancelable) {
+            event.preventDefault();
+        }
+
+        const rect = state.slider.getBoundingClientRect();
+        const width = Math.max(1, rect.width);
+        const min = Number(state.slider.min || 0);
+        const max = Number(state.slider.max || 100);
+        const span = max - min;
+        const direction = getComputedStyle(state.slider).direction === 'rtl' ? -1 : 1;
+        const next = normalizeRangeValue(
+            state.slider,
+            state.startValue + direction * (dx / width) * span,
+        );
+
+        state.currentValue = next;
+        state.slider.value = String(next);
+        dispatchSynthetic(state.slider, 'input');
+    };
+
+    const finishRangeGesture = (event, cancelled = false) => {
+        const state = activeRanges.get(event.pointerId);
+        if (!state) return;
+
+        activeRanges.delete(event.pointerId);
+        state.slider.classList.remove('tt-touch-slider-dragging');
+
+        if (!cancelled && state.mode === 'slider') {
+            state.slider.value = String(state.currentValue);
+            dispatchSynthetic(state.slider, 'change');
+            clickRestore.set(state.slider, {
+                value: state.currentValue,
+                until: performance.now() + 1000,
+            });
+        } else {
+            state.slider.value = String(state.startValue);
+            clickRestore.set(state.slider, {
+                value: state.startValue,
+                until: performance.now() + 1000,
+            });
+        }
+    };
+
+    const onPointerUp = (event) => finishRangeGesture(event, false);
+    const onPointerCancel = (event) => finishRangeGesture(event, true);
+
+    const onRangeInputCapture = (event) => {
+        if (syntheticEvents.has(event) || !isTouchRange(event.target)) {
+            return;
+        }
+
+        const state = [...activeRanges.values()].find((item) => item.slider === event.target);
+        if (!state) return;
+
+        event.stopImmediatePropagation();
+        event.target.value = String(state.mode === 'slider' ? state.currentValue : state.startValue);
+    };
+
+    const onRangeClickCapture = (event) => {
+        if (!isTouchRange(event.target) || !event.isTrusted) {
+            return;
+        }
+
+        const restore = clickRestore.get(event.target);
+        if (!restore || performance.now() > restore.until) {
+            return;
+        }
+
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        event.target.value = String(restore.value);
+    };
+
+    const onBooleanClickCapture = (event) => {
+        if (!isTouchBoolean(event.target) || !event.isTrusted) {
+            return;
+        }
+
+        event.preventDefault();
+        event.stopImmediatePropagation();
+
+        queueMicrotask(() => openBooleanMenu(event.target));
+    };
+
+    document.addEventListener('pointerdown', onPointerDown, true);
+    document.addEventListener('pointermove', onPointerMove, { capture: true, passive: false });
+    document.addEventListener('pointerup', onPointerUp, true);
+    document.addEventListener('pointercancel', onPointerCancel, true);
+    document.addEventListener('input', onRangeInputCapture, true);
+    document.addEventListener('click', onRangeClickCapture, true);
+    document.addEventListener('click', onBooleanClickCapture, true);
+
+    mobileTouchGuardCleanup = () => {
+        closeBooleanMenu();
+        activeRanges.clear();
+
+        document.removeEventListener('pointerdown', onPointerDown, true);
+        document.removeEventListener('pointermove', onPointerMove, true);
+        document.removeEventListener('pointerup', onPointerUp, true);
+        document.removeEventListener('pointercancel', onPointerCancel, true);
+        document.removeEventListener('input', onRangeInputCapture, true);
+        document.removeEventListener('click', onRangeClickCapture, true);
+        document.removeEventListener('click', onBooleanClickCapture, true);
+
+        mobileTouchGuardCleanup = null;
+    };
 }
 
 function mountColorPicker(state) {
@@ -347,23 +658,46 @@ function mountBackgroundBlurControl(state) {
     control.append(small, slider, counter);
     nativeControl.insertAdjacentElement('afterend', control);
 
-    const saveValue = (rawValue) => {
+    const previewValue = (rawValue) => {
         const value = applyBackgroundImageBlur(rawValue);
         slider.value = String(value);
         counter.value = String(value);
+        return value;
+    };
+
+    const commitValue = (rawValue) => {
+        const value = previewValue(rawValue);
         settings.backgroundImageBlurStrength = value;
         context.saveSettingsDebounced?.();
     };
 
-    bgBlurSliderHandler = () => saveValue(slider.value);
+    bgBlurSliderHandler = () => previewValue(slider.value);
+    bgBlurSliderChangeHandler = () => commitValue(slider.value);
+
     bgBlurCounterHandler = () => {
         if (counter.value === '') return;
-        saveValue(counter.value);
+        previewValue(counter.value);
+    };
+
+    bgBlurCounterCommitHandler = () => {
+        if (counter.value === '') {
+            counter.value = String(settings.backgroundImageBlurStrength);
+            return;
+        }
+        commitValue(counter.value);
+    };
+
+    bgBlurCounterKeyHandler = (event) => {
+        if (event.key === 'Enter') {
+            counter.blur();
+        }
     };
 
     slider.addEventListener('input', bgBlurSliderHandler);
+    slider.addEventListener('change', bgBlurSliderChangeHandler);
     counter.addEventListener('input', bgBlurCounterHandler);
-    counter.addEventListener('change', bgBlurCounterHandler);
+    counter.addEventListener('change', bgBlurCounterCommitHandler);
+    counter.addEventListener('keydown', bgBlurCounterKeyHandler);
 
     renameNativeBlurLabel();
     return true;
@@ -404,6 +738,7 @@ function startMountRetry() {
 
 export async function init() {
     startMessageBannerFix();
+    installMobileTouchGuards();
     if (initialized) {
         mountUi();
         return;
@@ -438,11 +773,21 @@ export async function cleanup() {
     if (slider && bgBlurSliderHandler) {
         slider.removeEventListener('input', bgBlurSliderHandler);
     }
+    if (slider && bgBlurSliderChangeHandler) {
+        slider.removeEventListener('change', bgBlurSliderChangeHandler);
+    }
 
     if (counter && bgBlurCounterHandler) {
         counter.removeEventListener('input', bgBlurCounterHandler);
-        counter.removeEventListener('change', bgBlurCounterHandler);
     }
+    if (counter && bgBlurCounterCommitHandler) {
+        counter.removeEventListener('change', bgBlurCounterCommitHandler);
+    }
+    if (counter && bgBlurCounterKeyHandler) {
+        counter.removeEventListener('keydown', bgBlurCounterKeyHandler);
+    }
+
+    mobileTouchGuardCleanup?.();
 
     const nativeSlider = document.getElementById('blur_strength');
     const nativeControl = nativeSlider?.closest('.alignitemscenter');
@@ -472,7 +817,10 @@ export async function cleanup() {
     colorChangeHandler = null;
     fontChangeHandler = null;
     bgBlurSliderHandler = null;
+    bgBlurSliderChangeHandler = null;
     bgBlurCounterHandler = null;
+    bgBlurCounterCommitHandler = null;
+    bgBlurCounterKeyHandler = null;
     originalBlurLabel = null;
     originalBlurInfoTitle = null;
     initialized = false;
