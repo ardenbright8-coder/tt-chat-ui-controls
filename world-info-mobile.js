@@ -128,7 +128,7 @@ function makeEntryToolbar(entry) {
             return;
         }
 
-        const toggle = entry.querySelector(':scope > form > .inline-drawer > .inline-drawer-header');
+        const toggle = entry.querySelector(':scope > form > .inline-drawer > .inline-drawer-header .inline-drawer-toggle');
         toggle?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     }));
 
