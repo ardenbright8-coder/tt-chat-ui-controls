@@ -185,9 +185,28 @@ function installMobileTouchGuards() {
         return;
     }
 
+    const LONG_PRESS_MS = 500;
+    const LONG_PRESS_MOVE_TOLERANCE = 10;
+
     const activeRanges = new Map();
-    const activeSwitches = new Map();
+    const activeHolds = new Map();
     const syntheticEvents = new WeakSet();
+
+    // Remove UI remnants from older builds if the extension was updated in-place.
+    document.querySelectorAll('.tt-touch-bool-menu, #user-settings-block .tt-touch-switch-visual')
+        .forEach((element) => element.remove());
+    document.querySelectorAll('#user-settings-block .tt-touch-switch-label')
+        .forEach((element) => element.classList.remove(
+            'tt-touch-switch-label',
+            'tt-touch-preview-on',
+            'tt-touch-preview-off',
+            'tt-touch-switch-dragging',
+        ));
+    document.querySelectorAll('#user-settings-block .tt-touch-switch-input')
+        .forEach((element) => {
+            element.classList.remove('tt-touch-switch-input');
+            delete element.dataset.ttTouchSwitch;
+        });
 
     const dispatchSynthetic = (element, type) => {
         const event = new Event(type, { bubbles: true });
@@ -200,55 +219,24 @@ function installMobileTouchGuards() {
         && element.type === 'range'
         && !element.disabled;
 
-    const resolveSettingsCheckbox = (target) => {
+    const settingsCheckboxFromTarget = (target) => {
         if (!(target instanceof Element)) return null;
-        if (target.closest('a, button, .right_menu_button, .fa-circle-info')) return null;
 
         const label = target.closest('#user-settings-block label.checkbox_label');
         if (!label) return null;
 
-        const direct = label.querySelector(':scope > input[type="checkbox"]');
-        if (!(direct instanceof HTMLInputElement) || direct.disabled || direct.classList.contains('displayNone')) {
+        const checkbox = label.querySelector(':scope > input[type="checkbox"]');
+        if (!(checkbox instanceof HTMLInputElement)
+            || checkbox.disabled
+            || checkbox.classList.contains('displayNone')) {
             return null;
         }
 
-        return { label, checkbox: direct };
+        return { label, checkbox };
     };
 
-    const decorateSettingsCheckboxes = (root = document) => {
-        const checkboxes = root.querySelectorAll?.(
-            '#user-settings-block label.checkbox_label > input[type="checkbox"]:not(.displayNone)',
-        ) ?? [];
-
-        for (const checkbox of checkboxes) {
-            if (!(checkbox instanceof HTMLInputElement) || checkbox.dataset.ttTouchSwitch === '1') {
-                continue;
-            }
-
-            const label = checkbox.closest('label.checkbox_label');
-            if (!label) continue;
-
-            checkbox.dataset.ttTouchSwitch = '1';
-            checkbox.classList.add('tt-touch-switch-input');
-            label.classList.add('tt-touch-switch-label');
-
-            const visual = document.createElement('span');
-            visual.className = 'tt-touch-switch-visual';
-            visual.setAttribute('aria-hidden', 'true');
-            checkbox.insertAdjacentElement('afterend', visual);
-        }
-    };
-
-    const undecorateSettingsCheckboxes = () => {
-        document.querySelectorAll('#user-settings-block .tt-touch-switch-visual').forEach((element) => element.remove());
-        document.querySelectorAll('#user-settings-block .tt-touch-switch-label').forEach((element) => {
-            element.classList.remove('tt-touch-switch-label', 'tt-touch-preview-on', 'tt-touch-preview-off', 'tt-touch-switch-dragging');
-        });
-        document.querySelectorAll('#user-settings-block .tt-touch-switch-input').forEach((element) => {
-            element.classList.remove('tt-touch-switch-input');
-            delete element.dataset.ttTouchSwitch;
-        });
-    };
+    const isCheckboxHit = (target, checkbox) =>
+        target === checkbox || target?.closest?.('input[type="checkbox"]') === checkbox;
 
     const decimalPlaces = (value) => {
         const text = String(value);
@@ -278,14 +266,63 @@ function installMobileTouchGuards() {
         return Number(stepped.toFixed(precision));
     };
 
-    const clearSwitchPreview = (state) => {
-        state.label.classList.remove('tt-touch-preview-on', 'tt-touch-preview-off', 'tt-touch-switch-dragging');
+    const clearHoldTimer = (state) => {
+        if (state?.timer !== null) {
+            globalThis.clearTimeout(state.timer);
+            state.timer = null;
+        }
     };
 
-    const previewSwitch = (state, nextValue) => {
-        state.label.classList.toggle('tt-touch-preview-on', nextValue);
-        state.label.classList.toggle('tt-touch-preview-off', !nextValue);
-        state.label.classList.add('tt-touch-switch-dragging');
+    const clearHoldFeedback = (state) => {
+        if (!state) return;
+        state.checkbox.classList.remove(
+            'tt-touch-hold-pending',
+            'tt-touch-hold-fired',
+            'tt-touch-hold-on',
+            'tt-touch-hold-off',
+        );
+        state.label.classList.remove('tt-touch-hold-label');
+    };
+
+    const startCheckboxHold = (event, label, checkbox) => {
+        const state = {
+            label,
+            checkbox,
+            startX: event.clientX,
+            startY: event.clientY,
+            startChecked: checkbox.checked,
+            fired: false,
+            moved: false,
+            timer: null,
+        };
+
+        checkbox.classList.add('tt-touch-hold-pending');
+        label.classList.add('tt-touch-hold-label');
+
+        state.timer = globalThis.setTimeout(() => {
+            if (state.moved || state.fired) return;
+
+            state.fired = true;
+            const nextChecked = !state.startChecked;
+            checkbox.checked = nextChecked;
+            checkbox.classList.remove('tt-touch-hold-pending');
+            checkbox.classList.add(
+                'tt-touch-hold-fired',
+                nextChecked ? 'tt-touch-hold-on' : 'tt-touch-hold-off',
+            );
+
+            dispatchSynthetic(checkbox, 'input');
+            dispatchSynthetic(checkbox, 'change');
+
+            // Optional light haptic feedback when the WebView exposes it.
+            try {
+                globalThis.navigator?.vibrate?.(18);
+            } catch {
+                // Ignore unsupported/blocked vibration.
+            }
+        }, LONG_PRESS_MS);
+
+        activeHolds.set(event.pointerId, state);
     };
 
     const onPointerDown = (event) => {
@@ -307,19 +344,12 @@ function installMobileTouchGuards() {
             return;
         }
 
-        const resolved = resolveSettingsCheckbox(event.target);
-        if (!resolved) return;
+        const resolved = settingsCheckboxFromTarget(event.target);
+        if (!resolved || !isCheckboxHit(event.target, resolved.checkbox)) {
+            return;
+        }
 
-        const { label, checkbox } = resolved;
-        activeSwitches.set(event.pointerId, {
-            label,
-            checkbox,
-            startX: event.clientX,
-            startY: event.clientY,
-            startChecked: checkbox.checked,
-            nextChecked: checkbox.checked,
-            mode: 'pending',
-        });
+        startCheckboxHold(event, resolved.label, resolved.checkbox);
     };
 
     const onPointerMove = (event) => {
@@ -370,38 +400,16 @@ function installMobileTouchGuards() {
             return;
         }
 
-        const switchState = activeSwitches.get(event.pointerId);
-        if (!switchState) return;
+        const holdState = activeHolds.get(event.pointerId);
+        if (!holdState || holdState.fired) return;
 
-        const dx = event.clientX - switchState.startX;
-        const dy = event.clientY - switchState.startY;
-
-        if (switchState.mode === 'pending') {
-            if (Math.hypot(dx, dy) < MOBILE_GESTURE_THRESHOLD) {
-                return;
-            }
-
-            if (Math.abs(dx) > Math.abs(dy) * MOBILE_SLIDER_DOMINANCE) {
-                switchState.mode = 'switch';
-            } else {
-                switchState.mode = 'scroll';
-                clearSwitchPreview(switchState);
-                return;
-            }
+        const dx = event.clientX - holdState.startX;
+        const dy = event.clientY - holdState.startY;
+        if (Math.hypot(dx, dy) > LONG_PRESS_MOVE_TOLERANCE) {
+            holdState.moved = true;
+            clearHoldTimer(holdState);
+            clearHoldFeedback(holdState);
         }
-
-        if (switchState.mode === 'scroll') {
-            clearSwitchPreview(switchState);
-            return;
-        }
-
-        if (switchState.mode !== 'switch') return;
-
-        if (event.cancelable) event.preventDefault();
-
-        // Right = ON, left = OFF. The checkbox itself is not changed until pointerup.
-        switchState.nextChecked = dx > 0;
-        previewSwitch(switchState, switchState.nextChecked);
     };
 
     const finishRangeGesture = (event, cancelled = false) => {
@@ -421,27 +429,19 @@ function installMobileTouchGuards() {
         return true;
     };
 
-    const finishSwitchGesture = (event, cancelled = false) => {
-        const state = activeSwitches.get(event.pointerId);
+    const finishCheckboxHold = (event) => {
+        const state = activeHolds.get(event.pointerId);
         if (!state) return false;
 
-        activeSwitches.delete(event.pointerId);
-        const dx = event.clientX - state.startX;
-        clearSwitchPreview(state);
+        activeHolds.delete(event.pointerId);
+        clearHoldTimer(state);
 
-        const commitDistance = 18;
-        if (cancelled || state.mode !== 'switch' || Math.abs(dx) < commitDistance) {
+        // Keep success feedback briefly after the long press fires.
+        if (state.fired) {
+            globalThis.setTimeout(() => clearHoldFeedback(state), 220);
+        } else {
             state.checkbox.checked = state.startChecked;
-            return true;
-        }
-
-        const nextChecked = dx > 0;
-        const changed = state.startChecked !== nextChecked;
-        state.checkbox.checked = nextChecked;
-
-        if (changed) {
-            dispatchSynthetic(state.checkbox, 'input');
-            dispatchSynthetic(state.checkbox, 'change');
+            clearHoldFeedback(state);
         }
 
         return true;
@@ -449,12 +449,12 @@ function installMobileTouchGuards() {
 
     const onPointerUp = (event) => {
         if (finishRangeGesture(event, false)) return;
-        finishSwitchGesture(event, false);
+        finishCheckboxHold(event);
     };
 
     const onPointerCancel = (event) => {
         if (finishRangeGesture(event, true)) return;
-        finishSwitchGesture(event, true);
+        finishCheckboxHold(event);
     };
 
     const onRangeInputCapture = (event) => {
@@ -470,29 +470,24 @@ function installMobileTouchGuards() {
     };
 
     const onSettingsCheckboxClickCapture = (event) => {
-        const resolved = resolveSettingsCheckbox(event.target);
+        const resolved = settingsCheckboxFromTarget(event.target);
         if (!resolved || !event.isTrusted || event.detail === 0) {
             return;
         }
 
-        // Pointer taps never toggle settings checkboxes on mobile.
-        // A deliberate horizontal swipe dispatches synthetic input/change instead.
+        // Mobile touch taps on settings checkboxes never change the value.
+        // Only a 500 ms stationary long press toggles and dispatches input/change.
         event.preventDefault();
         event.stopImmediatePropagation();
     };
 
-    decorateSettingsCheckboxes();
+    const onContextMenuCapture = (event) => {
+        const resolved = settingsCheckboxFromTarget(event.target);
+        if (!resolved || !isCheckboxHit(event.target, resolved.checkbox)) return;
 
-    const observer = new MutationObserver((records) => {
-        for (const record of records) {
-            for (const node of record.addedNodes) {
-                if (node instanceof Element) {
-                    decorateSettingsCheckboxes(node.matches('#user-settings-block') ? node : node);
-                }
-            }
-        }
-    });
-    observer.observe(document.body, { childList: true, subtree: true });
+        event.preventDefault();
+        event.stopImmediatePropagation();
+    };
 
     document.addEventListener('pointerdown', onPointerDown, true);
     document.addEventListener('pointermove', onPointerMove, { capture: true, passive: false });
@@ -500,12 +495,26 @@ function installMobileTouchGuards() {
     document.addEventListener('pointercancel', onPointerCancel, true);
     document.addEventListener('input', onRangeInputCapture, true);
     document.addEventListener('click', onSettingsCheckboxClickCapture, true);
+    document.addEventListener('contextmenu', onContextMenuCapture, true);
 
     mobileTouchGuardCleanup = () => {
+        for (const state of activeHolds.values()) {
+            clearHoldTimer(state);
+            clearHoldFeedback(state);
+        }
+
         activeRanges.clear();
-        activeSwitches.clear();
-        observer.disconnect();
-        undecorateSettingsCheckboxes();
+        activeHolds.clear();
+
+        document.querySelectorAll('#user-settings-block .tt-touch-hold-pending, #user-settings-block .tt-touch-hold-fired')
+            .forEach((element) => element.classList.remove(
+                'tt-touch-hold-pending',
+                'tt-touch-hold-fired',
+                'tt-touch-hold-on',
+                'tt-touch-hold-off',
+            ));
+        document.querySelectorAll('#user-settings-block .tt-touch-hold-label')
+            .forEach((element) => element.classList.remove('tt-touch-hold-label'));
 
         document.removeEventListener('pointerdown', onPointerDown, true);
         document.removeEventListener('pointermove', onPointerMove, true);
@@ -513,6 +522,7 @@ function installMobileTouchGuards() {
         document.removeEventListener('pointercancel', onPointerCancel, true);
         document.removeEventListener('input', onRangeInputCapture, true);
         document.removeEventListener('click', onSettingsCheckboxClickCapture, true);
+        document.removeEventListener('contextmenu', onContextMenuCapture, true);
 
         mobileTouchGuardCleanup = null;
     };
