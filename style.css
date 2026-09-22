@@ -1,5 +1,5 @@
 /*
- * 聊天显示控制 v1.8.0
+ * 聊天显示控制 v1.8.1
  * - 聊天正文颜色独立
  * - 聊天正文字体下拉
  * - 八款开源字体随扩展提供
@@ -889,5 +889,267 @@
 
     #world_popup.tt-wi-mobile.tt-wi-focus-mode .tt-wi-content-block .cm-scroller {
         overflow: auto;
+    }
+}
+
+
+/* v1.8.1 World Info mobile spacing refinements */
+@media (pointer: coarse) {
+    /* List cards: spend space on the title, not on empty gutters. */
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-card > .world_entry_form > .inline-drawer > .inline-drawer-header {
+        grid-template-columns: 14px minmax(0, 1fr) 24px 24px 24px;
+        column-gap: 4px;
+        min-height: 0;
+        padding: 6px 7px;
+    }
+
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-card .world_entry_thin_controls {
+        display: grid !important;
+        grid-template-columns: 16px minmax(0, 1fr) 24px;
+        align-items: center;
+        gap: 5px !important;
+        min-width: 0;
+    }
+
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-card .world_entry_thin_controls > div[name="entryKillSwitch"] {
+        grid-column: 1;
+        grid-row: 1;
+        justify-self: start;
+        margin: 0 !important;
+    }
+
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-card .world_entry_thin_controls > .flex-container.alignitemscenter.wide100p {
+        grid-column: 2;
+        grid-row: 1;
+        min-width: 0;
+        width: 100% !important;
+    }
+
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-card .world_entry_thin_controls > .inline-drawer-toggle.inline-drawer-icon {
+        grid-column: 3;
+        grid-row: 1;
+        justify-self: end;
+        margin: 0 !important;
+        width: 24px;
+        min-width: 24px;
+        text-align: center;
+    }
+
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-card .move_entry_button,
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-card .duplicate_entry_button,
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-card .delete_entry_button {
+        width: 24px;
+        height: 24px;
+        min-width: 24px;
+        min-height: 24px;
+        font-size: 13px;
+        border-radius: 7px;
+    }
+
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-card textarea[name="comment"] {
+        width: 100% !important;
+        min-width: 0;
+        min-height: 1.55em !important;
+        max-height: 3.15em !important;
+        padding: 2px 3px;
+        line-height: 1.35;
+        field-sizing: content;
+        overflow: hidden !important;
+        resize: none !important;
+        font-weight: 680;
+    }
+
+    /* Keep the list itself visually compact. */
+    #world_popup.tt-wi-mobile #world_popup_entries_list {
+        gap: 8px;
+    }
+
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-card {
+        border-radius: 12px;
+    }
+
+    #world_popup.tt-wi-mobile > .tt-wi-listbar {
+        gap: 6px;
+        padding: 8px;
+    }
+
+    #world_popup.tt-wi-mobile > .tt-wi-listbar #world_info_pagination {
+        margin-top: 0;
+    }
+
+    #world_popup.tt-wi-mobile #world_info_pagination .paginationjs {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        grid-template-areas:
+            'pages size'
+            'nav nav';
+        align-items: center;
+        gap: 4px 8px;
+        width: 100%;
+        min-height: 0;
+    }
+
+    #world_popup.tt-wi-mobile #world_info_pagination .paginationjs-pages {
+        grid-area: pages;
+        min-width: 0;
+    }
+
+    #world_popup.tt-wi-mobile #world_info_pagination .paginationjs-pages ul {
+        display: flex;
+        flex-wrap: nowrap;
+        align-items: center;
+        gap: 2px;
+        margin: 0;
+        padding: 0;
+    }
+
+    #world_popup.tt-wi-mobile #world_info_pagination .paginationjs-pages li a {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 28px;
+        min-height: 28px;
+        padding: 2px 5px;
+        line-height: 1;
+    }
+
+    #world_popup.tt-wi-mobile #world_info_pagination .paginationjs-size-changer {
+        grid-area: size;
+        margin: 0;
+    }
+
+    #world_popup.tt-wi-mobile #world_info_pagination .paginationjs-size-changer select {
+        height: 32px;
+        min-height: 32px;
+        padding: 2px 24px 2px 8px;
+    }
+
+    #world_popup.tt-wi-mobile #world_info_pagination .paginationjs-nav {
+        grid-area: nav;
+        width: auto;
+        margin: 0;
+        padding: 0 2px;
+        opacity: .72;
+        font-size: .82em;
+        line-height: 1.2;
+    }
+
+    /* Edit page: the title gets the full row. Strategy moves into the parameter grid. */
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-active-entry .WIEntryTitleAndStatus {
+        display: flex !important;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 5px;
+        width: 100%;
+        min-width: 0;
+    }
+
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-active-entry .WIEntryTitleAndStatus::before {
+        grid-column: auto;
+        width: 100%;
+        margin: 0;
+    }
+
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-active-entry textarea[name="comment"] {
+        width: 100% !important;
+        min-width: 0;
+        height: auto !important;
+        min-height: 46px !important;
+        max-height: 5.2em !important;
+        padding: 10px 12px;
+        box-sizing: border-box;
+        overflow-y: auto !important;
+    }
+
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-active-entry .world_entry_thin_controls {
+        display: flex !important;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 7px !important;
+        width: 100% !important;
+    }
+
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-active-entry .world_entry_thin_controls > .flex-container.alignitemscenter.wide100p {
+        display: flex !important;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 7px;
+        width: 100% !important;
+    }
+
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-active-entry .WIEnteryHeaderControls {
+        display: grid !important;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 7px;
+        width: 100%;
+    }
+
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-active-entry .WIEnteryHeaderControls > [name="PositionBlock"] {
+        grid-column: 1 / -1;
+    }
+
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-active-entry .WIEnteryHeaderControls > .tt-wi-strategy-control {
+        grid-column: auto;
+    }
+
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-active-entry .WIEnteryHeaderControls > .world_entry_form_control {
+        min-height: 76px;
+        padding: 7px 9px;
+    }
+
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-active-entry .WIEnteryHeaderControls > [name="PositionBlock"] {
+        min-height: 82px;
+    }
+
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-active-entry [name="PositionBlock"] select[name="position"] {
+        width: 100% !important;
+        min-width: 0 !important;
+        height: 42px;
+        font-size: .92em;
+    }
+
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-active-entry .tt-wi-strategy-control label {
+        font-size: .82em;
+        opacity: .68;
+    }
+
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-active-entry .tt-wi-strategy-control select[name="entryStateSelector"] {
+        display: block !important;
+        width: 100% !important;
+        min-width: 0 !important;
+        height: 42px;
+        margin: 0 !important;
+        padding: 0 8px;
+        border-radius: 8px;
+        font-size: 1em;
+    }
+
+    /* The edit toolbar is now just back + title. The content's own maximize icon stays with the content. */
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-active-entry > .tt-wi-entry-toolbar {
+        grid-template-columns: 40px minmax(0, 1fr);
+        min-height: 44px;
+        margin-bottom: 6px;
+        padding: 5px 6px;
+    }
+
+    #world_popup.tt-wi-mobile .tt-wi-entry-toolbar-title {
+        text-align: left;
+        padding-right: 4px;
+    }
+
+    #world_popup.tt-wi-mobile .tt-wi-focus-toggle {
+        display: none !important;
+    }
+
+    #world_popup.tt-wi-mobile .tt-wi-content-block .editor_maximize {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 30px;
+        min-height: 30px;
+        margin-left: 4px;
+        border-radius: 8px;
+        background: var(--tt-wi-soft-bg);
+        color: var(--tt-wi-accent);
     }
 }
