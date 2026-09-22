@@ -1,5 +1,5 @@
 /*
- * 聊天显示控制 v1.7.1
+ * 聊天显示控制 v1.7.2
  * - 聊天正文颜色独立
  * - 聊天正文字体下拉
  * - 八款开源字体随扩展提供
@@ -83,84 +83,33 @@
     }
 
     /*
-     * User Settings checkboxes become obvious swipe switches on touch devices.
-     * Tap / light touch does nothing; right swipe = ON, left swipe = OFF.
+     * Settings checkboxes: tap does nothing.
+     * Hold the actual checkbox for 500 ms without moving >10px to toggle.
      */
-    #user-settings-block label.checkbox_label.tt-touch-switch-label {
+    #user-settings-block label.checkbox_label > input[type="checkbox"]:not(.displayNone) {
         touch-action: pan-y;
-        align-items: center;
-        min-height: 34px;
+        transition: transform 100ms ease, box-shadow 100ms ease, filter 100ms ease;
     }
 
-    #user-settings-block .tt-touch-switch-input {
-        position: absolute !important;
-        width: 1px !important;
-        height: 1px !important;
-        min-width: 1px !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        opacity: 0 !important;
-        pointer-events: none !important;
+    #user-settings-block label.checkbox_label > input[type="checkbox"].tt-touch-hold-pending {
+        transform: scale(1.12);
+        box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.22);
     }
 
-    #user-settings-block .tt-touch-switch-visual {
-        position: relative;
-        display: inline-block;
-        flex: 0 0 46px;
-        width: 46px;
-        height: 26px;
-        margin: 0 8px 0 0;
-        box-sizing: border-box;
-        border: 1px solid rgba(255, 255, 255, 0.32);
-        border-radius: 999px;
-        background: rgba(90, 90, 90, 0.72);
-        box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25);
-        transition: background 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
-        vertical-align: middle;
+    #user-settings-block label.checkbox_label > input[type="checkbox"].tt-touch-hold-fired.tt-touch-hold-on {
+        transform: scale(1.16);
+        box-shadow: 0 0 0 4px rgba(46, 213, 98, 0.42);
+        filter: brightness(1.15);
     }
 
-    #user-settings-block .tt-touch-switch-visual::after {
-        content: '';
-        position: absolute;
-        top: 3px;
-        left: 3px;
-        width: 18px;
-        height: 18px;
-        border-radius: 50%;
-        background: rgba(245, 245, 245, 0.98);
-        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
-        transform: translateX(0);
-        transition: transform 120ms ease;
+    #user-settings-block label.checkbox_label > input[type="checkbox"].tt-touch-hold-fired.tt-touch-hold-off {
+        transform: scale(1.16);
+        box-shadow: 0 0 0 4px rgba(255, 92, 92, 0.42);
+        filter: brightness(1.05);
     }
 
-    #user-settings-block .tt-touch-switch-input:checked + .tt-touch-switch-visual,
-    #user-settings-block .tt-touch-switch-label.tt-touch-preview-on .tt-touch-switch-visual {
-        border-color: rgba(73, 214, 108, 0.95);
-        background: rgba(40, 185, 78, 0.88);
-    }
-
-    #user-settings-block .tt-touch-switch-input:checked + .tt-touch-switch-visual::after,
-    #user-settings-block .tt-touch-switch-label.tt-touch-preview-on .tt-touch-switch-visual::after {
-        transform: translateX(20px);
-    }
-
-    #user-settings-block .tt-touch-switch-label.tt-touch-preview-off .tt-touch-switch-visual {
-        border-color: rgba(255, 255, 255, 0.32);
-        background: rgba(90, 90, 90, 0.72);
-    }
-
-    #user-settings-block .tt-touch-switch-label.tt-touch-preview-off .tt-touch-switch-visual::after {
-        transform: translateX(0);
-    }
-
-    #user-settings-block .tt-touch-switch-label.tt-touch-switch-dragging .tt-touch-switch-visual {
-        box-shadow:
-            0 0 0 3px rgba(255, 255, 255, 0.12),
-            inset 0 1px 2px rgba(0, 0, 0, 0.25);
-    }
-
-    #user-settings-block .tt-touch-switch-input:focus-visible + .tt-touch-switch-visual {
-        outline: 2px solid rgba(255, 255, 255, 0.85);
-        outline-offset: 2px;
+    #user-settings-block label.checkbox_label.tt-touch-hold-label {
+        -webkit-user-select: none;
+        user-select: none;
     }
 }
