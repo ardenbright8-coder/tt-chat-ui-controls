@@ -1,3 +1,5 @@
+import { initWorldInfoMobile, cleanupWorldInfoMobile } from './world-info-mobile.js';
+
 const EXTENSION_KEY = 'chat-text-color';
 
 const COLOR_ROW_ID = 'chat-text-color-row';
@@ -788,6 +790,7 @@ function startMountRetry() {
 export async function init() {
     startMessageBannerFix();
     installMobileTouchGuards();
+    initWorldInfoMobile();
     if (initialized) {
         mountUi();
         return;
@@ -837,6 +840,7 @@ export async function cleanup() {
     }
 
     mobileTouchGuardCleanup?.();
+    cleanupWorldInfoMobile();
 
     const nativeSlider = document.getElementById('blur_strength');
     const nativeControl = nativeSlider?.closest('.alignitemscenter');
