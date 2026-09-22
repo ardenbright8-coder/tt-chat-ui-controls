@@ -1,5 +1,5 @@
 /*
- * 聊天显示控制 v1.8.3
+ * 聊天显示控制 v1.8.4
  * - 聊天正文颜色独立
  * - 聊天正文字体下拉
  * - 八款开源字体随扩展提供
@@ -1344,5 +1344,25 @@
         font-size: .92em;
         opacity: .78;
         font-weight: 400;
+    }
+}
+
+
+/* v1.8.4 World Info strategy selector labels */
+@media (pointer: coarse) {
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-active-entry
+        .tt-wi-strategy-control select[name="entryStateSelector"] {
+        width: 100% !important;
+        min-width: 0 !important;
+        min-height: 46px;
+        padding: 0 34px 0 12px;
+        font-size: .94em;
+        font-weight: 650;
+        text-overflow: ellipsis;
+    }
+
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-active-entry
+        .tt-wi-strategy-control {
+        min-height: 82px;
     }
 }
