@@ -395,6 +395,7 @@ function startMountRetry() {
 }
 
 export async function init() {
+    startMessageBannerFix();
     if (initialized) {
         mountUi();
         return;
@@ -405,6 +406,7 @@ export async function init() {
 }
 
 export async function cleanup() {
+    stopMessageBannerFix?.();
     fontRequest += 1; // Ignore any in-flight font completion after disable.
     fontLoads.clear();
     if (retryTimer !== null) {
@@ -467,3 +469,123 @@ export async function cleanup() {
     originalBlurInfoTitle = null;
     initialized = false;
 }
+
+
+// Message banners: use each message's original portrait and disable avatar zoom.
+let stopMessageBannerFix = null;
+
+function bannerOriginalUrl(source, base = document.baseURI) {
+    try {
+        const url = new URL(source, base);
+        if (url.origin !== new URL(base).origin || !url.pathname.endsWith('/thumbnail')) return null;
+        const type = url.searchParams.get('type');
+        const file = url.searchParams.get('file');
+        if (!file || /[/\\\\]/.test(file) || !['avatar', 'persona'].includes(type)) return null;
+        const directory = type === 'avatar' ? 'characters/' : 'User%20Avatars/';
+        const prefix = url.pathname.slice(0, -'thumbnail'.length);
+        const result = new URL(prefix + directory + encodeURIComponent(file), url);
+        if (url.searchParams.has('t')) result.searchParams.set('t', url.searchParams.get('t'));
+        return result.href;
+    } catch {
+        return null;
+    }
+}
+
+function startMessageBannerFix() {
+    if (stopMessageBannerFix) return;
+    const selector = '#chat .mes > .mesAvatarWrapper > .avatar > img';
+    const originals = new WeakMap();
+    const pending = new WeakMap();
+    const probes = new Set();
+    let active = true;
+    let chat = null;
+
+    const style = document.createElement('style');
+    style.textContent = `
+#chat .mes > .mesAvatarWrapper > .avatar,
+#chat .mes > .mesAvatarWrapper > .avatar * {
+    pointer-events: none !important;
+    cursor: default !important;
+}`;
+    document.head.append(style);
+
+    // Capture also blocks programmatic DOM clicks before the native delegated handler.
+    const blockZoom = (event) => {
+        if (event.target?.closest?.('#chat .mes > .mesAvatarWrapper > .avatar')) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+        }
+    };
+    document.addEventListener('click', blockZoom, true);
+
+    const upgrade = (img) => {
+        if (!active || !img.matches(selector)) return;
+        const source = img.getAttribute('src');
+        const target = source && bannerOriginalUrl(source);
+        if (!target || pending.get(img) === source) return;
+        pending.set(img, source);
+        const probe = new Image();
+        probes.add(probe);
+        const finish = () => {
+            probes.delete(probe);
+            probe.onload = probe.onerror = null;
+        };
+        probe.onload = () => {
+            if (active && img.isConnected && img.matches(selector)
+                && img.getAttribute('src') === source && probe.naturalWidth > 0) {
+                originals.set(img, { source, target });
+                img.setAttribute('src', target);
+            }
+            finish();
+        };
+        // Keep the working thumbnail if the original is unavailable.
+        probe.onerror = finish;
+        probe.src = target;
+    };
+    const scan = (node) => {
+        if (node.nodeType !== 1) return;
+        if (node.matches(selector)) upgrade(node);
+        // Streaming text cannot contain the direct avatar wrapper.
+        if (node.closest('.mes_text')) return;
+        node.querySelectorAll(selector).forEach(upgrade);
+    };
+    const observer = new MutationObserver((records) => {
+        if (!chat) {
+            attach();
+            return;
+        }
+        for (const record of records) {
+            if (record.type === 'attributes') upgrade(record.target);
+            else record.addedNodes.forEach(scan);
+        }
+    });
+    const attach = () => {
+        chat = document.getElementById('chat');
+        if (!chat) return;
+        observer.disconnect();
+        observer.observe(chat, { subtree: true, childList: true, attributes: true, attributeFilter: ['src'] });
+        scan(chat);
+    };
+    attach();
+    if (!chat) observer.observe(document.body, { childList: true, subtree: true });
+
+    stopMessageBannerFix = () => {
+        active = false;
+        observer.disconnect();
+        document.removeEventListener('click', blockZoom, true);
+        style.remove();
+        for (const probe of probes) {
+            probe.onload = probe.onerror = null;
+            probe.removeAttribute('src');
+        }
+        probes.clear();
+        document.querySelectorAll(selector).forEach((img) => {
+            const original = originals.get(img);
+            if (original && img.getAttribute('src') === original.target) {
+                img.setAttribute('src', original.source);
+            }
+        });
+        stopMessageBannerFix = null;
+    };
+}
+
