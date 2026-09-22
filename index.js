@@ -20,14 +20,14 @@ const FONT_OPTIONS = [
     { value: 'theme', label: '跟随主题（默认）', family: 'inherit' },
 
     // 常用阅读 / 宋体
-    { value: 'source-han-serif', file: 'sourcehanserif.woff2', label: '思源宋体（常用阅读）', face: 'TT Source Han Serif CN', family: '"TT Source Han Serif CN", serif' },
-    { value: 'chill-jinshu-song', file: 'chilljinshu.woff2', label: '寒蝉锦书宋（温润宋体）', face: 'TT Chill Jinshu Song', family: '"TT Chill Jinshu Song", serif' },
-    { value: 'wenjin-mincho', file: 'wenjin.woff2', label: '文津宋体（古典正文）', face: 'TT WenJin Mincho', family: '"TT WenJin Mincho", serif' },
+    { value: 'source-han-serif', file: 'sourcehanserif.otf', format: 'opentype', label: '思源宋体（常用阅读）', face: 'TT Source Han Serif CN', family: '"TT Source Han Serif CN", serif' },
+    { value: 'chill-jinshu-song', file: 'chilljinshu.otf', format: 'opentype', label: '寒蝉锦书宋（温润宋体）', face: 'TT Chill Jinshu Song', family: '"TT Chill Jinshu Song", serif' },
+    { value: 'wenjin-mincho', file: 'wenjin.ttf', format: 'truetype', label: '文津宋体（古典正文）', face: 'TT WenJin Mincho', family: '"TT WenJin Mincho", serif' },
 
     // 楷 / 手写阅读
     { value: 'lxgw-wenkai-gb', file: 'wenkai.woff2', label: '霞鹜文楷 GB（舒展）', face: 'TT LXGW WenKai GB', family: '"TT LXGW WenKai GB", serif' },
     { value: 'lxgw-zhenkai-gb', file: 'zhenkai.woff2', label: '霞鹜臻楷 GB（较厚实）', face: 'TT LXGW ZhenKai GB', family: '"TT LXGW ZhenKai GB", serif' },
-    { value: 'qingsong-handwriting', file: 'qingsong.woff2', label: '清松手写体1（圆润）', face: 'TT Qingsong Handwriting', family: '"TT Qingsong Handwriting", cursive' },
+    { value: 'qingsong-handwriting', file: 'qingsong.ttf', format: 'truetype', label: '清松手写体1（圆润）', face: 'TT Qingsong Handwriting', family: '"TT Qingsong Handwriting", cursive' },
     { value: 'xiaolai', file: 'xiaolai.woff2', label: '小赖字体（圆润手写）', face: 'TT Xiaolai', family: '"TT Xiaolai", sans-serif' },
     { value: 'yozai', file: 'yozai.woff2', label: '悠哉字体（轻松手写）', face: 'TT Yozai', family: '"TT Yozai", serif' },
 ];
@@ -136,7 +136,7 @@ function applyFontPreset(value) {
         const promise = Promise.resolve().then(() => {
             if (!globalThis.FontFace || !document.fonts) throw new Error('Font loading API unavailable');
             const url = new URL(`./fonts/${option.file}`, import.meta.url);
-            const face = new FontFace(option.face, `url("${url.href}") format("woff2")`, { style: 'normal', weight: '400' });
+            const face = new FontFace(option.face, `url("${url.href}") format("${option.format || 'woff2'}")`, { style: 'normal', weight: '400' });
             return face.load();
         }).then((face) => {
             document.fonts.add(face);
