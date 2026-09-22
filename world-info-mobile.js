@@ -6,6 +6,7 @@ let popup = null;
 let list = null;
 let initialized = false;
 let globalCleanup = [];
+let helpOverlay = null;
 const entryCleanup = new WeakMap();
 const movedNodes = new WeakMap();
 
@@ -213,6 +214,246 @@ function moveRecursionFlags(edit, advancedBody) {
 }
 
 
+
+const FIELD_HELP = {
+    position: {
+        title: '注入位置：这条内容到底塞到哪里',
+        html: `
+            <p><b>它决定“放哪儿”，不是决定“怎么触发”。</b></p>
+            <div class="tt-wi-help-row"><b>角色定义之前</b><span>放在角色描述 / 场景之前。位置更早，通常影响相对温和。</span></div>
+            <div class="tt-wi-help-row"><b>角色定义之后</b><span>放在角色描述 / 场景之后，更靠近后面的提示词，通常影响更直接。</span></div>
+            <div class="tt-wi-help-row"><b>示例消息前</b><span>把这条当“示例对话”处理，放在角色卡示例消息之前。适合示范说话方式、对话范例。</span></div>
+            <div class="tt-wi-help-row"><b>示例消息后</b><span>同样按“示例对话”处理，只是放在示例消息之后，比“示例消息前”更靠后。</span></div>
+            <div class="tt-wi-help-row"><b>作者注释之前 / 之后</b><span>插到 Author's Note 的开头 / 结尾。作者注释关闭时，这两种位置不会生效。</span></div>
+            <div class="tt-wi-help-row"><b>@D ⚙️ 系统</b><span>插进聊天历史指定深度，并把这段当 <b>system</b> 消息。更像系统规则 / 背景说明。</span></div>
+            <div class="tt-wi-help-row"><b>@D 👤 用户</b><span>同样插进聊天历史，但把这段当 <b>user</b> 消息，像用户曾经说过的话。</span></div>
+            <div class="tt-wi-help-row"><b>@D 🤖 AI</b><span>同样插进聊天历史，但把这段当 <b>assistant</b> 消息，像模型自己曾经说过的话。</span></div>
+            <div class="tt-wi-help-row"><b>➡️ 锚点 / Outlet</b><span>不自动塞进提示词。只有别处调用对应 <code>{{outlet::名称}}</code> 时才把内容取出来。</span></div>
+            <p class="tt-wi-help-note"><b>和“顺序”的区别：</b>注入位置决定去哪个区域；顺序只负责多个世界书条目同时生效时谁更靠后。</p>
+        `,
+    },
+    depth: {
+        title: '注入深度：@D 模式下插到聊天历史多深',
+        html: `
+            <p>只有选择 <b>@D ⚙️ / @D 👤 / @D 🤖</b> 时才有用。</p>
+            <div class="tt-wi-help-example"><b>例：</b>深度 0 = 放在聊天历史最底部 / 最近处；深度 1 = 往前一条；深度 2 = 再往前一条。</div>
+            <p><b>别和高级设置里的“扫描深度”混淆：</b><br>注入深度 = 内容最终插在哪里；扫描深度 = 为了找触发词，往前检查多少条聊天。</p>
+        `,
+    },
+    order: {
+        title: '顺序：越大越靠后，通常影响更强',
+        html: `
+            <p>当多条世界书同时激活、而且处在可比较的插入区域时，用这个数字决定先后。</p>
+            <div class="tt-wi-help-example"><b>例：</b>Order 100 会排在 Order 250 前面；250 更靠近上下文末端，通常更容易影响当前回复。</div>
+            <p><b>注意：</b>它不是数学权重。250 不代表比 100 “强 2.5 倍”。它主要改变插入先后与预算竞争优先级。</p>
+        `,
+    },
+    probability: {
+        title: '激活概率：命中以后，这条最终进不进',
+        html: `
+            <p>先满足关键词 / 过滤条件，再看这个概率。</p>
+            <div class="tt-wi-help-example"><b>例：</b>100% = 命中后每次都生效；50% = 命中后大约一半机会生效；20% = 大约五次里一次。</div>
+            <p><b>它不控制“影响有多强”。</b>一旦成功注入，20% 和 100% 的同一段内容本身没有强弱差别。</p>
+        `,
+    },
+    strategy: {
+        title: '激活策略：这条靠什么方式进入上下文',
+        html: `
+            <div class="tt-wi-help-row"><b>🔵 常驻</b><span>不用等关键词，条目保持常驻参与注入。</span></div>
+            <div class="tt-wi-help-row"><b>🟢 普通</b><span>靠关键词命中，再结合可选过滤器 / 角色过滤等条件决定是否触发。</span></div>
+            <div class="tt-wi-help-row"><b>🔗 向量</b><span>允许 Vector Storage 根据语义相似度找这条；如果还写了关键词，关键词触发仍然可以继续工作。</span></div>
+            <p class="tt-wi-help-note">禁用不是这里的第四项，仍然由条目自己的启用 / 禁用开关控制。</p>
+        `,
+    },
+    characterFilter: {
+        title: '绑定对象：限制这条世界书给谁用',
+        html: `
+            <p>它看的是“当前聊天角色是谁”，不是聊天里有没有出现某个词。</p>
+            <div class="tt-wi-help-example"><b>例：</b>一条“冬天旧伤发作”的世界书绑定清月后，和清月聊天时可以触发；换成别的角色，即使同样聊到“下雪”，这条也可以被挡住。</div>
+            <p><b>和关键词的区别：</b>关键词看聊天内容；绑定对象 / 角色过滤看当前角色或标签。</p>
+        `,
+    },
+};
+
+function closeFieldHelp() {
+    helpOverlay?.remove();
+    helpOverlay = null;
+}
+
+function openFieldHelp(key) {
+    const info = FIELD_HELP[key];
+    if (!info) return;
+
+    closeFieldHelp();
+
+    const overlay = document.createElement('div');
+    overlay.className = 'tt-wi-help-overlay';
+
+    const card = document.createElement('section');
+    card.className = 'tt-wi-help-card';
+    card.setAttribute('role', 'dialog');
+    card.setAttribute('aria-modal', 'true');
+    card.setAttribute('aria-label', info.title);
+
+    const header = document.createElement('div');
+    header.className = 'tt-wi-help-header';
+
+    const title = document.createElement('strong');
+    title.textContent = info.title;
+
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'tt-wi-help-close';
+    close.setAttribute('aria-label', '关闭说明');
+    close.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+
+    const body = document.createElement('div');
+    body.className = 'tt-wi-help-body';
+    body.innerHTML = info.html;
+
+    header.append(title, close);
+    card.append(header, body);
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+    helpOverlay = overlay;
+
+    const stop = (event) => event.stopPropagation();
+    card.addEventListener('pointerdown', stop);
+    card.addEventListener('click', stop);
+
+    const dismiss = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        closeFieldHelp();
+    };
+
+    close.addEventListener('click', dismiss);
+    overlay.addEventListener('click', dismiss);
+}
+
+function addFieldHelpButton(label, key) {
+    if (!label || label.querySelector(':scope > .tt-wi-help-button')) return;
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'tt-wi-help-button';
+    button.textContent = '!';
+    button.setAttribute('aria-label', '查看说明');
+    button.setAttribute('title', '查看说明');
+
+    const open = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        openFieldHelp(key);
+    };
+
+    button.addEventListener('pointerdown', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+    });
+    button.addEventListener('click', open);
+    label.appendChild(button);
+}
+
+function setPlainLabel(label, text) {
+    if (!label) return;
+    if (!label.dataset.ttWiOriginalHtml) {
+        label.dataset.ttWiOriginalHtml = label.innerHTML;
+    }
+    label.childNodes.forEach((node) => {
+        if (node.nodeType === Node.TEXT_NODE) node.remove();
+    });
+    label.insertAdjacentText('afterbegin', text);
+}
+
+function decorateCommonFieldHelp(entry) {
+    const position = entry.querySelector('[name="PositionBlock"]');
+    const depth = entry.querySelector('input[name="depth"]')?.closest('.world_entry_form_control');
+    const order = entry.querySelector('input[name="order"]')?.closest('.world_entry_form_control');
+    const probability = entry.querySelector('input[name="probability"]')?.closest('.world_entry_form_control');
+    const strategy = entry.querySelector('.tt-wi-strategy-control');
+    const characterFilter = entry.querySelector('.tt-wi-character-filter');
+
+    const positionLabel = position?.querySelector(':scope > label');
+    const depthLabel = depth?.querySelector(':scope > label');
+    const orderLabel = order?.querySelector(':scope > label');
+    const probabilityLabel = probability?.querySelector(':scope > label');
+    const strategyLabel = strategy?.querySelector(':scope > label');
+    const charFilterLabel = characterFilter?.querySelector('label');
+
+    setPlainLabel(positionLabel, '注入位置');
+    setPlainLabel(depthLabel, '注入深度（仅 @D）');
+    setPlainLabel(orderLabel, '顺序（越大越靠后，通常影响更强）');
+    setPlainLabel(probabilityLabel, '激活概率（命中后生效概率）');
+
+    if (strategyLabel) {
+        if (!strategyLabel.dataset.ttWiOriginalHtml) {
+            strategyLabel.dataset.ttWiOriginalHtml = strategyLabel.innerHTML;
+        }
+        strategyLabel.innerHTML = '激活策略 <span class="tt-wi-field-note">（触发方式）</span>';
+    }
+
+    addFieldHelpButton(positionLabel, 'position');
+    addFieldHelpButton(depthLabel, 'depth');
+    addFieldHelpButton(orderLabel, 'order');
+    addFieldHelpButton(probabilityLabel, 'probability');
+    addFieldHelpButton(strategyLabel, 'strategy');
+
+    if (charFilterLabel) {
+        addFieldHelpButton(charFilterLabel, 'characterFilter');
+    }
+}
+
+function restoreCommonFieldHelp(entry) {
+    entry.querySelectorAll('[data-tt-wi-original-html]').forEach((label) => {
+        label.innerHTML = label.dataset.ttWiOriginalHtml;
+        delete label.dataset.ttWiOriginalHtml;
+    });
+}
+
+function enhancePositionOptions(entry) {
+    const select = entry.querySelector('select[name="position"]');
+    if (!select || select.dataset.ttWiPositionLabels === '1') return;
+
+    const labels = new Map([
+        ['0:', '角色定义之前（放角色设定前）'],
+        ['1:', '角色定义之后（放角色设定后，通常更靠后）'],
+        ['5:', '示例消息前（当示例对话，放示例前）'],
+        ['6:', '示例消息后（当示例对话，放示例后）'],
+        ['2:', '作者注释之前（放 Author\'s Note 开头）'],
+        ['3:', '作者注释之后（放 Author\'s Note 结尾）'],
+        ['4:0', '@D ⚙️ 系统（按 system 消息插入聊天历史）'],
+        ['4:1', '@D 👤 用户（按 user 消息插入聊天历史）'],
+        ['4:2', '@D 🤖 AI（按 assistant 消息插入聊天历史）'],
+        ['7:', '➡️ 锚点 / Outlet（不自动注入，等宏调用）'],
+    ]);
+
+    for (const option of select.options) {
+        const key = `${option.value}:${option.dataset.role ?? ''}`;
+        const label = labels.get(key);
+        if (!label) continue;
+
+        if (!option.dataset.ttWiOriginalText) {
+            option.dataset.ttWiOriginalText = option.textContent ?? '';
+        }
+        option.textContent = label;
+    }
+
+    select.dataset.ttWiPositionLabels = '1';
+
+    const cleanup = entryCleanup.get(entry) ?? [];
+    cleanup.push(() => {
+        for (const option of select.options) {
+            if (option.dataset.ttWiOriginalText !== undefined) {
+                option.textContent = option.dataset.ttWiOriginalText;
+                delete option.dataset.ttWiOriginalText;
+            }
+        }
+        delete select.dataset.ttWiPositionLabels;
+    });
+    entryCleanup.set(entry, cleanup);
+}
+
 function markCommonHeaderControls(entry) {
     const order = entry.querySelector('input[name="order"]')?.closest('.world_entry_form_control');
     const probability = entry.querySelector('input[name="probability"]')?.closest('.world_entry_form_control');
@@ -230,6 +471,8 @@ function organizeEditor(entry, edit) {
 
     makeEntryToolbar(entry);
     markCommonHeaderControls(entry);
+    enhancePositionOptions(entry);
+    decorateCommonFieldHelp(entry);
 
     const contentBlock = edit.querySelector('[name="contentAndCharFilterBlock"]');
     if (contentBlock) {
@@ -246,6 +489,7 @@ function organizeEditor(entry, edit) {
     if (characterFilterBlock) {
         characterFilterBlock.classList.add('tt-wi-character-filter');
         move(characterFilterBlock, commonBody);
+        decorateCommonFieldHelp(entry);
     }
 
     const advanced = makeAdvancedSection(edit);
@@ -442,6 +686,7 @@ function decorateEntry(entry) {
 
     entryCleanup.set(entry, cleanup);
     enhanceStrategyOptions(entry);
+    enhancePositionOptions(entry);
     makeListActionBar(entry);
     bindDepthVisibility(entry);
     requestAnimationFrame(() => syncCardTitleHeight(entry));
@@ -534,6 +779,7 @@ export function initWorldInfoMobile() {
 export function cleanupWorldInfoMobile() {
     if (!initialized) return;
     initialized = false;
+    closeFieldHelp();
 
     observer?.disconnect();
     observer = null;
@@ -554,6 +800,7 @@ export function cleanupWorldInfoMobile() {
                 if (movedNodes.has(node)) restoreMovedNode(node);
             });
 
+            restoreCommonFieldHelp(entry);
             entry.classList.remove('tt-wi-card', 'tt-wi-entry-open', 'tt-wi-active-entry');
             delete entry.dataset[WI_ENTRY_MARK];
 
