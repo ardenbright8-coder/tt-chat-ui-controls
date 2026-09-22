@@ -18,8 +18,16 @@ const BG_SCALE_CSS_VAR = '--BackgroundImageScale';
 
 const FONT_OPTIONS = [
     { value: 'theme', label: '跟随主题（默认）', family: 'inherit' },
+
+    // 常用阅读 / 宋体
+    { value: 'source-han-serif', file: 'sourcehanserif.woff2', label: '思源宋体（常用阅读）', face: 'TT Source Han Serif CN', family: '"TT Source Han Serif CN", serif' },
+    { value: 'chill-jinshu-song', file: 'chilljinshu.woff2', label: '寒蝉锦书宋（温润宋体）', face: 'TT Chill Jinshu Song', family: '"TT Chill Jinshu Song", serif' },
+    { value: 'wenjin-mincho', file: 'wenjin.woff2', label: '文津宋体（古典正文）', face: 'TT WenJin Mincho', family: '"TT WenJin Mincho", serif' },
+
+    // 楷 / 手写阅读
     { value: 'lxgw-wenkai-gb', file: 'wenkai.woff2', label: '霞鹜文楷 GB（舒展）', face: 'TT LXGW WenKai GB', family: '"TT LXGW WenKai GB", serif' },
     { value: 'lxgw-zhenkai-gb', file: 'zhenkai.woff2', label: '霞鹜臻楷 GB（较厚实）', face: 'TT LXGW ZhenKai GB', family: '"TT LXGW ZhenKai GB", serif' },
+    { value: 'qingsong-handwriting', file: 'qingsong.woff2', label: '清松手写体1（圆润）', face: 'TT Qingsong Handwriting', family: '"TT Qingsong Handwriting", cursive' },
     { value: 'xiaolai', file: 'xiaolai.woff2', label: '小赖字体（圆润手写）', face: 'TT Xiaolai', family: '"TT Xiaolai", sans-serif' },
     { value: 'yozai', file: 'yozai.woff2', label: '悠哉字体（轻松手写）', face: 'TT Yozai', family: '"TT Yozai", serif' },
 ];
@@ -119,7 +127,7 @@ function applyFontPreset(value) {
     const request = ++fontRequest;
     if (!option.face) {
         document.documentElement.style.setProperty(FONT_CSS_VAR, 'inherit');
-        setFontHint('跟随主题。其他四款字体已随扩展提供，无需付费。');
+        setFontHint('跟随主题。其他八款字体已随扩展提供，无需系统安装。');
         return option.value;
     }
 
@@ -225,7 +233,7 @@ function mountFontSelector(state) {
     const row = document.createElement('div');
     row.id = FONT_ROW_ID;
     row.className = 'flex-container';
-    row.title = '只更换聊天消息正文的字体。四款开源字体随扩展提供，无需系统安装或付费。';
+    row.title = '只更换聊天消息正文的字体。八款开源字体随扩展提供，无需系统安装或付费。';
 
     const label = document.createElement('span');
     label.textContent = '聊天正文字体';
@@ -243,7 +251,7 @@ function mountFontSelector(state) {
 
     const hint = document.createElement('small');
     hint.id = FONT_HINT_ID;
-    hint.textContent = '四款字体随扩展提供；首次选择需等待本地字体加载。';
+    hint.textContent = '八款字体随扩展提供；首次选择需等待本地字体加载。';
 
     select.value = getFontOption(settings.fontPreset).value;
 
