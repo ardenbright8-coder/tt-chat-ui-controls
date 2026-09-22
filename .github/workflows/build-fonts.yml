@@ -57,5 +57,6 @@ jobs:
             echo "No font changes to commit."
           else
             git commit -m "Bundle four additional reading fonts for v1.6 [skip ci]"
+            git pull --rebase origin main
             git push
           fi
