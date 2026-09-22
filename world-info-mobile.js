@@ -212,12 +212,24 @@ function moveRecursionFlags(edit, advancedBody) {
     if (count) advancedBody.prepend(flagBox);
 }
 
+
+function markCommonHeaderControls(entry) {
+    const order = entry.querySelector('input[name="order"]')?.closest('.world_entry_form_control');
+    const probability = entry.querySelector('input[name="probability"]')?.closest('.world_entry_form_control');
+    const position = entry.querySelector('[name="PositionBlock"]');
+
+    order?.classList.add('tt-wi-order-control');
+    probability?.classList.add('tt-wi-probability-control');
+    position?.classList.add('tt-wi-position-control');
+}
+
 function organizeEditor(entry, edit) {
     if (edit.dataset.ttWiOrganized === '1') return;
     edit.dataset.ttWiOrganized = '1';
     edit.classList.add('tt-wi-editor');
 
     makeEntryToolbar(entry);
+    markCommonHeaderControls(entry);
 
     const contentBlock = edit.querySelector('[name="contentAndCharFilterBlock"]');
     if (contentBlock) {
@@ -374,7 +386,8 @@ function decorateEntry(entry) {
         strategy.className = 'world_entry_form_control wi-enter-footer-text tt-wi-strategy-control';
 
         const label = document.createElement('label');
-        label.textContent = '激活策略';
+        label.className = 'tt-wi-strategy-label';
+        label.innerHTML = '激活策略 <span class="tt-wi-field-note">（触发方式）</span>';
 
         rememberMove(stateSelect);
         strategy.append(label, stateSelect);
