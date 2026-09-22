@@ -7,7 +7,10 @@ let list = null;
 let initialized = false;
 let globalCleanup = [];
 let helpOverlay = null;
+let activeEntry = null;
+let listReturnState = null;
 const entryCleanup = new WeakMap();
+const entrySnapshots = new WeakMap();
 const movedNodes = new WeakMap();
 
 function isTouchMobile() {
@@ -86,10 +89,163 @@ function isEntryDrawerOpen(entry) {
     return !!content && getComputedStyle(content).display !== 'none';
 }
 
+
+function captureEntrySnapshot(entry) {
+    if (!entry || entrySnapshots.has(entry)) return;
+
+    const controls = [...entry.querySelectorAll('input, select, textarea')].map((element) => {
+        if (element instanceof HTMLSelectElement) {
+            return {
+                element,
+                type: 'select',
+                selected: [...element.options].map((option) => option.selected),
+            };
+        }
+
+        if (element instanceof HTMLInputElement && (element.type === 'checkbox' || element.type === 'radio')) {
+            return {
+                element,
+                type: 'checked',
+                checked: element.checked,
+            };
+        }
+
+        return {
+            element,
+            type: 'value',
+            value: element.value,
+        };
+    });
+
+    entrySnapshots.set(entry, controls);
+}
+
+function restoreEntrySnapshot(entry) {
+    const snapshot = entrySnapshots.get(entry);
+    if (!snapshot) return;
+
+    for (const item of snapshot) {
+        const element = item.element;
+        if (!element?.isConnected) continue;
+
+        let changed = false;
+
+        if (item.type === 'select' && element instanceof HTMLSelectElement) {
+            [...element.options].forEach((option, index) => {
+                const next = !!item.selected[index];
+                if (option.selected !== next) changed = true;
+                option.selected = next;
+            });
+        } else if (item.type === 'checked' && element instanceof HTMLInputElement) {
+            changed = element.checked !== item.checked;
+            element.checked = item.checked;
+        } else if ('value' in element) {
+            changed = element.value !== item.value;
+            element.value = item.value;
+        }
+
+        if (changed) {
+            element.dispatchEvent(new Event('input', { bubbles: true }));
+            element.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+    }
+}
+
+function clearEntrySnapshot(entry) {
+    entrySnapshots.delete(entry);
+}
+
+function rememberListReturn(entry) {
+    if (!popup || !entry) return;
+
+    listReturnState = {
+        uid: entry.getAttribute('uid') ?? '',
+        scrollTop: popup.scrollTop,
+        topOffset: entry.getBoundingClientRect().top - popup.getBoundingClientRect().top,
+    };
+}
+
+function restoreListReturn() {
+    if (!popup || !listReturnState) return;
+
+    const state = listReturnState;
+    listReturnState = null;
+
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            popup.scrollTop = state.scrollTop;
+
+            if (!state.uid) return;
+            const safeUid = globalThis.CSS?.escape ? CSS.escape(state.uid) : state.uid.replace(/"/g, '\\"');
+            const entry = list?.querySelector(`.world_entry[uid="${safeUid}"]`);
+            if (!entry) return;
+
+            const popupRect = popup.getBoundingClientRect();
+            const entryRect = entry.getBoundingClientRect();
+            const expectedTop = popupRect.top + state.topOffset;
+            const delta = entryRect.top - expectedTop;
+
+            if (Math.abs(delta) > 3) {
+                popup.scrollTop += delta;
+            }
+        });
+    });
+}
+
+function closeEntryDrawer(entry) {
+    const toggle = entry?.querySelector(':scope > form > .inline-drawer > .inline-drawer-header .inline-drawer-toggle');
+    if (!toggle) return;
+    toggle.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+}
+
+function makeEditActions(entry) {
+    if (!entry || entry.querySelector(':scope > .tt-wi-edit-actions')) return;
+
+    const actions = document.createElement('div');
+    actions.className = 'tt-wi-edit-actions';
+
+    const cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.className = 'tt-wi-edit-cancel';
+    cancel.textContent = '取消';
+
+    const confirm = document.createElement('button');
+    confirm.type = 'button';
+    confirm.className = 'tt-wi-edit-confirm';
+    confirm.textContent = '确定';
+
+    actions.append(cancel, confirm);
+    entry.appendChild(actions);
+
+    const cleanup = entryCleanup.get(entry) ?? [];
+
+    cleanup.push(on(cancel, 'click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        restoreEntrySnapshot(entry);
+        clearEntrySnapshot(entry);
+        closeEntryDrawer(entry);
+    }));
+
+    cleanup.push(on(confirm, 'click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        clearEntrySnapshot(entry);
+        closeEntryDrawer(entry);
+    }));
+
+    cleanup.push(() => actions.remove());
+    entryCleanup.set(entry, cleanup);
+}
+
 function syncActiveEntry(preferred = null) {
     if (!popup || !list) return;
 
     const entries = [...list.querySelectorAll(':scope > .world_entry')];
+    const previousActive = activeEntry;
+
     let active = preferred && preferred.isConnected && isEntryDrawerOpen(preferred)
         ? preferred
         : entries.find((entry) => entry.classList.contains('tt-wi-active-entry') && isEntryDrawerOpen(entry))
@@ -103,8 +259,19 @@ function syncActiveEntry(preferred = null) {
     }
 
     popup.classList.toggle('tt-wi-editing', !!active);
+    activeEntry = active;
+
+    if (active && active !== previousActive) {
+        rememberListReturn(active);
+        captureEntrySnapshot(active);
+        makeEditActions(active);
+    }
 
     if (!active) {
+        if (previousActive) {
+            clearEntrySnapshot(previousActive);
+            restoreListReturn();
+        }
         return;
     }
 
@@ -138,8 +305,8 @@ function makeEntryToolbar(entry) {
         event.preventDefault();
         event.stopPropagation();
 
-        const toggle = entry.querySelector(':scope > form > .inline-drawer > .inline-drawer-header .inline-drawer-toggle');
-        toggle?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+        clearEntrySnapshot(entry);
+        closeEntryDrawer(entry);
     }));
 
     const comment = entry.querySelector('textarea[name="comment"]');
@@ -484,6 +651,12 @@ function organizeEditor(entry, edit) {
     const common = makeCommonSection(edit, contentBlock);
     const commonBody = common.querySelector('.tt-wi-common-body');
 
+    const headerControls = entry.querySelector('.WIEnteryHeaderControls');
+    if (headerControls) {
+        headerControls.classList.add('tt-wi-common-header-controls');
+        move(headerControls, commonBody);
+    }
+
     const characterFilter = edit.querySelector('select[name="characterFilter"]');
     const characterFilterBlock = characterFilter?.closest('.flex4');
     if (characterFilterBlock) {
@@ -780,6 +953,8 @@ export function cleanupWorldInfoMobile() {
     if (!initialized) return;
     initialized = false;
     closeFieldHelp();
+    activeEntry = null;
+    listReturnState = null;
 
     observer?.disconnect();
     observer = null;
