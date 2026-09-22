@@ -186,12 +186,8 @@ function installMobileTouchGuards() {
     }
 
     const activeRanges = new Map();
+    const activeSwitches = new Map();
     const syntheticEvents = new WeakSet();
-    const clickRestore = new WeakMap();
-
-    let booleanMenu = null;
-    let booleanMenuCheckbox = null;
-    let booleanMenuTimer = null;
 
     const dispatchSynthetic = (element, type) => {
         const event = new Event(type, { bubbles: true });
@@ -204,11 +200,55 @@ function installMobileTouchGuards() {
         && element.type === 'range'
         && !element.disabled;
 
-    const isTouchBoolean = (element) =>
-        element instanceof HTMLInputElement
-        && element.type === 'checkbox'
-        && !element.disabled
-        && !element.closest('.tt-touch-bool-menu');
+    const resolveSettingsCheckbox = (target) => {
+        if (!(target instanceof Element)) return null;
+        if (target.closest('a, button, .right_menu_button, .fa-circle-info')) return null;
+
+        const label = target.closest('#user-settings-block label.checkbox_label');
+        if (!label) return null;
+
+        const direct = label.querySelector(':scope > input[type="checkbox"]');
+        if (!(direct instanceof HTMLInputElement) || direct.disabled || direct.classList.contains('displayNone')) {
+            return null;
+        }
+
+        return { label, checkbox: direct };
+    };
+
+    const decorateSettingsCheckboxes = (root = document) => {
+        const checkboxes = root.querySelectorAll?.(
+            '#user-settings-block label.checkbox_label > input[type="checkbox"]:not(.displayNone)',
+        ) ?? [];
+
+        for (const checkbox of checkboxes) {
+            if (!(checkbox instanceof HTMLInputElement) || checkbox.dataset.ttTouchSwitch === '1') {
+                continue;
+            }
+
+            const label = checkbox.closest('label.checkbox_label');
+            if (!label) continue;
+
+            checkbox.dataset.ttTouchSwitch = '1';
+            checkbox.classList.add('tt-touch-switch-input');
+            label.classList.add('tt-touch-switch-label');
+
+            const visual = document.createElement('span');
+            visual.className = 'tt-touch-switch-visual';
+            visual.setAttribute('aria-hidden', 'true');
+            checkbox.insertAdjacentElement('afterend', visual);
+        }
+    };
+
+    const undecorateSettingsCheckboxes = () => {
+        document.querySelectorAll('#user-settings-block .tt-touch-switch-visual').forEach((element) => element.remove());
+        document.querySelectorAll('#user-settings-block .tt-touch-switch-label').forEach((element) => {
+            element.classList.remove('tt-touch-switch-label', 'tt-touch-preview-on', 'tt-touch-preview-off', 'tt-touch-switch-dragging');
+        });
+        document.querySelectorAll('#user-settings-block .tt-touch-switch-input').forEach((element) => {
+            element.classList.remove('tt-touch-switch-input');
+            delete element.dataset.ttTouchSwitch;
+        });
+    };
 
     const decimalPlaces = (value) => {
         const text = String(value);
@@ -238,162 +278,135 @@ function installMobileTouchGuards() {
         return Number(stepped.toFixed(precision));
     };
 
-    const closeBooleanMenu = () => {
-        if (booleanMenuTimer !== null) {
-            globalThis.clearTimeout(booleanMenuTimer);
-            booleanMenuTimer = null;
-        }
-        booleanMenu?.remove();
-        booleanMenu = null;
-        booleanMenuCheckbox = null;
+    const clearSwitchPreview = (state) => {
+        state.label.classList.remove('tt-touch-preview-on', 'tt-touch-preview-off', 'tt-touch-switch-dragging');
     };
 
-    const positionBooleanMenu = (menu, checkbox) => {
-        const rect = checkbox.getBoundingClientRect();
-        const menuRect = menu.getBoundingClientRect();
-        const margin = 8;
-
-        let left = rect.left + rect.width / 2 - menuRect.width / 2;
-        left = Math.max(margin, Math.min(left, globalThis.innerWidth - menuRect.width - margin));
-
-        let top = rect.bottom + margin;
-        if (top + menuRect.height > globalThis.innerHeight - margin) {
-            top = Math.max(margin, rect.top - menuRect.height - margin);
-        }
-
-        menu.style.left = `${Math.round(left)}px`;
-        menu.style.top = `${Math.round(top)}px`;
-    };
-
-    const openBooleanMenu = (checkbox) => {
-        closeBooleanMenu();
-
-        const menu = document.createElement('div');
-        menu.className = 'tt-touch-bool-menu';
-        menu.setAttribute('role', 'dialog');
-        menu.setAttribute('aria-label', '选择开关状态');
-
-        const enable = document.createElement('button');
-        enable.type = 'button';
-        enable.className = 'tt-touch-bool-choice tt-touch-bool-on';
-        enable.title = '开启';
-        enable.setAttribute('aria-label', '开启');
-        enable.textContent = '●';
-
-        const disable = document.createElement('button');
-        disable.type = 'button';
-        disable.className = 'tt-touch-bool-choice tt-touch-bool-off';
-        disable.title = '关闭';
-        disable.setAttribute('aria-label', '关闭');
-        disable.textContent = '●';
-
-        const choose = (nextValue) => {
-            const changed = checkbox.checked !== nextValue;
-            checkbox.checked = nextValue;
-            closeBooleanMenu();
-
-            if (changed) {
-                dispatchSynthetic(checkbox, 'input');
-                dispatchSynthetic(checkbox, 'change');
-            }
-        };
-
-        enable.addEventListener('click', (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            choose(true);
-        });
-
-        disable.addEventListener('click', (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            choose(false);
-        });
-
-        menu.append(enable, disable);
-        document.body.appendChild(menu);
-        booleanMenu = menu;
-        booleanMenuCheckbox = checkbox;
-        positionBooleanMenu(menu, checkbox);
-
-        booleanMenuTimer = globalThis.setTimeout(closeBooleanMenu, 5000);
+    const previewSwitch = (state, nextValue) => {
+        state.label.classList.toggle('tt-touch-preview-on', nextValue);
+        state.label.classList.toggle('tt-touch-preview-off', !nextValue);
+        state.label.classList.add('tt-touch-switch-dragging');
     };
 
     const onPointerDown = (event) => {
-        const target = event.target;
-
-        if (booleanMenu && !booleanMenu.contains(target) && target !== booleanMenuCheckbox) {
-            closeBooleanMenu();
-        }
-
-        if (!isTouchRange(target) || event.pointerType === 'mouse' || !event.isPrimary) {
+        if (event.pointerType === 'mouse' || !event.isPrimary) {
             return;
         }
 
-        const startValue = Number(target.value);
-        activeRanges.set(event.pointerId, {
-            slider: target,
+        const range = event.target;
+        if (isTouchRange(range)) {
+            const startValue = Number(range.value);
+            activeRanges.set(event.pointerId, {
+                slider: range,
+                startX: event.clientX,
+                startY: event.clientY,
+                startValue,
+                currentValue: startValue,
+                mode: 'pending',
+            });
+            return;
+        }
+
+        const resolved = resolveSettingsCheckbox(event.target);
+        if (!resolved) return;
+
+        const { label, checkbox } = resolved;
+        activeSwitches.set(event.pointerId, {
+            label,
+            checkbox,
             startX: event.clientX,
             startY: event.clientY,
-            startValue,
-            currentValue: startValue,
+            startChecked: checkbox.checked,
+            nextChecked: checkbox.checked,
             mode: 'pending',
         });
     };
 
     const onPointerMove = (event) => {
-        const state = activeRanges.get(event.pointerId);
-        if (!state) return;
+        const rangeState = activeRanges.get(event.pointerId);
+        if (rangeState) {
+            const dx = event.clientX - rangeState.startX;
+            const dy = event.clientY - rangeState.startY;
 
-        const dx = event.clientX - state.startX;
-        const dy = event.clientY - state.startY;
+            if (rangeState.mode === 'pending') {
+                if (Math.hypot(dx, dy) < MOBILE_GESTURE_THRESHOLD) {
+                    rangeState.slider.value = String(rangeState.startValue);
+                    return;
+                }
 
-        if (state.mode === 'pending') {
+                if (Math.abs(dx) > Math.abs(dy) * MOBILE_SLIDER_DOMINANCE) {
+                    rangeState.mode = 'slider';
+                    rangeState.slider.classList.add('tt-touch-slider-dragging');
+                } else {
+                    rangeState.mode = 'scroll';
+                    rangeState.slider.value = String(rangeState.startValue);
+                    return;
+                }
+            }
+
+            if (rangeState.mode === 'scroll') {
+                rangeState.slider.value = String(rangeState.startValue);
+                return;
+            }
+
+            if (rangeState.mode !== 'slider') return;
+
+            if (event.cancelable) event.preventDefault();
+
+            const rect = rangeState.slider.getBoundingClientRect();
+            const width = Math.max(1, rect.width);
+            const min = Number(rangeState.slider.min || 0);
+            const max = Number(rangeState.slider.max || 100);
+            const span = max - min;
+            const direction = getComputedStyle(rangeState.slider).direction === 'rtl' ? -1 : 1;
+            const next = normalizeRangeValue(
+                rangeState.slider,
+                rangeState.startValue + direction * (dx / width) * span,
+            );
+
+            rangeState.currentValue = next;
+            rangeState.slider.value = String(next);
+            dispatchSynthetic(rangeState.slider, 'input');
+            return;
+        }
+
+        const switchState = activeSwitches.get(event.pointerId);
+        if (!switchState) return;
+
+        const dx = event.clientX - switchState.startX;
+        const dy = event.clientY - switchState.startY;
+
+        if (switchState.mode === 'pending') {
             if (Math.hypot(dx, dy) < MOBILE_GESTURE_THRESHOLD) {
-                state.slider.value = String(state.startValue);
                 return;
             }
 
             if (Math.abs(dx) > Math.abs(dy) * MOBILE_SLIDER_DOMINANCE) {
-                state.mode = 'slider';
-                state.slider.classList.add('tt-touch-slider-dragging');
+                switchState.mode = 'switch';
             } else {
-                state.mode = 'scroll';
-                state.slider.value = String(state.startValue);
+                switchState.mode = 'scroll';
+                clearSwitchPreview(switchState);
                 return;
             }
         }
 
-        if (state.mode === 'scroll') {
-            state.slider.value = String(state.startValue);
+        if (switchState.mode === 'scroll') {
+            clearSwitchPreview(switchState);
             return;
         }
 
-        if (state.mode !== 'slider') return;
+        if (switchState.mode !== 'switch') return;
 
-        if (event.cancelable) {
-            event.preventDefault();
-        }
+        if (event.cancelable) event.preventDefault();
 
-        const rect = state.slider.getBoundingClientRect();
-        const width = Math.max(1, rect.width);
-        const min = Number(state.slider.min || 0);
-        const max = Number(state.slider.max || 100);
-        const span = max - min;
-        const direction = getComputedStyle(state.slider).direction === 'rtl' ? -1 : 1;
-        const next = normalizeRangeValue(
-            state.slider,
-            state.startValue + direction * (dx / width) * span,
-        );
-
-        state.currentValue = next;
-        state.slider.value = String(next);
-        dispatchSynthetic(state.slider, 'input');
+        // Right = ON, left = OFF. The checkbox itself is not changed until pointerup.
+        switchState.nextChecked = dx > 0;
+        previewSwitch(switchState, switchState.nextChecked);
     };
 
     const finishRangeGesture = (event, cancelled = false) => {
         const state = activeRanges.get(event.pointerId);
-        if (!state) return;
+        if (!state) return false;
 
         activeRanges.delete(event.pointerId);
         state.slider.classList.remove('tt-touch-slider-dragging');
@@ -401,21 +414,48 @@ function installMobileTouchGuards() {
         if (!cancelled && state.mode === 'slider') {
             state.slider.value = String(state.currentValue);
             dispatchSynthetic(state.slider, 'change');
-            clickRestore.set(state.slider, {
-                value: state.currentValue,
-                until: performance.now() + 1000,
-            });
         } else {
             state.slider.value = String(state.startValue);
-            clickRestore.set(state.slider, {
-                value: state.startValue,
-                until: performance.now() + 1000,
-            });
         }
+
+        return true;
     };
 
-    const onPointerUp = (event) => finishRangeGesture(event, false);
-    const onPointerCancel = (event) => finishRangeGesture(event, true);
+    const finishSwitchGesture = (event, cancelled = false) => {
+        const state = activeSwitches.get(event.pointerId);
+        if (!state) return false;
+
+        activeSwitches.delete(event.pointerId);
+        const dx = event.clientX - state.startX;
+        clearSwitchPreview(state);
+
+        const commitDistance = 18;
+        if (cancelled || state.mode !== 'switch' || Math.abs(dx) < commitDistance) {
+            state.checkbox.checked = state.startChecked;
+            return true;
+        }
+
+        const nextChecked = dx > 0;
+        const changed = state.startChecked !== nextChecked;
+        state.checkbox.checked = nextChecked;
+
+        if (changed) {
+            dispatchSynthetic(state.checkbox, 'input');
+            dispatchSynthetic(state.checkbox, 'change');
+        }
+
+        return true;
+    };
+
+    const onPointerUp = (event) => {
+        if (finishRangeGesture(event, false)) return;
+        finishSwitchGesture(event, false);
+    };
+
+    const onPointerCancel = (event) => {
+        if (finishRangeGesture(event, true)) return;
+        finishSwitchGesture(event, true);
+    };
 
     const onRangeInputCapture = (event) => {
         if (syntheticEvents.has(event) || !isTouchRange(event.target)) {
@@ -429,51 +469,50 @@ function installMobileTouchGuards() {
         event.target.value = String(state.mode === 'slider' ? state.currentValue : state.startValue);
     };
 
-    const onRangeClickCapture = (event) => {
-        if (!isTouchRange(event.target) || !event.isTrusted) {
+    const onSettingsCheckboxClickCapture = (event) => {
+        const resolved = resolveSettingsCheckbox(event.target);
+        if (!resolved || !event.isTrusted || event.detail === 0) {
             return;
         }
 
-        const restore = clickRestore.get(event.target);
-        if (!restore || performance.now() > restore.until) {
-            return;
-        }
-
+        // Pointer taps never toggle settings checkboxes on mobile.
+        // A deliberate horizontal swipe dispatches synthetic input/change instead.
         event.preventDefault();
         event.stopImmediatePropagation();
-        event.target.value = String(restore.value);
     };
 
-    const onBooleanClickCapture = (event) => {
-        if (!isTouchBoolean(event.target) || !event.isTrusted) {
-            return;
+    decorateSettingsCheckboxes();
+
+    const observer = new MutationObserver((records) => {
+        for (const record of records) {
+            for (const node of record.addedNodes) {
+                if (node instanceof Element) {
+                    decorateSettingsCheckboxes(node.matches('#user-settings-block') ? node : node);
+                }
+            }
         }
-
-        event.preventDefault();
-        event.stopImmediatePropagation();
-
-        queueMicrotask(() => openBooleanMenu(event.target));
-    };
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
 
     document.addEventListener('pointerdown', onPointerDown, true);
     document.addEventListener('pointermove', onPointerMove, { capture: true, passive: false });
     document.addEventListener('pointerup', onPointerUp, true);
     document.addEventListener('pointercancel', onPointerCancel, true);
     document.addEventListener('input', onRangeInputCapture, true);
-    document.addEventListener('click', onRangeClickCapture, true);
-    document.addEventListener('click', onBooleanClickCapture, true);
+    document.addEventListener('click', onSettingsCheckboxClickCapture, true);
 
     mobileTouchGuardCleanup = () => {
-        closeBooleanMenu();
         activeRanges.clear();
+        activeSwitches.clear();
+        observer.disconnect();
+        undecorateSettingsCheckboxes();
 
         document.removeEventListener('pointerdown', onPointerDown, true);
         document.removeEventListener('pointermove', onPointerMove, true);
         document.removeEventListener('pointerup', onPointerUp, true);
         document.removeEventListener('pointercancel', onPointerCancel, true);
         document.removeEventListener('input', onRangeInputCapture, true);
-        document.removeEventListener('click', onRangeClickCapture, true);
-        document.removeEventListener('click', onBooleanClickCapture, true);
+        document.removeEventListener('click', onSettingsCheckboxClickCapture, true);
 
         mobileTouchGuardCleanup = null;
     };
