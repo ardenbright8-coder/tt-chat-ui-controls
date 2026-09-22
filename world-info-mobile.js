@@ -54,6 +54,28 @@ function textValue(entry) {
     return value || input?.placeholder || '未命名条目';
 }
 
+function syncCardTitleHeight(entry) {
+    const input = entry.querySelector('textarea[name="comment"]');
+    if (!input) return;
+
+    if (entry.classList.contains('tt-wi-active-entry')) {
+        input.style.removeProperty('height');
+        return;
+    }
+
+    const styles = getComputedStyle(input);
+    const fontSize = Number.parseFloat(styles.fontSize) || 16;
+    const lineHeight = Number.parseFloat(styles.lineHeight) || fontSize * 1.35;
+    const padding = (Number.parseFloat(styles.paddingTop) || 0) + (Number.parseFloat(styles.paddingBottom) || 0);
+    const border = (Number.parseFloat(styles.borderTopWidth) || 0) + (Number.parseFloat(styles.borderBottomWidth) || 0);
+    const oneLine = lineHeight + padding + border;
+    const twoLines = lineHeight * 2 + padding + border;
+
+    input.style.setProperty('height', 'auto', 'important');
+    const desired = Math.max(oneLine, Math.min(input.scrollHeight + border, twoLines));
+    input.style.setProperty('height', `${Math.ceil(desired)}px`, 'important');
+}
+
 function directEntryDrawerContent(entry) {
     return entry.querySelector(':scope > form > .inline-drawer > .inline-drawer-content');
 }
@@ -76,12 +98,12 @@ function syncActiveEntry(preferred = null) {
     for (const entry of entries) {
         entry.classList.toggle('tt-wi-entry-open', isEntryDrawerOpen(entry));
         entry.classList.toggle('tt-wi-active-entry', entry === active);
+        requestAnimationFrame(() => syncCardTitleHeight(entry));
     }
 
     popup.classList.toggle('tt-wi-editing', !!active);
 
     if (!active) {
-        popup.classList.remove('tt-wi-focus-mode');
         return;
     }
 
@@ -105,13 +127,7 @@ function makeEntryToolbar(entry) {
     title.className = 'tt-wi-entry-toolbar-title';
     title.textContent = textValue(entry);
 
-    const focus = document.createElement('button');
-    focus.type = 'button';
-    focus.className = 'tt-wi-focus-toggle';
-    focus.setAttribute('aria-label', '切换长文本专注编辑');
-    focus.innerHTML = '<i class="fa-solid fa-expand"></i><span>长文本模式</span>';
-
-    toolbar.append(back, title, focus);
+    toolbar.append(back, title);
     entry.prepend(toolbar);
 
     const cleanup = entryCleanup.get(entry) ?? [];
@@ -121,33 +137,15 @@ function makeEntryToolbar(entry) {
         event.preventDefault();
         event.stopPropagation();
 
-        if (popup?.classList.contains('tt-wi-focus-mode')) {
-            popup.classList.remove('tt-wi-focus-mode');
-            focus.innerHTML = '<i class="fa-solid fa-expand"></i><span>长文本模式</span>';
-            focusEditor(entry);
-            return;
-        }
-
         const toggle = entry.querySelector(':scope > form > .inline-drawer > .inline-drawer-header .inline-drawer-toggle');
         toggle?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-    }));
-
-    cleanup.push(on(focus, 'click', (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-
-        const enabled = !popup.classList.contains('tt-wi-focus-mode');
-        popup.classList.toggle('tt-wi-focus-mode', enabled);
-        focus.innerHTML = enabled
-            ? '<i class="fa-solid fa-compress"></i><span>退出专注</span>'
-            : '<i class="fa-solid fa-expand"></i><span>长文本模式</span>';
-        requestAnimationFrame(() => focusEditor(entry));
     }));
 
     const comment = entry.querySelector('textarea[name="comment"]');
     if (comment) {
         const updateTitle = () => {
             title.textContent = textValue(entry);
+            syncCardTitleHeight(entry);
         };
         cleanup.push(on(comment, 'input', updateTitle));
     }
@@ -155,16 +153,6 @@ function makeEntryToolbar(entry) {
     entryCleanup.set(entry, cleanup);
 }
 
-function focusEditor(entry) {
-    const content = entry.querySelector('textarea[name="content"]');
-    if (content && content.offsetParent !== null) {
-        content.focus({ preventScroll: true });
-        return;
-    }
-
-    const cm = entry.querySelector('.cm-editor .cm-content, .CodeMirror textarea, [contenteditable="true"]');
-    cm?.focus?.({ preventScroll: true });
-}
 
 function makeAdvancedSection(edit) {
     let details = edit.querySelector(':scope > .tt-wi-advanced');
@@ -303,13 +291,8 @@ function organizeEditor(entry, edit) {
     const contentLabel = contentBlock?.querySelector('label[for="content "] > small > span');
     if (contentLabel) contentLabel.classList.add('tt-wi-content-heading');
 
-    requestAnimationFrame(() => focusEditorIfNeeded(entry));
 }
 
-function focusEditorIfNeeded(entry) {
-    if (!popup?.classList.contains('tt-wi-focus-mode')) return;
-    focusEditor(entry);
-}
 
 function decorateEntry(entry) {
     if (!(entry instanceof HTMLElement) || entry.dataset[WI_ENTRY_MARK] === '1') return;
@@ -319,12 +302,22 @@ function decorateEntry(entry) {
     const cleanup = [];
 
     const stateSelect = entry.querySelector('select[name="entryStateSelector"]');
-    if (stateSelect && !entry.querySelector('.tt-wi-state-caption')) {
-        const caption = document.createElement('span');
-        caption.className = 'tt-wi-state-caption';
-        caption.textContent = '激活策略';
-        stateSelect.before(caption);
-        cleanup.push(() => caption.remove());
+    const headerControls = entry.querySelector('.WIEnteryHeaderControls');
+    if (stateSelect && headerControls && !entry.querySelector('.tt-wi-strategy-control')) {
+        const strategy = document.createElement('div');
+        strategy.className = 'world_entry_form_control wi-enter-footer-text tt-wi-strategy-control';
+
+        const label = document.createElement('label');
+        label.textContent = '激活策略';
+
+        rememberMove(stateSelect);
+        strategy.append(label, stateSelect);
+        headerControls.appendChild(strategy);
+
+        cleanup.push(() => {
+            restoreMovedNode(stateSelect);
+            strategy.remove();
+        });
     }
 
     cleanup.push(on(entry, 'focusin', () => {
@@ -334,6 +327,7 @@ function decorateEntry(entry) {
     }));
 
     entryCleanup.set(entry, cleanup);
+    requestAnimationFrame(() => syncCardTitleHeight(entry));
 
     const edit = entry.querySelector('.world_entry_edit');
     if (edit) organizeEditor(entry, edit);
@@ -428,7 +422,7 @@ export function cleanupWorldInfoMobile() {
     observer = null;
 
     if (popup) {
-        popup.classList.remove(WI_MOBILE_CLASS, 'tt-wi-editing', 'tt-wi-focus-mode', 'tt-wi-bookbar', 'tt-wi-listbar');
+        popup.classList.remove(WI_MOBILE_CLASS, 'tt-wi-editing', 'tt-wi-bookbar', 'tt-wi-listbar');
     }
 
     if (list) {
@@ -462,7 +456,6 @@ export function cleanupWorldInfoMobile() {
         try { cleanup(); } catch { /* ignore */ }
     }
 
-    popup?.querySelectorAll('.tt-wi-state-caption').forEach((node) => node.remove());
     popup?.querySelectorAll('.tt-wi-mobile-title').forEach((node) => node.remove());
     popup?.querySelectorAll('.tt-wi-bookbar, .tt-wi-listbar').forEach((node) => {
         node.classList.remove('tt-wi-bookbar', 'tt-wi-listbar');
