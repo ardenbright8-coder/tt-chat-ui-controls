@@ -1,5 +1,9 @@
 const WI_MOBILE_CLASS = 'tt-wi-mobile';
 const WI_ENTRY_MARK = 'ttWiMobile';
+const WI_CONTENT_FONT_KEY = 'tt-chat-ui-controls:world-info-content-font-size';
+const WI_CONTENT_FONT_MIN = 14;
+const WI_CONTENT_FONT_MAX = 32;
+const WI_CONTENT_FONT_STEP = 1;
 
 let observer = null;
 let popup = null;
@@ -50,6 +54,70 @@ function restoreMovedNode(node) {
         // The original World Info drawer may already have been destroyed/re-rendered.
     }
     movedNodes.delete(node);
+}
+
+
+function loadStoredContentFontSize() {
+    try {
+        const value = Number.parseFloat(globalThis.localStorage?.getItem(WI_CONTENT_FONT_KEY) ?? '');
+        if (!Number.isFinite(value)) return null;
+        return Math.min(WI_CONTENT_FONT_MAX, Math.max(WI_CONTENT_FONT_MIN, value));
+    } catch {
+        return null;
+    }
+}
+
+function saveContentFontSize(value) {
+    try {
+        globalThis.localStorage?.setItem(WI_CONTENT_FONT_KEY, String(value));
+    } catch {
+        // A blocked localStorage must not affect World Info editing.
+    }
+}
+
+function applyStoredContentFontSize() {
+    if (!popup) return;
+    const stored = loadStoredContentFontSize();
+    if (stored === null) {
+        popup.style.removeProperty('--tt-wi-content-font-size');
+        return;
+    }
+    popup.style.setProperty('--tt-wi-content-font-size', `${stored}px`);
+}
+
+function currentContentFontSize(entry) {
+    const stored = loadStoredContentFontSize();
+    if (stored !== null) return stored;
+
+    const target =
+        entry?.querySelector('.tt-wi-content-block .cm-content')
+        ?? entry?.querySelector('.tt-wi-content-block textarea[name="content"]')
+        ?? entry?.querySelector('textarea[name="content"]');
+
+    const computed = Number.parseFloat(target ? getComputedStyle(target).fontSize : '');
+    if (Number.isFinite(computed)) {
+        return Math.min(WI_CONTENT_FONT_MAX, Math.max(WI_CONTENT_FONT_MIN, computed));
+    }
+
+    return 18;
+}
+
+function updateFontSizeReadouts(value) {
+    document.querySelectorAll('#world_popup .tt-wi-font-value').forEach((element) => {
+        element.textContent = String(Math.round(value));
+    });
+}
+
+function changeContentFontSize(entry, delta) {
+    const current = currentContentFontSize(entry);
+    const next = Math.min(
+        WI_CONTENT_FONT_MAX,
+        Math.max(WI_CONTENT_FONT_MIN, current + delta * WI_CONTENT_FONT_STEP),
+    );
+
+    popup?.style.setProperty('--tt-wi-content-font-size', `${next}px`);
+    saveContentFontSize(next);
+    updateFontSizeReadouts(next);
 }
 
 function textValue(entry) {
@@ -155,42 +223,49 @@ function clearEntrySnapshot(entry) {
     entrySnapshots.delete(entry);
 }
 
-function rememberListReturn(entry) {
-    if (!popup || !entry) return;
+function rememberListReturn(entry, force = false) {
+    if (!list || !entry) return;
+    if (listReturnState && !force) return;
 
     listReturnState = {
         uid: entry.getAttribute('uid') ?? '',
-        scrollTop: popup.scrollTop,
-        topOffset: entry.getBoundingClientRect().top - popup.getBoundingClientRect().top,
+        scrollTop: list.scrollTop,
+        topOffset: entry.getBoundingClientRect().top - list.getBoundingClientRect().top,
     };
 }
 
 function restoreListReturn() {
-    if (!popup || !listReturnState) return;
+    if (!list || !listReturnState) return;
 
     const state = listReturnState;
     listReturnState = null;
 
-    requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-            popup.scrollTop = state.scrollTop;
+    const restore = () => {
+        if (!list?.isConnected) return;
 
-            if (!state.uid) return;
-            const safeUid = globalThis.CSS?.escape ? CSS.escape(state.uid) : state.uid.replace(/"/g, '\\"');
-            const entry = list?.querySelector(`.world_entry[uid="${safeUid}"]`);
-            if (!entry) return;
+        list.scrollTop = state.scrollTop;
 
-            const popupRect = popup.getBoundingClientRect();
-            const entryRect = entry.getBoundingClientRect();
-            const expectedTop = popupRect.top + state.topOffset;
-            const delta = entryRect.top - expectedTop;
+        if (!state.uid) return;
+        const safeUid = globalThis.CSS?.escape ? CSS.escape(state.uid) : state.uid.replace(/"/g, '\\"');
+        const entry = list.querySelector(`.world_entry[uid="${safeUid}"]`);
+        if (!entry) return;
 
-            if (Math.abs(delta) > 3) {
-                popup.scrollTop += delta;
-            }
-        });
-    });
+        const expectedTop = list.getBoundingClientRect().top + state.topOffset;
+        const currentTop = entry.getBoundingClientRect().top;
+        const delta = currentTop - expectedTop;
+
+        if (Math.abs(delta) > 2) {
+            list.scrollTop += delta;
+        }
+    };
+
+    // TauriTavern collapses the drawer and relayouts the list asynchronously.
+    // Restore more than once so a later reflow cannot throw the user back to the top.
+    requestAnimationFrame(() => requestAnimationFrame(restore));
+    globalThis.setTimeout(restore, 60);
+    globalThis.setTimeout(restore, 180);
 }
+
 
 function closeEntryDrawer(entry) {
     const toggle = entry?.querySelector(':scope > form > .inline-drawer > .inline-drawer-header .inline-drawer-toggle');
@@ -252,6 +327,10 @@ function syncActiveEntry(preferred = null) {
             ?? entries.find(isEntryDrawerOpen)
             ?? null;
 
+    if (active && active !== previousActive) {
+        rememberListReturn(active);
+    }
+
     for (const entry of entries) {
         entry.classList.toggle('tt-wi-entry-open', isEntryDrawerOpen(entry));
         entry.classList.toggle('tt-wi-active-entry', entry === active);
@@ -262,7 +341,6 @@ function syncActiveEntry(preferred = null) {
     activeEntry = active;
 
     if (active && active !== previousActive) {
-        rememberListReturn(active);
         captureEntrySnapshot(active);
         makeEditActions(active);
     }
@@ -295,11 +373,44 @@ function makeEntryToolbar(entry) {
     title.className = 'tt-wi-entry-toolbar-title';
     title.textContent = textValue(entry);
 
-    toolbar.append(back, title);
+    const fontControls = document.createElement('div');
+    fontControls.className = 'tt-wi-font-controls';
+    fontControls.setAttribute('aria-label', '正文文字大小');
+
+    const fontMinus = document.createElement('button');
+    fontMinus.type = 'button';
+    fontMinus.className = 'tt-wi-font-minus';
+    fontMinus.setAttribute('aria-label', '正文文字缩小');
+    fontMinus.textContent = '−';
+
+    const fontValue = document.createElement('span');
+    fontValue.className = 'tt-wi-font-value';
+    fontValue.textContent = String(Math.round(currentContentFontSize(entry)));
+
+    const fontPlus = document.createElement('button');
+    fontPlus.type = 'button';
+    fontPlus.className = 'tt-wi-font-plus';
+    fontPlus.setAttribute('aria-label', '正文文字放大');
+    fontPlus.textContent = '+';
+
+    fontControls.append(fontMinus, fontValue, fontPlus);
+    toolbar.append(back, title, fontControls);
     entry.prepend(toolbar);
 
     const cleanup = entryCleanup.get(entry) ?? [];
     cleanup.push(() => toolbar.remove());
+
+    cleanup.push(on(fontMinus, 'click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        changeContentFontSize(entry, -1);
+    }));
+
+    cleanup.push(on(fontPlus, 'click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        changeContentFontSize(entry, 1);
+    }));
 
     cleanup.push(on(back, 'click', (event) => {
         event.preventDefault();
@@ -785,6 +896,9 @@ function makeListActionBar(entry) {
     header.appendChild(actions);
 
     const cleanup = entryCleanup.get(entry) ?? [];
+    cleanup.push(on(toggle, 'pointerdown', () => {
+        rememberListReturn(entry, true);
+    }, true));
     cleanup.push(() => {
         for (const node of [toggle, moveButton, duplicateButton, deleteButton]) {
             if (node && movedNodes.has(node)) restoreMovedNode(node);
@@ -874,6 +988,7 @@ function decorateWorldPopup() {
     if (!popup || !list) return false;
 
     popup.classList.add(WI_MOBILE_CLASS);
+    applyStoredContentFontSize();
 
     if (!popup.querySelector(':scope > .tt-wi-mobile-title')) {
         const title = document.createElement('div');
