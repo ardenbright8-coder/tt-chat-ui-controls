@@ -1,5 +1,5 @@
 /*
- * 聊天显示控制 v1.8.6
+ * 聊天显示控制 v1.8.7
  * - 聊天正文颜色独立
  * - 聊天正文字体下拉
  * - 八款开源字体随扩展提供
@@ -1652,5 +1652,71 @@
             color-mix(in srgb, var(--tt-wi-accent) 70%, #ff62c7)
         );
         color: white !important;
+    }
+}
+
+
+/* v1.8.7 World Info editor font controls and larger content pane */
+@media (pointer: coarse) {
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-active-entry > .tt-wi-entry-toolbar {
+        grid-template-columns: 40px minmax(0, 1fr) auto;
+        gap: 6px;
+    }
+
+    #world_popup.tt-wi-mobile .tt-wi-font-controls {
+        display: grid;
+        grid-template-columns: 30px 28px 30px;
+        align-items: center;
+        gap: 2px;
+        padding: 2px;
+        border: 1px solid var(--tt-wi-border);
+        border-radius: 10px;
+        background: var(--tt-wi-soft-bg);
+    }
+
+    #world_popup.tt-wi-mobile .tt-wi-font-controls button {
+        width: 30px;
+        height: 30px;
+        min-width: 30px;
+        min-height: 30px;
+        padding: 0;
+        border: 0;
+        border-radius: 8px;
+        background: transparent;
+        color: inherit;
+        font-size: 20px;
+        font-weight: 700;
+        line-height: 1;
+    }
+
+    #world_popup.tt-wi-mobile .tt-wi-font-value {
+        min-width: 28px;
+        text-align: center;
+        font-size: 12px;
+        opacity: .78;
+        font-variant-numeric: tabular-nums;
+    }
+
+    /* Default is deliberately two pixels smaller than the host font.
+       Once +/- is used, the saved pixel value becomes independent. */
+    #world_popup.tt-wi-mobile {
+        --tt-wi-content-font-size: calc(var(--mainFontSize) - 2px);
+    }
+
+    #world_popup.tt-wi-mobile .tt-wi-content-block textarea[name="content"],
+    #world_popup.tt-wi-mobile .tt-wi-content-block .cm-editor .cm-content,
+    #world_popup.tt-wi-mobile .tt-wi-content-block .CodeMirror,
+    #world_popup.tt-wi-mobile .tt-wi-content-block .CodeMirror-code {
+        font-size: var(--tt-wi-content-font-size) !important;
+        line-height: 1.5 !important;
+    }
+
+    #world_popup.tt-wi-mobile .tt-wi-content-block textarea[name="content"] {
+        min-height: 54dvh !important;
+    }
+
+    #world_popup.tt-wi-mobile .tt-wi-content-block .cm-editor,
+    #world_popup.tt-wi-mobile .tt-wi-content-block .CodeMirror {
+        min-height: 54dvh !important;
     }
 }
