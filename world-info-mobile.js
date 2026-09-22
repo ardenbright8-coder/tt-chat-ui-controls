@@ -307,6 +307,41 @@ function organizeEditor(entry, edit) {
 
 
 
+function enhanceStrategyOptions(entry) {
+    const select = entry.querySelector('select[name="entryStateSelector"]');
+    if (!select || select.dataset.ttWiStrategyLabels === '1') return;
+
+    const labels = {
+        constant: '🔵 常驻（始终注入）',
+        normal: '🟢 普通（关键词触发）',
+        vectorized: '🔗 向量（语义匹配）',
+    };
+
+    for (const option of select.options) {
+        const value = String(option.value);
+        if (!(value in labels)) continue;
+
+        if (!option.dataset.ttWiOriginalText) {
+            option.dataset.ttWiOriginalText = option.textContent ?? '';
+        }
+        option.textContent = labels[value];
+    }
+
+    select.dataset.ttWiStrategyLabels = '1';
+
+    const cleanup = entryCleanup.get(entry) ?? [];
+    cleanup.push(() => {
+        for (const option of select.options) {
+            if (option.dataset.ttWiOriginalText !== undefined) {
+                option.textContent = option.dataset.ttWiOriginalText;
+                delete option.dataset.ttWiOriginalText;
+            }
+        }
+        delete select.dataset.ttWiStrategyLabels;
+    });
+    entryCleanup.set(entry, cleanup);
+}
+
 function makeListActionBar(entry) {
     if (entry.querySelector(':scope > form > .inline-drawer > .inline-drawer-header > .tt-wi-list-actions')) {
         return;
@@ -406,6 +441,7 @@ function decorateEntry(entry) {
     }));
 
     entryCleanup.set(entry, cleanup);
+    enhanceStrategyOptions(entry);
     makeListActionBar(entry);
     bindDepthVisibility(entry);
     requestAnimationFrame(() => syncCardTitleHeight(entry));
