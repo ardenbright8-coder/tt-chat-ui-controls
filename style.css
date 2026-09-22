@@ -1,5 +1,5 @@
 /*
- * 聊天显示控制 v1.7
+ * 聊天显示控制 v1.7.1
  * - 聊天正文颜色独立
  * - 聊天正文字体下拉
  * - 八款开源字体随扩展提供
@@ -82,42 +82,85 @@
         touch-action: none;
     }
 
-    .tt-touch-bool-menu {
-        position: fixed;
-        z-index: 100000;
-        display: flex;
+    /*
+     * User Settings checkboxes become obvious swipe switches on touch devices.
+     * Tap / light touch does nothing; right swipe = ON, left swipe = OFF.
+     */
+    #user-settings-block label.checkbox_label.tt-touch-switch-label {
+        touch-action: pan-y;
         align-items: center;
-        justify-content: center;
-        gap: 14px;
-        min-width: 96px;
-        min-height: 48px;
-        padding: 6px 10px;
+        min-height: 34px;
+    }
+
+    #user-settings-block .tt-touch-switch-input {
+        position: absolute !important;
+        width: 1px !important;
+        height: 1px !important;
+        min-width: 1px !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+    }
+
+    #user-settings-block .tt-touch-switch-visual {
+        position: relative;
+        display: inline-block;
+        flex: 0 0 46px;
+        width: 46px;
+        height: 26px;
+        margin: 0 8px 0 0;
         box-sizing: border-box;
-        border: 1px solid rgba(255, 255, 255, 0.18);
-        border-radius: 14px;
-        background: rgba(28, 30, 34, 0.96);
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
-        -webkit-backdrop-filter: blur(8px);
-        backdrop-filter: blur(8px);
+        border: 1px solid rgba(255, 255, 255, 0.32);
+        border-radius: 999px;
+        background: rgba(90, 90, 90, 0.72);
+        box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25);
+        transition: background 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+        vertical-align: middle;
     }
 
-    .tt-touch-bool-choice {
-        width: 36px;
-        height: 36px;
-        padding: 0;
-        border: 0;
+    #user-settings-block .tt-touch-switch-visual::after {
+        content: '';
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        width: 18px;
+        height: 18px;
         border-radius: 50%;
-        background: transparent;
-        font-size: 30px;
-        line-height: 1;
-        touch-action: manipulation;
+        background: rgba(245, 245, 245, 0.98);
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+        transform: translateX(0);
+        transition: transform 120ms ease;
     }
 
-    .tt-touch-bool-on {
-        color: #39d353;
+    #user-settings-block .tt-touch-switch-input:checked + .tt-touch-switch-visual,
+    #user-settings-block .tt-touch-switch-label.tt-touch-preview-on .tt-touch-switch-visual {
+        border-color: rgba(73, 214, 108, 0.95);
+        background: rgba(40, 185, 78, 0.88);
     }
 
-    .tt-touch-bool-off {
-        color: #ff5f57;
+    #user-settings-block .tt-touch-switch-input:checked + .tt-touch-switch-visual::after,
+    #user-settings-block .tt-touch-switch-label.tt-touch-preview-on .tt-touch-switch-visual::after {
+        transform: translateX(20px);
+    }
+
+    #user-settings-block .tt-touch-switch-label.tt-touch-preview-off .tt-touch-switch-visual {
+        border-color: rgba(255, 255, 255, 0.32);
+        background: rgba(90, 90, 90, 0.72);
+    }
+
+    #user-settings-block .tt-touch-switch-label.tt-touch-preview-off .tt-touch-switch-visual::after {
+        transform: translateX(0);
+    }
+
+    #user-settings-block .tt-touch-switch-label.tt-touch-switch-dragging .tt-touch-switch-visual {
+        box-shadow:
+            0 0 0 3px rgba(255, 255, 255, 0.12),
+            inset 0 1px 2px rgba(0, 0, 0, 0.25);
+    }
+
+    #user-settings-block .tt-touch-switch-input:focus-visible + .tt-touch-switch-visual {
+        outline: 2px solid rgba(255, 255, 255, 0.85);
+        outline-offset: 2px;
     }
 }
