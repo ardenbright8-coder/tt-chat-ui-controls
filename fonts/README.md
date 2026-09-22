@@ -1,15 +1,15 @@
 # 随扩展提供的字体
 
-本目录中的字体都用于聊天正文按需加载。v1.6 共 8 款，均来自可核实的开源来源；转换成 WOFF2 只为了网页/Android WebView 加载，不主动删字或改字形。
+本目录中的字体都用于聊天正文按需加载。v1.6 共 8 款，均来自可核实的开源来源；现有四款沿用 WOFF2；v1.6 新增的四款保留官方 OTF/TTF 原格式，由 Android WebView 直接加载，不主动删字或改字形。
 
 | 菜单名称 | 文件 | 来源 / 授权 |
 | --- | --- | --- |
-| 思源宋体 | sourcehanserif.woff2 | Adobe Source Han Serif，SIL OFL 1.1 |
-| 寒蝉锦书宋 | chilljinshu.woff2 | Warren2060/ChillJinshuSong，SIL OFL 1.1 |
-| 文津宋体 | wenjin.woff2 | takushun-wu/WenJinMincho，SIL OFL 1.1 |
+| 思源宋体 | sourcehanserif.otf | Adobe Source Han Serif，SIL OFL 1.1 |
+| 寒蝉锦书宋 | chilljinshu.otf | Warren2060/ChillJinshuSong，SIL OFL 1.1 |
+| 文津宋体 | wenjin.ttf | takushun-wu/WenJinMincho，SIL OFL 1.1 |
 | 霞鹜文楷 GB | wenkai.woff2 | lxgw/LxgwWenkaiGB，SIL OFL 1.1 |
 | 霞鹜臻楷 GB | zhenkai.woff2 | lxgw/LxgwZhenKai，SIL OFL 1.1 |
-| 清松手写体1 | qingsong.woff2 | jasonhandwriting/JasonHandwriting，项目声明 SIL OFL |
+| 清松手写体1 | qingsong.ttf | jasonhandwriting/JasonHandwriting，项目声明 SIL OFL |
 | 小赖字体 | xiaolai.woff2 | lxgw/kose-font，SIL OFL 1.1 |
 | 悠哉字体 | yozai.woff2 | lxgw/yozai-font，SIL OFL 1.1 |
 
