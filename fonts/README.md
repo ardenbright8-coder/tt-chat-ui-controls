@@ -1,28 +1,26 @@
 # 随扩展提供的字体
 
-四款均采用 SIL Open Font License 1.1，许可证在本目录；免费使用，不需要系统安装。
-从官方原始 TTF 转为网页专用 WOFF2，不删字、不修改字形；不提供桌面安装版。
-浏览器只加载当前选择的字体，从当前酒馆服务器的扩展目录读取，无第三方字体请求。
+本目录中的字体都用于聊天正文按需加载。v1.6 共 8 款，均来自可核实的开源来源；转换成 WOFF2 只为了网页/Android WebView 加载，不主动删字或改字形。
 
-| 菜单名称 | 文件 | 官方原始来源 |
+| 菜单名称 | 文件 | 来源 / 授权 |
 | --- | --- | --- |
-| 霞鹜文楷 GB | wenkai.woff2 | https://github.com/lxgw/LxgwWenkaiGB/blob/6ceaf966f41aec8cae1e865167acc2bb7b5ae368/fonts/TTF/LXGWWenKaiGB-Regular.ttf |
-| 霞鹜臻楷 GB | zhenkai.woff2 | https://github.com/lxgw/LxgwZhenKai/releases/tag/v0.825 |
-| 小赖字体 | xiaolai.woff2 | https://github.com/lxgw/kose-font/releases/tag/v3.126 |
-| 悠哉字体 | yozai.woff2 | https://github.com/lxgw/yozai-font/releases/tag/v0.868 |
+| 思源宋体 | sourcehanserif.woff2 | Adobe Source Han Serif，SIL OFL 1.1 |
+| 寒蝉锦书宋 | chilljinshu.woff2 | Warren2060/ChillJinshuSong，SIL OFL 1.1 |
+| 文津宋体 | wenjin.woff2 | takushun-wu/WenJinMincho，SIL OFL 1.1 |
+| 霞鹜文楷 GB | wenkai.woff2 | lxgw/LxgwWenkaiGB，SIL OFL 1.1 |
+| 霞鹜臻楷 GB | zhenkai.woff2 | lxgw/LxgwZhenKai，SIL OFL 1.1 |
+| 清松手写体1 | qingsong.woff2 | jasonhandwriting/JasonHandwriting，项目声明 SIL OFL |
+| 小赖字体 | xiaolai.woff2 | lxgw/kose-font，SIL OFL 1.1 |
+| 悠哉字体 | yozai.woff2 | lxgw/yozai-font，SIL OFL 1.1 |
 
-字形覆盖有限，未收录字符仍使用浏览器备用字体。样式感受属个人偏好。
+## 具体源文件
 
-## 核查与已知限制（2026-09-21）
+- 思源宋体：`adobe-fonts/source-han-serif` release 分支的 `SubsetOTF/CN/SourceHanSerifCN-Regular.otf`
+- 寒蝉锦书宋：`Warren2060/ChillJinshuSong` 的 `ChillJinshuSongCCRegular.otf.zip`
+- 文津宋体：`takushun-wu/WenJinMincho` 的 `ttf/WenJinMinchoP0-Regular.ttf`
+- 清松手写体1：`jasonhandwriting/JasonHandwriting` 的 `JasonHandwriting1.ttf`
+- 其余四款沿用 v1.5 已核实来源。
 
-旧版文楷 TTF 约 25.8MB，旧 jsDelivr 地址实测返回 HTTP 403：文件超过 20MB 限制。
-旧版臻楷 Release 文件实测 HTTP 200；不能据此保证所有手机网络都能访问。
-其他旧菜单项只声明本地字体名称，没有提供字体文件；不能据此认定用户设备上没有安装。
+## 犬仓书楷
 
-社区样本不足以形成普遍的舒适度结论。以下是具体使用反馈，不能等同所有用户：
-- 小赖：用户认为与 Monaspace 手写字体搭配好看，但指出中西文宽度搭配问题（2025-12-01，开放）：https://github.com/lxgw/kose-font/issues/21
-- 小赖：用户反馈“媱”字形错误（2026-06-23，开放，未确认本次版本已修复）：https://github.com/lxgw/kose-font/issues/22
-- 悠哉：用户反馈中文引号与感叹号重叠（2022-11-23，已关闭；旧版本反馈，不能视作当前仍存在）：https://github.com/lxgw/yozai-font/issues/4
-- 文楷 GB：用户反馈全角引号排版问题：https://github.com/lxgw/LxgwWenkaiGB/issues/15
-
-本次保留文楷、臻楷，增加小赖、悠哉作为个人阅读风格选择；并非适合出版校对的字形正确性保证。
+已核实 100font / 猫啃网均标明其为 SIL OFL 1.1，可个人/商业免费使用、再分发和嵌入软件；但目前公开下载入口主要是网盘，不是稳定可复现的作者直链。为了避免把来源不明的镜像二进制塞进仓库，本次暂不打包。拿到原始 TTF/OTF 后可直接补入 `fonts/` 并接进下拉菜单。
