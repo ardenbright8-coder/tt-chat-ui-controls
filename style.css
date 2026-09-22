@@ -1,5 +1,5 @@
 /*
- * 聊天显示控制 v1.6
+ * 聊天显示控制 v1.7
  * - 聊天正文颜色独立
  * - 聊天正文字体下拉
  * - 八款开源字体随扩展提供
@@ -69,4 +69,55 @@
 #chat-text-color-row > span,
 #background-image-blur-control small > span {
     user-select: none;
+}
+
+
+/* Mobile-only anti-mistouch layer. PC pointer behavior remains native. */
+@media (pointer: coarse) {
+    input[type="range"] {
+        touch-action: pan-y;
+    }
+
+    input[type="range"].tt-touch-slider-dragging {
+        touch-action: none;
+    }
+
+    .tt-touch-bool-menu {
+        position: fixed;
+        z-index: 100000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+        min-width: 96px;
+        min-height: 48px;
+        padding: 6px 10px;
+        box-sizing: border-box;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        border-radius: 14px;
+        background: rgba(28, 30, 34, 0.96);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+        -webkit-backdrop-filter: blur(8px);
+        backdrop-filter: blur(8px);
+    }
+
+    .tt-touch-bool-choice {
+        width: 36px;
+        height: 36px;
+        padding: 0;
+        border: 0;
+        border-radius: 50%;
+        background: transparent;
+        font-size: 30px;
+        line-height: 1;
+        touch-action: manipulation;
+    }
+
+    .tt-touch-bool-on {
+        color: #39d353;
+    }
+
+    .tt-touch-bool-off {
+        color: #ff5f57;
+    }
 }
