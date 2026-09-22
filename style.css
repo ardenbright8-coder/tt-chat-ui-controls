@@ -1,5 +1,5 @@
 /*
- * 聊天显示控制 v1.8.4
+ * 聊天显示控制 v1.8.5
  * - 聊天正文颜色独立
  * - 聊天正文字体下拉
  * - 八款开源字体随扩展提供
@@ -537,7 +537,7 @@
     }
 
     #world_popup.tt-wi-mobile .world_entry.tt-wi-active-entry .WIEnteryHeaderControls .world_entry_form_control:has(input[name="probability"]) > label::after {
-        content: '激活概率（触发后生效率）';
+        content: '激活概率（命中后生效概率）';
         font-size: calc(var(--mainFontSize) * .82);
     }
 
@@ -1317,7 +1317,7 @@
 
     #world_popup.tt-wi-mobile .world_entry.tt-wi-active-entry
         .tt-wi-order-control > label::after {
-        content: '顺序（插入优先级）';
+        content: '顺序（越大越靠后，通常影响更强）';
         font-size: calc(var(--mainFontSize) * .82);
     }
 
@@ -1365,4 +1365,176 @@
         .tt-wi-strategy-control {
         min-height: 82px;
     }
+}
+
+
+/* v1.8.5 World Info common-field help */
+@media (pointer: coarse) {
+    /* The labels now carry their own text + help button, so stop relying on pseudo text. */
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-active-entry
+        [name="PositionBlock"] > label,
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-active-entry
+        .WIEnteryHeaderControls .world_entry_form_control:has(input[name="depth"]) > label,
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-active-entry
+        .tt-wi-order-control > label,
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-active-entry
+        .tt-wi-probability-control > label {
+        display: flex !important;
+        align-items: flex-start;
+        gap: 5px;
+        width: 100%;
+        min-width: 0;
+        font-size: calc(var(--mainFontSize) * .78) !important;
+        line-height: 1.25;
+        opacity: .76;
+        white-space: normal;
+    }
+
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-active-entry
+        [name="PositionBlock"] > label::after,
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-active-entry
+        .WIEnteryHeaderControls .world_entry_form_control:has(input[name="depth"]) > label::after,
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-active-entry
+        .tt-wi-order-control > label::after,
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-active-entry
+        .tt-wi-probability-control > label::after {
+        content: none !important;
+    }
+
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-active-entry
+        .tt-wi-strategy-label {
+        display: flex !important;
+        align-items: center;
+        gap: 5px;
+        width: 100%;
+        min-width: 0;
+        white-space: normal !important;
+        line-height: 1.25;
+    }
+
+    #world_popup.tt-wi-mobile .tt-wi-help-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 18px;
+        width: 18px;
+        height: 18px;
+        min-width: 18px;
+        min-height: 18px;
+        margin: 0;
+        padding: 0;
+        border: 1px solid currentColor;
+        border-radius: 50%;
+        background: transparent;
+        color: inherit;
+        font: 700 12px/1 sans-serif;
+        opacity: .82;
+        touch-action: manipulation;
+    }
+
+    #world_popup.tt-wi-mobile .tt-wi-position-control select[name="position"] {
+        min-height: 46px;
+        padding: 0 34px 0 11px;
+        font-size: .9em;
+        text-overflow: ellipsis;
+    }
+
+    #world_popup.tt-wi-mobile .tt-wi-character-filter label {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+    }
+}
+
+/* Help sheet is intentionally outside #world_popup so it can cover the whole phone screen. */
+.tt-wi-help-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 100500;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding: 14px;
+    box-sizing: border-box;
+    background: rgba(0, 0, 0, .48);
+    backdrop-filter: blur(3px);
+}
+
+.tt-wi-help-card {
+    width: min(680px, 100%);
+    max-height: min(76dvh, 760px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,.16);
+    border-radius: 16px;
+    background: color-mix(in srgb, var(--SmartThemeBlurTintColor, #25272b) 96%, black 4%);
+    color: var(--SmartThemeBodyColor, #f1f1f1);
+    box-shadow: 0 18px 50px rgba(0,0,0,.45);
+}
+
+.tt-wi-help-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 36px;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 12px 10px 14px;
+    border-bottom: 1px solid rgba(255,255,255,.12);
+}
+
+.tt-wi-help-header strong {
+    min-width: 0;
+    font-size: 1.02em;
+    line-height: 1.35;
+}
+
+.tt-wi-help-close {
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border: 0;
+    border-radius: 9px;
+    background: rgba(255,255,255,.08);
+    color: inherit;
+}
+
+.tt-wi-help-body {
+    overflow: auto;
+    padding: 12px 14px 16px;
+    line-height: 1.55;
+    overscroll-behavior: contain;
+}
+
+.tt-wi-help-body p {
+    margin: 0 0 10px;
+}
+
+.tt-wi-help-row {
+    display: grid;
+    grid-template-columns: minmax(112px, .8fr) minmax(0, 1.7fr);
+    gap: 8px;
+    padding: 9px 0;
+    border-top: 1px solid rgba(255,255,255,.09);
+}
+
+.tt-wi-help-row:first-of-type {
+    border-top: 0;
+}
+
+.tt-wi-help-row b {
+    align-self: start;
+}
+
+.tt-wi-help-example,
+.tt-wi-help-note {
+    margin: 8px 0 10px;
+    padding: 9px 10px;
+    border-radius: 10px;
+    background: rgba(255,255,255,.07);
+}
+
+.tt-wi-help-body code {
+    padding: 1px 4px;
+    border-radius: 5px;
+    background: rgba(255,255,255,.08);
 }
