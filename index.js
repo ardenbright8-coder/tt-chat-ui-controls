@@ -1,3 +1,4 @@
+import { initContextLock, cleanupContextLock } from './context-lock.js';
 import { initWorldInfoMobile, cleanupWorldInfoMobile } from './world-info-mobile.js';
 
 const EXTENSION_KEY = 'chat-text-color';
@@ -757,6 +758,7 @@ function mountBackgroundBlurControl(state) {
 function mountUi() {
     const state = getExtensionState();
     if (!state) return false;
+    initContextLock();
 
     applyColor(state.settings.color);
     applyFontPreset(state.settings.fontPreset);
@@ -801,6 +803,7 @@ export async function init() {
 }
 
 export async function cleanup() {
+    cleanupContextLock();
     stopMessageBannerFix?.();
     fontRequest += 1; // Ignore any in-flight font completion after disable.
     fontLoads.clear();
