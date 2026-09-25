@@ -1,3 +1,4 @@
+import { initPromptDetachGuard, cleanupPromptDetachGuard } from './prompt-detach-guard.js';
 import { initContextLock, cleanupContextLock } from './context-lock.js';
 import { initWorldInfoMobile, cleanupWorldInfoMobile } from './world-info-mobile.js';
 
@@ -792,6 +793,7 @@ function startMountRetry() {
 export async function init() {
     startMessageBannerFix();
     installMobileTouchGuards();
+    initPromptDetachGuard();
     initWorldInfoMobile();
     if (initialized) {
         mountUi();
@@ -804,6 +806,7 @@ export async function init() {
 
 export async function cleanup() {
     cleanupContextLock();
+    cleanupPromptDetachGuard();
     stopMessageBannerFix?.();
     fontRequest += 1; // Ignore any in-flight font completion after disable.
     fontLoads.clear();
