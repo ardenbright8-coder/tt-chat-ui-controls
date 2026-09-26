@@ -1,6 +1,7 @@
 import { initPromptDetachGuard, cleanupPromptDetachGuard } from './prompt-detach-guard.js';
 import { initContextLock, cleanupContextLock } from './context-lock.js';
 import { initWorldInfoMobile, cleanupWorldInfoMobile } from './world-info-mobile.js';
+import { initChatScrollGuard, cleanupChatScrollGuard } from './chat-scroll-guard.js';
 
 const EXTENSION_KEY = 'chat-text-color';
 
@@ -792,6 +793,7 @@ function startMountRetry() {
 
 export async function init() {
     startMessageBannerFix();
+    initChatScrollGuard();
     installMobileTouchGuards();
     initPromptDetachGuard();
     initWorldInfoMobile();
@@ -805,6 +807,7 @@ export async function init() {
 }
 
 export async function cleanup() {
+    cleanupChatScrollGuard();
     cleanupContextLock();
     cleanupPromptDetachGuard();
     stopMessageBannerFix?.();
