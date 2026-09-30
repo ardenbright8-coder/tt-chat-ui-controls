@@ -1726,11 +1726,11 @@
 @media (pointer: coarse) {
     #world_popup.tt-wi-mobile .world_entry.tt-wi-card:not(.tt-wi-active-entry)
         .tt-wi-list-actions .inline-drawer-toggle.inline-drawer-icon {
-        width: 44px;
-        height: 44px;
-        min-width: 44px;
-        min-height: 44px;
-        flex: 0 0 44px;
+        width: 50px;
+        height: 50px;
+        min-width: 50px;
+        min-height: 50px;
+        flex: 0 0 50px;
         margin-left: 10px !important;
         padding: 0 !important;
         border-radius: 12px;
