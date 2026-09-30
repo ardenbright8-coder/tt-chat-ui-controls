@@ -1026,15 +1026,42 @@ function openSummary() {
         return;
     }
     showBubble({
-        text: '“放进输入框”：把总结提示词填进聊天输入框，你点发送，模型按平时聊天的方式回复；回复里 <总结> 的内容会自动变成可一键复制的气泡。',
+        text: '“直接发送”：把总结提示词当成你的消息发出去，模型按平时聊天的方式回复；回复里 <总结> 的内容会自动变成可一键复制的气泡。',
         meta: ' ',
         extra: lengthControl(),
         actions: [
-            { label: '放进输入框', cls: 'tt-summary-primary', onClick: fillInputWithPrompt },
+            { label: '直接发送', cls: 'tt-summary-primary', onClick: sendPromptNow },
+            { label: '放进输入框', onClick: fillInputWithPrompt },
             { label: '后台生成', onClick: () => runSummary(true) },
             { label: '关闭', onClick: closeBubble },
         ],
     });
+}
+
+// Send the summary prompt right away as the user's message, through the
+// host's own send button (same path as tapping send).
+function sendPromptNow() {
+    const input = document.getElementById('send_textarea');
+    const send = document.getElementById('send_but');
+    if (!(input instanceof HTMLTextAreaElement) || !send) {
+        globalThis.toastr?.error?.('找不到聊天输入框或发送按钮');
+        return;
+    }
+    if (input.value.trim()) {
+        // Never send the user's unfinished draft along with it.
+        fillInputWithPrompt();
+        globalThis.toastr?.warning?.('输入框里已有内容，为免误发，已改为放进输入框，请确认后手动发送');
+        return;
+    }
+    const busy = document.getElementById('mes_stop');
+    if (send.classList.contains('displayNone') || (busy && getComputedStyle(busy).display !== 'none')) {
+        globalThis.toastr?.warning?.('模型正在回复，等它写完再发总结请求');
+        return;
+    }
+    input.value = systemPrompt(summaryLength());
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    closeBubble();
+    send.click();
 }
 
 // Put the summary prompt into the chat input; the user sends it like any
