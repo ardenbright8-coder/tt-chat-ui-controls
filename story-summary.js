@@ -1,14 +1,23 @@
-// One-tap story summary.
-// A '总结全文' item in the left options menu (under 继续) asks the current model, OUTSIDE the
-// role-play (no preset, no world info, nothing added to the chat), to
-// summarise the whole story so far in about 1000 Chinese characters.
-// The result shows in a floating bubble whose Copy button copies only the
-// summary text.
+// Story summary + summary library.
+//
+// 总结全文 (options menu, under 继续): asks the current model OUTSIDE the
+// role-play (no preset, no world info, nothing written to the chat) to
+// summarise the story so far in about 1000 Chinese characters. Every result
+// is saved to the summary library automatically.
+//
+// 总结库: lists saved summaries across all chats and characters. A summary
+// can become the opening of a fresh chat (added as an extra greeting swipe,
+// so swiping still reaches the card's own openings), or be placed in this
+// chat's Author's Note for cards whose status bar needs the real opening.
 
-const BUTTON_ID = 'option_tt_story_summary';
+const SUMMARY_ID = 'option_tt_story_summary';
+const LIBRARY_ID = 'option_tt_summary_library';
 const BUBBLE_ID = 'tt_story_summary_bubble';
+const EXTENSION_KEY = 'chat-text-color';
+const LIBRARY_LIMIT = 30;
 const RESPONSE_TOKENS = 4096;
 const PROMPT_RESERVE_TOKENS = 1500;
+const RECAP_TITLE = '【前情提要】';
 
 const SYSTEM_PROMPT = [
     '【暂停一切角色扮演】',
@@ -22,11 +31,12 @@ const SYSTEM_PROMPT = [
 
 let running = false;
 let lastResult = null; // { chatId, length, text, note }
-let button = null;
 let mountTimer = null;
 let observer = null;
 
 const ctx = () => globalThis.SillyTavern?.getContext?.();
+
+// ---------------------------------------------------------------- text utils
 
 // Drop things that are not story text: code blocks (status bars, HTML
 // cards), script/style, collapsible reasoning, then any remaining tags.
@@ -48,6 +58,385 @@ export function extractSummary(reply) {
     const body = tagged ? tagged[1] : text.replace(/<(think|thinking)[\s\S]*?<\/\1>/gi, '');
     return body.replace(/<\/?[^>\n]{1,40}>/g, '').trim();
 }
+
+// Replace an earlier recap block in the Author's Note, or put one on top.
+export function mergeRecapIntoNote(note, summary) {
+    const block = `${RECAP_TITLE}\n${summary}\n${RECAP_TITLE.replace('【', '【/')}`;
+    const current = String(note ?? '');
+    const pattern = /【前情提要】[\s\S]*?【\/前情提要】/;
+    if (pattern.test(current)) return current.replace(pattern, block);
+    return current.trim() ? `${block}\n\n${current}` : block;
+}
+
+const charCount = (text) => String(text ?? '').replace(/\s/g, '').length;
+
+function formatTime(ms) {
+    const d = new Date(ms);
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getMonth() + 1}月${d.getDate()}日 ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// ---------------------------------------------------------------- library
+
+function library() {
+    const context = ctx();
+    const all = context?.extensionSettings;
+    if (!all) return [];
+    all[EXTENSION_KEY] ??= {};
+    const settings = all[EXTENSION_KEY];
+    if (!Array.isArray(settings.summaryLibrary)) settings.summaryLibrary = [];
+    return settings.summaryLibrary;
+}
+
+function persist() {
+    try { ctx()?.saveSettingsDebounced?.(); } catch { /* next save will catch up */ }
+}
+
+function saveToLibrary({ text, character, chatId }) {
+    const items = library();
+    const existing = items.findIndex((item) => item.text === text);
+    if (existing >= 0) items.splice(existing, 1);
+    const item = { id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, text, character, chatId, createdAt: Date.now() };
+    items.unshift(item);
+    if (items.length > LIBRARY_LIMIT) items.length = LIBRARY_LIMIT;
+    persist();
+    return item;
+}
+
+function removeFromLibrary(id) {
+    const items = library();
+    const index = items.findIndex((item) => item.id === id);
+    if (index >= 0) items.splice(index, 1);
+    persist();
+}
+
+// ---------------------------------------------------------------- applying
+
+// Only a chat that holds nothing but its opening may get a new opening.
+function openingState() {
+    const chat = ctx()?.chat ?? [];
+    if (chat.length === 0) return 'empty';
+    if (chat.length === 1 && !chat[0].is_user) return 'greeting';
+    return 'busy';
+}
+
+async function useAsOpening(text) {
+    const context = ctx();
+    const chat = context?.chat;
+    if (!chat) throw new Error('没有打开的聊天');
+    const body = `${RECAP_TITLE}\n${text}`;
+    const state = openingState();
+    if (state === 'busy') throw new Error('只能在刚开的新聊天里替换开场白');
+    if (state === 'empty') {
+        const now = new Date().toISOString();
+        chat.push({
+            name: context.name2,
+            is_user: false,
+            is_system: false,
+            send_date: now,
+            mes: body,
+            swipes: [body],
+            swipe_id: 0,
+            swipe_info: [{ send_date: now, extra: {} }],
+            extra: {},
+        });
+    } else {
+        // Add the recap as one more greeting swipe and show it. The card's own
+        // openings keep their positions, so swiping right brings them back.
+        const message = chat[0];
+        if (!Array.isArray(message.swipes) || !message.swipes.length) {
+            message.swipes = [message.mes];
+            message.swipe_id = 0;
+        }
+        if (!Array.isArray(message.swipe_info)) message.swipe_info = message.swipes.map(() => ({}));
+        while (message.swipe_info.length < message.swipes.length) message.swipe_info.push({});
+        let index = message.swipes.indexOf(body);
+        if (index < 0) {
+            message.swipes.push(body);
+            message.swipe_info.push({ send_date: message.send_date, extra: {} });
+            index = message.swipes.length - 1;
+        }
+        message.swipe_id = index;
+        message.mes = body;
+    }
+    await context.saveChat?.();
+    await context.reloadCurrentChat?.();
+}
+
+// Remove the card's opening from this fresh chat only, so the user can write
+// their own first message. Reloading an existing chat never re-adds it.
+async function clearOpening() {
+    const context = ctx();
+    if (openingState() !== 'greeting') throw new Error('只能在刚开的新聊天里清空开场白');
+    context.chat.splice(0, 1);
+    await context.saveChat?.();
+    await context.reloadCurrentChat?.();
+}
+
+function useAsAuthorsNote(text) {
+    const input = document.getElementById('extension_floating_prompt');
+    if (!input) throw new Error('找不到作者注释输入框');
+    const jq = globalThis.jQuery;
+    const next = mergeRecapIntoNote(input.value, text);
+    // Go through the host's own input handler (same path as its /note command),
+    // which saves the chat metadata and refreshes the token counter.
+    if (jq) jq(input).val(next).trigger('input');
+    else {
+        input.value = next;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    // An interval of 0 switches the note off; make it apply every turn.
+    const interval = document.getElementById('extension_floating_interval');
+    if (interval && Number(interval.value) === 0) {
+        if (jq) jq(interval).val(1).trigger('input');
+        else { interval.value = '1'; interval.dispatchEvent(new Event('input', { bubbles: true })); }
+    }
+}
+
+// ---------------------------------------------------------------- bubble UI
+
+function closeBubble() {
+    document.getElementById(BUBBLE_ID)?.remove();
+}
+
+async function copyText(text, trigger) {
+    let ok = false;
+    try {
+        await navigator.clipboard.writeText(text);
+        ok = true;
+    } catch {
+        const area = document.createElement('textarea');
+        area.value = text;
+        area.setAttribute('readonly', '');
+        area.style.cssText = 'position:fixed;left:-9999px;top:0';
+        document.body.append(area);
+        area.select();
+        try { ok = document.execCommand('copy'); } catch { ok = false; }
+        area.remove();
+    }
+    flash(trigger, ok ? '已复制' : '复制失败');
+}
+
+function flash(button, label) {
+    if (!button) return;
+    const original = button.dataset.label ?? button.textContent;
+    button.dataset.label = original;
+    button.textContent = label;
+    clearTimeout(Number(button.dataset.timer));
+    button.dataset.timer = String(setTimeout(() => { button.textContent = original; }, 1500));
+}
+
+// actions: [{ label, cls?, onClick(button), disabled? }]
+function showBubble({ title = '剧情总结', text = '', meta = '', note = '', error = '', loading = false, list = null, actions = [] }) {
+    closeBubble();
+    const bubble = document.createElement('div');
+    bubble.id = BUBBLE_ID;
+    bubble.setAttribute('role', 'dialog');
+    bubble.setAttribute('aria-label', title);
+
+    const head = document.createElement('div');
+    head.className = 'tt-summary-head';
+    const titleEl = document.createElement('span');
+    titleEl.textContent = title;
+    const metaEl = document.createElement('span');
+    metaEl.className = 'tt-summary-count';
+    metaEl.textContent = meta || (text ? `${charCount(text)} 字` : '');
+    head.append(titleEl, metaEl);
+    bubble.append(head);
+
+    if (list) bubble.append(list);
+    else {
+        const body = document.createElement('div');
+        body.className = 'tt-summary-body';
+        body.textContent = loading ? '正在通读全文并整理，稍等片刻…' : (error || text);
+        if (error) body.classList.add('tt-summary-error');
+        bubble.append(body);
+    }
+
+    if (note) {
+        const noteEl = document.createElement('div');
+        noteEl.className = 'tt-summary-note';
+        noteEl.textContent = note;
+        bubble.append(noteEl);
+    }
+
+    const bar = document.createElement('div');
+    bar.className = 'tt-summary-actions';
+    bar.style.gridTemplateColumns = `repeat(${Math.min(3, actions.length) || 1}, minmax(0, 1fr))`;
+    for (const action of actions) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = action.cls ?? '';
+        b.textContent = action.label;
+        b.disabled = !!action.disabled;
+        b.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            action.onClick(b);
+        });
+        bar.append(b);
+    }
+    bubble.append(bar);
+    document.body.append(bubble);
+    return bubble;
+}
+
+function showResult(result) {
+    showBubble({
+        text: result.text,
+        note: [result.note, '已自动存入总结库，开新聊天后可从菜单“总结库”取用。'].filter(Boolean).join('\n'),
+        actions: [
+            { label: '复制', cls: 'tt-summary-primary', onClick: (b) => copyText(result.text, b) },
+            { label: '重新生成', onClick: () => runSummary(true) },
+            { label: '关闭', onClick: closeBubble },
+        ],
+    });
+}
+
+function showLibrary(query = '') {
+    const items = library();
+    const wrap = document.createElement('div');
+    wrap.className = 'tt-summary-list';
+
+    const search = document.createElement('input');
+    search.type = 'search';
+    search.className = 'tt-summary-search';
+    search.placeholder = '按角色名或内容搜索';
+    search.value = query;
+    const rows = document.createElement('div');
+    rows.className = 'tt-summary-rows';
+    wrap.append(search, rows);
+
+    const render = () => {
+        rows.replaceChildren();
+        const q = search.value.trim().toLowerCase();
+        const shown = q
+            ? items.filter((item) => `${item.character ?? ''}\n${item.text}`.toLowerCase().includes(q))
+            : items;
+        if (!shown.length) {
+            const empty = document.createElement('div');
+            empty.className = 'tt-summary-empty';
+            empty.textContent = items.length
+                ? '没有找到匹配的总结。'
+                : '总结库还是空的。在聊天里点菜单“总结全文”，生成的总结会自动存到这里（最多保留最近 30 条）。';
+            rows.append(empty);
+            return;
+        }
+        for (const item of shown) {
+            const row = document.createElement('button');
+            row.type = 'button';
+            row.className = 'tt-summary-row';
+            const top = document.createElement('span');
+            top.className = 'tt-summary-row-meta';
+            top.textContent = `${item.character || '未知角色'} · ${formatTime(item.createdAt)} · ${charCount(item.text)} 字`;
+            const preview = document.createElement('span');
+            preview.className = 'tt-summary-row-text';
+            preview.textContent = item.text;
+            row.append(top, preview);
+            row.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                showLibraryItem(item, search.value);
+            });
+            rows.append(row);
+        }
+    };
+    search.addEventListener('input', render);
+    render();
+
+    const fresh = openingState() === 'greeting';
+    showBubble({
+        title: '总结库',
+        meta: items.length ? `${items.length} / ${LIBRARY_LIMIT} 条` : '',
+        list: wrap,
+        note: fresh ? '“空白开局”会删掉这个新聊天里的开场白，由你自己写第一条。' : '',
+        actions: [
+            {
+                label: '空白开局',
+                disabled: !fresh,
+                onClick: async (b) => {
+                    try {
+                        b.disabled = true;
+                        await clearOpening();
+                        closeBubble();
+                        globalThis.toastr?.success?.('已清空开场白，可以自己写开局了');
+                    } catch (error) {
+                        b.disabled = false;
+                        flash(b, '失败');
+                        globalThis.toastr?.error?.(String(error?.message || error));
+                    }
+                },
+            },
+            { label: '关闭', onClick: closeBubble },
+        ],
+    });
+}
+
+function showLibraryItem(item, query = '') {
+    const state = openingState();
+    const openingNote = state === 'busy'
+        ? '替换开场白只能在刚开的新聊天里用；聊天已经开始的，可以用“作者注释”。'
+        : '替换开场白：总结会成为开场白的一个新选项并直接显示，右滑可翻回卡里原来的开场白。带状态栏的卡建议用“作者注释”：开场白不动，总结写进本聊天的作者注释。';
+    let deleteArmed = false;
+    showBubble({
+        title: item.character ? `${item.character} 的总结` : '总结',
+        meta: `${formatTime(item.createdAt)} · ${charCount(item.text)} 字`,
+        text: item.text,
+        note: openingNote,
+        actions: [
+            {
+                label: '替换开场白',
+                cls: 'tt-summary-primary',
+                disabled: state === 'busy',
+                onClick: async (b) => {
+                    try {
+                        b.disabled = true;
+                        await useAsOpening(item.text);
+                        closeBubble();
+                        globalThis.toastr?.success?.('已用总结作为开场白，右滑可翻回原开场白');
+                    } catch (error) {
+                        b.disabled = false;
+                        flash(b, '失败');
+                        globalThis.toastr?.error?.(String(error?.message || error));
+                    }
+                },
+            },
+            {
+                label: '作者注释',
+                onClick: (b) => {
+                    try {
+                        useAsAuthorsNote(item.text);
+                        flash(b, '已放入');
+                        globalThis.toastr?.success?.('总结已放进本聊天的作者注释，每轮都会带给模型');
+                    } catch (error) {
+                        flash(b, '失败');
+                        globalThis.toastr?.error?.(String(error?.message || error));
+                    }
+                },
+            },
+            { label: '复制', onClick: (b) => copyText(item.text, b) },
+            {
+                label: '删除',
+                cls: 'tt-summary-danger',
+                onClick: (b) => {
+                    // Two taps: the first arms, the second deletes.
+                    if (!deleteArmed) {
+                        deleteArmed = true;
+                        b.textContent = '再点一次删除';
+                        setTimeout(() => { deleteArmed = false; if (b.isConnected) b.textContent = '删除'; }, 2500);
+                        return;
+                    }
+                    removeFromLibrary(item.id);
+                    showLibrary(query);
+                },
+            },
+            { label: '返回列表', onClick: () => showLibrary(query) },
+            { label: '关闭', onClick: closeBubble },
+        ],
+    });
+}
+
+// ---------------------------------------------------------------- summarise
 
 async function countTokens(context, text) {
     try {
@@ -74,126 +463,52 @@ async function buildTranscript(context) {
     let transcript = kept.join('\n\n');
     let tokens = await countTokens(context, transcript);
     while (tokens > budget && kept.length > 1) {
-        const ratio = budget / tokens;
-        const drop = Math.max(1, Math.ceil(kept.length * (1 - ratio)));
+        const drop = Math.max(1, Math.ceil(kept.length * (1 - budget / tokens)));
         kept = kept.slice(drop);
         transcript = kept.join('\n\n');
         tokens = await countTokens(context, transcript);
     }
-    const skipped = lines.length - kept.length;
-    return { transcript, skipped, total: lines.length };
+    return { transcript, skipped: lines.length - kept.length, total: lines.length };
 }
 
 function setBusy(busy) {
     running = busy;
-    if (!button) return;
-    button.classList.toggle('tt-summary-busy', busy);
-    const icon = button.querySelector('i');
+    const item = document.getElementById(SUMMARY_ID);
+    if (!item) return;
+    item.classList.toggle('tt-summary-busy', busy);
+    const icon = item.querySelector('i');
     icon?.classList.toggle('fa-book-open', !busy);
     icon?.classList.toggle('fa-spinner', busy);
     icon?.classList.toggle('fa-spin', busy);
-    const label = button.querySelector('span');
+    const label = item.querySelector('span');
     if (label) label.textContent = busy ? '正在总结…' : '总结全文';
-}
-
-function closeBubble() {
-    document.getElementById(BUBBLE_ID)?.remove();
-}
-
-async function copyText(text, trigger) {
-    let ok = false;
-    try {
-        await navigator.clipboard.writeText(text);
-        ok = true;
-    } catch {
-        const area = document.createElement('textarea');
-        area.value = text;
-        area.setAttribute('readonly', '');
-        area.style.cssText = 'position:fixed;left:-9999px;top:0';
-        document.body.append(area);
-        area.select();
-        try { ok = document.execCommand('copy'); } catch { ok = false; }
-        area.remove();
-    }
-    if (trigger) {
-        const label = trigger.textContent;
-        trigger.textContent = ok ? '已复制' : '复制失败';
-        setTimeout(() => { trigger.textContent = label; }, 1400);
-    }
-}
-
-function showBubble({ text = '', note = '', error = '', loading = false }) {
-    closeBubble();
-    const bubble = document.createElement('div');
-    bubble.id = BUBBLE_ID;
-    bubble.setAttribute('role', 'dialog');
-    bubble.setAttribute('aria-label', '剧情总结');
-
-    const head = document.createElement('div');
-    head.className = 'tt-summary-head';
-    const title = document.createElement('span');
-    title.textContent = '剧情总结';
-    const count = document.createElement('span');
-    count.className = 'tt-summary-count';
-    if (text) count.textContent = `${text.replace(/\s/g, '').length} 字`;
-    head.append(title, count);
-
-    const body = document.createElement('div');
-    body.className = 'tt-summary-body';
-    if (loading) body.textContent = '正在通读全文并整理，稍等片刻…';
-    else if (error) body.textContent = error;
-    else body.textContent = text;
-    if (error) body.classList.add('tt-summary-error');
-
-    bubble.append(head, body);
-    if (note) {
-        const noteEl = document.createElement('div');
-        noteEl.className = 'tt-summary-note';
-        noteEl.textContent = note;
-        bubble.append(noteEl);
-    }
-
-    const actions = document.createElement('div');
-    actions.className = 'tt-summary-actions';
-    const make = (label, cls, onClick) => {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.className = cls;
-        b.textContent = label;
-        b.addEventListener('click', (event) => { event.preventDefault(); event.stopPropagation(); onClick(b); });
-        actions.append(b);
-        return b;
-    };
-    const copy = make('复制', 'tt-summary-copy', (b) => copyText(text, b));
-    copy.disabled = !text;
-    const again = make('重新生成', 'tt-summary-again', () => runSummary(true));
-    again.disabled = loading;
-    make('关闭', 'tt-summary-close', closeBubble);
-    bubble.append(actions);
-
-    document.body.append(bubble);
 }
 
 async function runSummary(force = false) {
     if (running) return;
     const context = ctx();
     if (!context?.generateRaw) {
-        showBubble({ error: '当前酒馆版本不支持此功能（缺少 generateRaw 接口）。' });
+        showBubble({ error: '当前酒馆版本不支持此功能（缺少 generateRaw 接口）。', actions: [{ label: '关闭', onClick: closeBubble }] });
         return;
     }
     const chatId = context.getCurrentChatId?.() ?? context.chatId ?? '';
     const length = context.chat?.length ?? 0;
     if (!force && lastResult && lastResult.chatId === chatId && lastResult.length === length) {
-        showBubble(lastResult);
+        showResult(lastResult);
         return;
     }
 
+    const fail = (message) => showBubble({
+        error: message,
+        actions: [{ label: '重新生成', onClick: () => runSummary(true) }, { label: '关闭', onClick: closeBubble }],
+    });
+
     setBusy(true);
-    showBubble({ loading: true });
+    showBubble({ loading: true, actions: [{ label: '关闭', onClick: closeBubble }] });
     try {
         const built = await buildTranscript(context);
         if (!built) {
-            showBubble({ error: '当前聊天还没有可总结的内容。' });
+            fail('当前聊天还没有可总结的内容。');
             return;
         }
         const omitted = built.skipped > 0
@@ -209,21 +524,24 @@ async function runSummary(force = false) {
         const reply = await context.generateRaw({ prompt, responseLength: RESPONSE_TOKENS, trimNames: false });
         const text = extractSummary(reply);
         if (!text) {
-            showBubble({ error: '模型没有返回总结内容，可以点“重新生成”再试一次。' });
+            fail('模型没有返回总结内容，可以点“重新生成”再试一次。');
             return;
         }
         const note = built.skipped > 0
             ? `对话太长，只总结了最近 ${built.total - built.skipped} 条（共 ${built.total} 条）。`
             : '';
+        saveToLibrary({ text, character: context.name2, chatId });
         lastResult = { chatId, length, text, note };
-        showBubble(lastResult);
+        showResult(lastResult);
     } catch (error) {
         console.error('[酒馆拓展] 总结失败', error);
-        showBubble({ error: `总结失败：${error?.message || error}` });
+        fail(`总结失败：${error?.message || error}`);
     } finally {
         setBusy(false);
     }
 }
+
+// ---------------------------------------------------------------- menu items
 
 // Close the host's options menu the way its own button does, so the host's
 // open/closed flag stays right and the next tap on the menu opens it at once.
@@ -232,45 +550,64 @@ function closeOptionsMenu() {
     if (menu && getComputedStyle(menu).display !== 'none') document.getElementById('options_button')?.click();
 }
 
-function mountButton() {
-    if (document.getElementById(BUTTON_ID)) return true;
-    const list = document.querySelector('#options .options-content');
-    if (!list) return false;
-    button = document.createElement('a');
-    button.id = BUTTON_ID;
-    button.title = '暂停角色扮演，把目前的故事总结成约 1000 字';
+function makeMenuItem(id, iconClass, text, title, onClick) {
+    const item = document.createElement('a');
+    item.id = id;
+    item.title = title;
     const icon = document.createElement('i');
-    icon.className = 'fa-lg fa-solid fa-book-open';
+    icon.className = `fa-lg fa-solid ${iconClass}`;
     const label = document.createElement('span');
-    label.textContent = '总结全文';
-    button.append(icon, label);
-    button.addEventListener('click', (event) => {
+    label.textContent = text;
+    item.append(icon, label);
+    item.addEventListener('click', (event) => {
         event.preventDefault();
         closeOptionsMenu();
-        runSummary(false);
+        onClick();
     });
+    return item;
+}
+
+function mountMenu() {
+    if (document.getElementById(SUMMARY_ID) && document.getElementById(LIBRARY_ID)) return true;
+    const list = document.querySelector('#options .options-content');
+    if (!list) return false;
+    document.getElementById(SUMMARY_ID)?.remove();
+    document.getElementById(LIBRARY_ID)?.remove();
+    const summary = makeMenuItem(SUMMARY_ID, 'fa-book-open', '总结全文', '暂停角色扮演，把目前的故事总结成约 1000 字', () => runSummary(false));
+    const lib = makeMenuItem(LIBRARY_ID, 'fa-box-archive', '总结库', '查看存下的总结，用于新聊天开场或作者注释', () => showLibrary());
     const after = document.getElementById('option_continue');
-    if (after?.parentElement === list) after.after(button);
-    else list.append(button);
+    if (after?.parentElement === list) after.after(summary, lib);
+    else list.append(summary, lib);
+    if (running) setBusy(true);
     return true;
+}
+
+// Opening the options menu hides the bubble so it never covers the menu.
+function onMenuButton(event) {
+    if (!event.target.closest?.('#options_button')) return;
+    const menu = document.getElementById('options');
+    if (menu && getComputedStyle(menu).display === 'none') closeBubble();
 }
 
 function watchMenu() {
     if (observer) return;
-    // Put the menu item back if the host rebuilds its options menu.
-    observer = new MutationObserver(() => { if (!document.getElementById(BUTTON_ID)) mountButton(); });
+    document.addEventListener('click', onMenuButton, true);
+    // Put the menu items back if the host rebuilds its options menu.
+    observer = new MutationObserver(() => {
+        if (!document.getElementById(SUMMARY_ID) || !document.getElementById(LIBRARY_ID)) mountMenu();
+    });
     observer.observe(document.getElementById('options') ?? document.body, { childList: true, subtree: true });
 }
 
 export function initStorySummary() {
     clearInterval(mountTimer);
-    if (mountButton()) {
+    if (mountMenu()) {
         watchMenu();
         return;
     }
     let tries = 0;
     mountTimer = setInterval(() => {
-        const done = mountButton();
+        const done = mountMenu();
         if (done) watchMenu();
         if (done || ++tries > 60) clearInterval(mountTimer);
     }, 500);
@@ -280,7 +617,8 @@ export function cleanupStorySummary() {
     clearInterval(mountTimer);
     observer?.disconnect();
     observer = null;
+    document.removeEventListener('click', onMenuButton, true);
     closeBubble();
-    document.getElementById(BUTTON_ID)?.remove();
-    button = null;
+    document.getElementById(SUMMARY_ID)?.remove();
+    document.getElementById(LIBRARY_ID)?.remove();
 }
