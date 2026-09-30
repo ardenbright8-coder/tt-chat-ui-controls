@@ -305,47 +305,124 @@ function closeEntryDrawer(entry) {
     toggle.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
 }
 
-function makeEditActions(entry) {
-    if (!entry || entry.querySelector(':scope > .tt-wi-edit-actions')) return;
+const CANCEL_HOLD_MS = 600;
+const CANCEL_MOVE_TOLERANCE = 10;
+const editActionsByEntry = new WeakMap();
 
-    const actions = document.createElement('div');
-    actions.className = 'tt-wi-edit-actions';
+// Long-press guard: the revert only fires after a steady ~0.6s hold, so a
+// stray tap next to the editor can't throw away this session's edits.
+function bindHoldToCancel(button, onConfirm) {
+    let press = null;
+    const stop = () => {
+        if (!press) return;
+        clearTimeout(press.timer);
+        button.classList.remove('tt-wi-cancel-holding');
+        press = null;
+    };
+    const down = (event) => {
+        if (event.button !== undefined && event.button !== 0) return;
+        event.preventDefault();
+        stop();
+        button.classList.add('tt-wi-cancel-holding');
+        press = {
+            id: event.pointerId,
+            x: event.clientX,
+            y: event.clientY,
+            timer: setTimeout(() => {
+                stop();
+                navigator.vibrate?.(15);
+                onConfirm();
+            }, CANCEL_HOLD_MS),
+        };
+    };
+    const move = (event) => {
+        if (!press || event.pointerId !== press.id) return;
+        if (Math.hypot(event.clientX - press.x, event.clientY - press.y) > CANCEL_MOVE_TOLERANCE) stop();
+    };
+    const up = (event) => {
+        if (!press || event.pointerId !== press.id) return;
+        stop();
+        globalThis.toastr?.info?.('按住“取消”约 0.6 秒，才会撤回本次修改', '', { timeOut: 1800 });
+    };
+    const click = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+    };
+    const key = (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        onConfirm();
+    };
+    const menu = (event) => event.preventDefault();
+    button.addEventListener('pointerdown', down);
+    button.addEventListener('pointermove', move);
+    button.addEventListener('pointerup', up);
+    button.addEventListener('pointercancel', stop);
+    button.addEventListener('pointerleave', stop);
+    button.addEventListener('click', click);
+    button.addEventListener('keydown', key);
+    button.addEventListener('contextmenu', menu);
+    return () => {
+        stop();
+        button.removeEventListener('pointerdown', down);
+        button.removeEventListener('pointermove', move);
+        button.removeEventListener('pointerup', up);
+        button.removeEventListener('pointercancel', stop);
+        button.removeEventListener('pointerleave', stop);
+        button.removeEventListener('click', click);
+        button.removeEventListener('keydown', key);
+        button.removeEventListener('contextmenu', menu);
+    };
+}
+
+function makeEditActions(entry) {
+    if (!entry) return;
+    const existing = editActionsByEntry.get(entry);
+    if (existing?.isConnected) return;
+    // The host rebuilds the drawer after it closes; drop listeners bound to the old editor.
+    if (existing) {
+        contentEditors.get(entry)?.cleanup();
+        contentEditors.delete(entry);
+    }
+
+    const actions = document.createElement('span');
+    actions.className = 'tt-wi-head-actions';
 
     const cancel = document.createElement('button');
     cancel.type = 'button';
     cancel.className = 'tt-wi-edit-cancel';
     cancel.textContent = '取消';
+    cancel.title = '长按约 0.6 秒：撤回本次打开后的所有修改并返回';
+    actions.append(cancel);
 
-    const confirm = document.createElement('button');
-    confirm.type = 'button';
-    confirm.className = 'tt-wi-edit-confirm';
-    confirm.textContent = '保存';
+    // Saving is automatic (the host saves every change), and ← already returns,
+    // so the only action kept here is Cancel, next to the content heading.
+    const heading = entry.querySelector('.tt-wi-content-heading')
+        ?? entry.querySelector('label[for="content "] > small > span');
+    if (heading) heading.append(actions);
+    else {
+        actions.className = 'tt-wi-edit-actions';
+        entry.appendChild(actions);
+    }
+    editActionsByEntry.set(entry, actions);
 
-    actions.append(cancel, confirm);
-    entry.appendChild(actions);
     const contentEditor = bindContentEditing(entry, actions);
     contentEditors.set(entry, contentEditor);
 
     const cleanup = entryCleanup.get(entry) ?? [];
 
-    cleanup.push(on(cancel, 'click', (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-
+    cleanup.push(bindHoldToCancel(cancel, () => {
         restoreEntrySnapshot(entry);
         clearEntrySnapshot(entry);
         closeEntryDrawer(entry);
     }));
 
-    cleanup.push(on(confirm, 'click', (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-
-        clearEntrySnapshot(entry);
-        closeEntryDrawer(entry);
-    }));
-
-    cleanup.push(() => { contentEditor.cleanup(); contentEditors.delete(entry); actions.remove(); });
+    cleanup.push(() => {
+        contentEditors.get(entry)?.cleanup();
+        contentEditors.delete(entry);
+        actions.remove();
+        editActionsByEntry.delete(entry);
+    });
     entryCleanup.set(entry, cleanup);
 }
 

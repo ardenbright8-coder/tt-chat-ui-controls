@@ -1823,3 +1823,68 @@
 .tt-wi-draft-actions button:last-child { background: #3d7059; }
 .tt-wi-draft-actions button:disabled,
 .tt-wi-edit-undo:disabled { opacity: .4; }
+
+
+/* v1.8.16: Cancel lives on the content heading row, long-press guarded.
+   Save is automatic, so the old bottom bar is gone. */
+@media (pointer: coarse) {
+    #world_popup.tt-wi-mobile .tt-wi-content-heading {
+        flex-wrap: nowrap;
+    }
+    #world_popup.tt-wi-mobile .tt-wi-content-heading > span:not(.tt-wi-head-actions):not(:first-child) {
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        text-align: right;
+    }
+    #world_popup.tt-wi-mobile .tt-wi-head-actions {
+        display: inline-flex;
+        flex: 0 0 auto;
+        align-items: center;
+        gap: 6px;
+        margin-left: 8px;
+    }
+    #world_popup.tt-wi-mobile .tt-wi-head-actions button {
+        min-height: 40px;
+        padding: 0 16px;
+        border: 1px solid var(--tt-wi-border);
+        border-radius: 12px;
+        color: inherit;
+        font: inherit;
+        font-size: 15px;
+        font-weight: 700;
+        line-height: 1;
+        background: var(--tt-wi-soft-bg);
+    }
+    #world_popup.tt-wi-mobile .tt-wi-head-actions .tt-wi-edit-cancel {
+        position: relative;
+        overflow: hidden;
+        min-width: 72px;
+        touch-action: pan-y;
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
+        color: #ffb4a8;
+        border-color: color-mix(in srgb, #e0604c 55%, transparent);
+    }
+    /* Fill bar shows how long the hold still needs. */
+    #world_popup.tt-wi-mobile .tt-wi-head-actions .tt-wi-edit-cancel::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        transform: scaleX(0);
+        transform-origin: left;
+        background: color-mix(in srgb, #e0604c 45%, transparent);
+        pointer-events: none;
+    }
+    #world_popup.tt-wi-mobile .tt-wi-head-actions .tt-wi-edit-cancel.tt-wi-cancel-holding::before {
+        transform: scaleX(1);
+        transition: transform 600ms linear;
+    }
+    /* The host code editor has its own ↶ ↷, so our undo only shows without it. */
+    #world_popup.tt-wi-mobile .tt-wi-content-block:has(.tt-codemirror-editor) .tt-wi-edit-undo {
+        display: none;
+    }
+}
