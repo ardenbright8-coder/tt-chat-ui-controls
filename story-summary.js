@@ -12,6 +12,8 @@
 
 const SUMMARY_ID = 'option_tt_story_summary';
 const LIBRARY_ID = 'option_tt_summary_library';
+const BLANK_ID = 'option_tt_blank_opening';
+const BLANK_WINDOW_MS = 60_000;
 const BUBBLE_ID = 'tt_story_summary_bubble';
 const EXTENSION_KEY = 'chat-text-color';
 const LIBRARY_LIMIT = 30;
@@ -165,6 +167,57 @@ async function useAsOpening(text) {
 
 // Remove the card's opening from this fresh chat only, so the user can write
 // their own first message. Reloading an existing chat never re-adds it.
+let pendingBlankUntil = 0;
+let blankListener = null;
+
+// Menu action: in a fresh chat, drop its opening now; otherwise start a new
+// chat through the host's own flow (with its confirm dialog) and drop the
+// opening as soon as that chat is created.
+async function blankOpening() {
+    const state = openingState();
+    if (state === 'empty') {
+        globalThis.toastr?.info?.('这个聊天已经是空白开局了');
+        return;
+    }
+    if (state === 'greeting') {
+        try {
+            await clearOpening();
+            globalThis.toastr?.success?.('已清空开场白，可以自己写开局了');
+        } catch (error) {
+            globalThis.toastr?.error?.(String(error?.message || error));
+        }
+        return;
+    }
+    const context = ctx();
+    const events = context?.eventSource;
+    const types = context?.eventTypes ?? context?.event_types;
+    const start = document.getElementById('option_start_new_chat');
+    if (!events?.on || !types?.CHAT_CREATED || !start) {
+        globalThis.toastr?.warning?.('请先用“开始新聊天”开一个新聊天，再点“空白开局”');
+        return;
+    }
+    pendingBlankUntil = Date.now() + BLANK_WINDOW_MS;
+    if (!blankListener) {
+        blankListener = () => {
+            if (Date.now() > pendingBlankUntil) return;
+            pendingBlankUntil = 0;
+            // Let the host finish its new-chat work (first-message events,
+            // status-bar setup) before the opening is removed.
+            setTimeout(async () => {
+                if (openingState() !== 'greeting') return;
+                try {
+                    await clearOpening();
+                    globalThis.toastr?.success?.('新聊天已开好，开场白已清空');
+                } catch (error) {
+                    globalThis.toastr?.error?.(String(error?.message || error));
+                }
+            }, 300);
+        };
+        events.on(types.CHAT_CREATED, blankListener);
+    }
+    start.click();
+}
+
 async function clearOpening() {
     const context = ctx();
     if (openingState() !== 'greeting') throw new Error('只能在刚开的新聊天里清空开场白');
@@ -344,31 +397,11 @@ function showLibrary(query = '') {
     search.addEventListener('input', render);
     render();
 
-    const fresh = openingState() === 'greeting';
     showBubble({
         title: '总结库',
         meta: items.length ? `${items.length} / ${LIBRARY_LIMIT} 条` : '',
         list: wrap,
-        note: fresh ? '“空白开局”会删掉这个新聊天里的开场白，由你自己写第一条。' : '',
-        actions: [
-            {
-                label: '空白开局',
-                disabled: !fresh,
-                onClick: async (b) => {
-                    try {
-                        b.disabled = true;
-                        await clearOpening();
-                        closeBubble();
-                        globalThis.toastr?.success?.('已清空开场白，可以自己写开局了');
-                    } catch (error) {
-                        b.disabled = false;
-                        flash(b, '失败');
-                        globalThis.toastr?.error?.(String(error?.message || error));
-                    }
-                },
-            },
-            { label: '关闭', onClick: closeBubble },
-        ],
+        actions: [{ label: '关闭', onClick: closeBubble }],
     });
 }
 
@@ -567,17 +600,19 @@ function makeMenuItem(id, iconClass, text, title, onClick) {
     return item;
 }
 
+const MENU_IDS = [SUMMARY_ID, LIBRARY_ID, BLANK_ID];
+
 function mountMenu() {
-    if (document.getElementById(SUMMARY_ID) && document.getElementById(LIBRARY_ID)) return true;
+    if (MENU_IDS.every((id) => document.getElementById(id))) return true;
     const list = document.querySelector('#options .options-content');
     if (!list) return false;
-    document.getElementById(SUMMARY_ID)?.remove();
-    document.getElementById(LIBRARY_ID)?.remove();
+    MENU_IDS.forEach((id) => document.getElementById(id)?.remove());
     const summary = makeMenuItem(SUMMARY_ID, 'fa-book-open', '总结全文', '暂停角色扮演，把目前的故事总结成约 1000 字', () => runSummary(false));
     const lib = makeMenuItem(LIBRARY_ID, 'fa-box-archive', '总结库', '查看存下的总结，用于新聊天开场或作者注释', () => showLibrary());
+    const blank = makeMenuItem(BLANK_ID, 'fa-file', '空白开局', '开一个没有开场白的新聊天，自己写第一条', blankOpening);
     const after = document.getElementById('option_continue');
-    if (after?.parentElement === list) after.after(summary, lib);
-    else list.append(summary, lib);
+    if (after?.parentElement === list) after.after(summary, lib, blank);
+    else list.append(summary, lib, blank);
     if (running) setBusy(true);
     return true;
 }
@@ -594,7 +629,7 @@ function watchMenu() {
     document.addEventListener('click', onMenuButton, true);
     // Put the menu items back if the host rebuilds its options menu.
     observer = new MutationObserver(() => {
-        if (!document.getElementById(SUMMARY_ID) || !document.getElementById(LIBRARY_ID)) mountMenu();
+        if (!MENU_IDS.every((id) => document.getElementById(id))) mountMenu();
     });
     observer.observe(document.getElementById('options') ?? document.body, { childList: true, subtree: true });
 }
@@ -619,6 +654,12 @@ export function cleanupStorySummary() {
     observer = null;
     document.removeEventListener('click', onMenuButton, true);
     closeBubble();
-    document.getElementById(SUMMARY_ID)?.remove();
-    document.getElementById(LIBRARY_ID)?.remove();
+    MENU_IDS.forEach((id) => document.getElementById(id)?.remove());
+    if (blankListener) {
+        const context = ctx();
+        const types = context?.eventTypes ?? context?.event_types;
+        try { context?.eventSource?.removeListener?.(types?.CHAT_CREATED, blankListener); } catch { /* host gone */ }
+        blankListener = null;
+    }
+    pendingBlankUntil = 0;
 }
