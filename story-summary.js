@@ -85,30 +85,40 @@ export function extractSummary(reply) {
 }
 
 // Split a reply into the <总结> body and everything else the model wrote.
+// Many presets wrap their persona chatter around the real content with
+// horizontal rules. Keep what sits between the first and the last rule when
+// that is the bulk of the text; return null when there is nothing to trim.
+function trimByRules(text) {
+    const lines = String(text ?? '').split('\n');
+    const rules = lines.reduce((found, line, index) => (/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/.test(line) ? [...found, index] : found), []);
+    if (rules.length < 2) return null;
+    const first = rules[0];
+    const last = rules[rules.length - 1];
+    const middle = lines.slice(first + 1, last).join('\n').trim();
+    if (charCount(middle) < charCount(text) * 0.5) return null;
+    const rest = [lines.slice(0, first).join('\n').trim(), lines.slice(last + 1).join('\n').trim()].filter(Boolean).join('\n\n……\n\n');
+    return { middle, rest };
+}
+
+// Split a reply into the <总结> body and everything else the model wrote.
 export function splitSummary(reply) {
     const raw = String(reply ?? '');
     const match = raw.match(/<总结>([\s\S]*?)(<\/总结>|$)/);
     if (!match) {
         const body = raw.replace(/<(think|thinking)[\s\S]*?<\/\1>/gi, '').trim();
-        // No tags: many presets wrap their persona chatter around the real
-        // content with horizontal rules, so keep what sits between the first
-        // and the last rule when that is the bulk of the reply.
-        const lines = body.split('\n');
-        const rules = lines.reduce((found, line, index) => (/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/.test(line) ? [...found, index] : found), []);
-        if (rules.length >= 2) {
-            const first = rules[0];
-            const last = rules[rules.length - 1];
-            const middle = lines.slice(first + 1, last).join('\n').trim();
-            if (charCount(middle) >= charCount(body) * 0.5) {
-                const rest = [lines.slice(0, first).join('\n').trim(), lines.slice(last + 1).join('\n').trim()].filter(Boolean).join('\n\n……\n\n');
-                return { summary: middle, rest, tagged: false, trimmed: true, truncated: false };
-            }
-        }
+        const cut = trimByRules(body);
+        if (cut) return { summary: cut.middle, rest: cut.rest, tagged: false, trimmed: true, truncated: false };
         return { summary: body, rest: '', tagged: false, trimmed: false, truncated: false };
     }
-    const summary = match[1].replace(/<\/?[^>\n]{1,40}>/g, '').trim();
-    const rest = (raw.slice(0, match.index) + raw.slice(match.index + match[0].length)).trim();
-    return { summary, rest, tagged: true, trimmed: false, truncated: !match[2] };
+    let summary = match[1].replace(/<\/?[^>\n]{1,40}>/g, '').trim();
+    let rest = (raw.slice(0, match.index) + raw.slice(match.index + match[0].length)).trim();
+    // Chatter written inside the tags gets the same treatment.
+    const cut = trimByRules(summary);
+    if (cut) {
+        summary = cut.middle;
+        rest = [cut.rest, rest].filter(Boolean).join('\n\n……\n\n');
+    }
+    return { summary, rest, tagged: true, trimmed: !!cut, truncated: !match[2] };
 }
 
 // Replace an earlier recap block in the Author's Note, or put one on top.
@@ -1013,6 +1023,7 @@ function decorateMessage(element) {
     const flags = [
         parts.truncated ? '可能被截断' : '',
         !parts.tagged ? (parts.trimmed ? '没找到总结标签，已按分隔线去掉首尾闲聊' : '没找到总结标签，显示整条回复') : '',
+        parts.tagged && parts.trimmed ? '已按分隔线去掉首尾闲聊' : '',
     ].filter(Boolean);
     meta.textContent = [`${charCount(parts.summary)} 字`, ...flags].join(' · ');
     if (flags.length) meta.classList.add('tt-summary-truncated');
