@@ -1,4 +1,4 @@
-# 聊天显示控制 v1.8.12（SillyTavern / TauriTavern）
+# 酒馆拓展 v1.8.16（SillyTavern / TauriTavern）
 
 目前包含三类显示控制、一套手机版防误触，以及移动端世界书界面优化：
 
@@ -53,7 +53,7 @@ TauriTavern：
 
 `https://github.com/ardenbright8-coder/tt-chat-ui-controls.git`
 
-已经安装旧版时，在扩展管理中对“聊天显示控制”执行更新即可。
+已经安装旧版时，在扩展管理中对“酒馆拓展”（旧名“聊天显示控制”）执行更新即可。
 
 更新完成后刷新页面一次；独立 App 可关闭后重新打开。
 
