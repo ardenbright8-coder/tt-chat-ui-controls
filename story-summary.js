@@ -106,6 +106,18 @@ function summaryLength() {
     return Number.isFinite(value) && value > 0 ? Math.min(LENGTH_MAX, Math.max(LENGTH_MIN, Math.round(value))) : LENGTH_DEFAULT;
 }
 
+// Name of the preset the user currently has selected, exactly as the preset
+// dropdown shows it (chat completion, text completion, …).
+function currentPresetName() {
+    const context = ctx();
+    const api = context?.mainApi;
+    const select = api ? document.querySelector(`select[data-preset-manager-for="${api}"]`) : null;
+    const fromUi = select?.selectedOptions?.[0]?.textContent?.trim();
+    if (fromUi) return fromUi;
+    if (api === 'openai') return String(context?.chatCompletionSettings?.preset_settings_openai ?? '').trim();
+    return '';
+}
+
 function usePreset() {
     const value = ctx()?.extensionSettings?.[EXTENSION_KEY]?.summaryUsePreset;
     return value !== false;
@@ -416,7 +428,7 @@ function lengthControl() {
     check.checked = usePreset();
     check.addEventListener('change', () => setUsePreset(check.checked));
     const text = document.createElement('span');
-    text.textContent = '使用当前预设（推荐）';
+    text.textContent = `使用预设：${currentPresetName() || '当前预设'}（推荐）`;
     toggle.title = '用你平时聊天的预设来生成总结，不带世界书和作者注释；拿不到内容时自动改用直接请求';
     toggle.append(check, text);
     box.append(lengthRow(), toggle);
@@ -724,9 +736,11 @@ async function runSummary(force = false) {
             fail(`总结失败。${problems.join('；')}。可能是模型的内容审核拦下了，或回复长度被思考过程用完，可以稍后重试或换个模型。`);
             return;
         }
+        const presetName = currentPresetName() || '当前预设';
         const note = [
-            built.skipped > 0 ? `对话太长，直接请求只带了最近 ${built.total - built.skipped} 条（共 ${built.total} 条）。` : '',
-            used !== routes[0] ? `${names[routes[0]]}没有拿到内容，这次是${names[used]}生成的。` : '',
+            used === 'preset' ? `这次用的预设：${presetName}` : '这次是直接请求，没有用预设。',
+            used !== routes[0] ? `（${names[routes[0]]}没有拿到内容，已自动改用${names[used]}）` : '',
+            used === 'direct' && built.skipped > 0 ? `对话太长，只带了最近 ${built.total - built.skipped} 条（共 ${built.total} 条）。` : '',
         ].filter(Boolean).join('\n');
         saveToLibrary({ text, character: context.name2, chatId });
         lastResult = { chatId, chatLength, words, text, note };
