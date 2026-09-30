@@ -393,6 +393,11 @@ function lengthControl() {
     return row;
 }
 
+function setLoadingText(message) {
+    const body = document.querySelector(`#${BUBBLE_ID} .tt-summary-body`);
+    if (body) body.textContent = message;
+}
+
 function showResult(result) {
     showBubble({
         text: result.text,
@@ -587,6 +592,31 @@ function setBusy(busy) {
     if (label) label.textContent = busy ? '正在总结…' : '总结全文';
 }
 
+// Menu entry: show the last result for this chat if nothing changed,
+// otherwise let the user set the length before generating.
+function openSummary() {
+    if (running) {
+        showBubble({ loading: true, actions: [{ label: '关闭', onClick: closeBubble }] });
+        return;
+    }
+    const context = ctx();
+    const chatId = context?.getCurrentChatId?.() ?? context?.chatId ?? '';
+    const chatLength = context?.chat?.length ?? 0;
+    if (lastResult && lastResult.chatId === chatId && lastResult.chatLength === chatLength && lastResult.words === summaryLength()) {
+        showResult(lastResult);
+        return;
+    }
+    showBubble({
+        text: '将暂停角色扮演，通读当前聊天，整理成一篇剧情总结。先选好字数，再点“开始总结”。',
+        meta: ' ',
+        extra: lengthControl(),
+        actions: [
+            { label: '开始总结', cls: 'tt-summary-primary', onClick: () => runSummary(true) },
+            { label: '关闭', onClick: closeBubble },
+        ],
+    });
+}
+
 async function runSummary(force = false) {
     if (running) return;
     const context = ctx();
@@ -631,15 +661,43 @@ async function runSummary(force = false) {
                 content: `${omitted}【对话记录开始】\n${built.transcript}\n【对话记录结束】\n\n现在暂停角色扮演，按要求输出约 ${words} 字的剧情总结。`,
             },
         ];
-        const reply = await context.generateRaw({ prompt, responseLength: responseTokens, trimNames: false });
-        const text = extractSummary(reply);
+        // First try a clean request without the preset. Some providers return
+        // nothing for mature stories without the preset's own settings, so
+        // retry through the current preset (world info / author's note skipped).
+        let text = '';
+        let rawError = null;
+        try {
+            text = extractSummary(await context.generateRaw({ prompt, responseLength: responseTokens, trimNames: false }));
+        } catch (error) {
+            rawError = error;
+        }
+        let viaPreset = false;
+        if (!text && typeof context.generateQuietPrompt === 'function') {
+            viaPreset = true;
+            setLoadingText('直接请求没有返回内容，正在改用当前预设重试…');
+            const instruction = `${systemPrompt(words)}\n\n现在暂停角色扮演，根据以上全部聊天记录，按要求输出约 ${words} 字的剧情总结。`;
+            try {
+                text = extractSummary(await context.generateQuietPrompt({
+                    quietPrompt: instruction,
+                    skipWIAN: true,
+                    responseLength: responseTokens,
+                    removeReasoning: true,
+                }));
+            } catch (error) {
+                fail(`总结失败：${error?.message || error}${rawError ? `（直接请求也失败：${rawError.message || rawError}）` : ''}`);
+                return;
+            }
+        }
         if (!text) {
-            fail('模型没有返回总结内容，可以点“重新生成”再试一次。');
+            fail(rawError
+                ? `总结失败：${rawError.message || rawError}。模型没有返回内容，可能被模型的内容审核拦下了，可以换个模型或稍后重试。`
+                : '模型没有返回总结内容，可以点“重新生成”再试一次。');
             return;
         }
-        const note = built.skipped > 0
-            ? `对话太长，只总结了最近 ${built.total - built.skipped} 条（共 ${built.total} 条）。`
-            : '';
+        const note = [
+            built.skipped > 0 ? `对话太长，只总结了最近 ${built.total - built.skipped} 条（共 ${built.total} 条）。` : '',
+            viaPreset ? '直接请求没有返回内容，这次是走当前预设生成的。' : '',
+        ].filter(Boolean).join('\n');
         saveToLibrary({ text, character: context.name2, chatId });
         lastResult = { chatId, chatLength, words, text, note };
         showResult(lastResult);
@@ -684,7 +742,7 @@ function mountMenu() {
     const list = document.querySelector('#options .options-content');
     if (!list) return false;
     MENU_IDS.forEach((id) => document.getElementById(id)?.remove());
-    const summary = makeMenuItem(SUMMARY_ID, 'fa-book-open', '总结全文', '暂停角色扮演，把目前的故事总结成约 1000 字', () => runSummary(false));
+    const summary = makeMenuItem(SUMMARY_ID, 'fa-book-open', '总结全文', '暂停角色扮演，把目前的故事整理成剧情总结', openSummary);
     const lib = makeMenuItem(LIBRARY_ID, 'fa-box-archive', '总结库', '查看存下的总结，用于新聊天开场或作者注释', () => showLibrary());
     const blank = makeMenuItem(BLANK_ID, 'fa-file', '空白开局', '开一个没有开场白的新聊天，自己写第一条', blankOpening);
     const after = document.getElementById('option_continue');
