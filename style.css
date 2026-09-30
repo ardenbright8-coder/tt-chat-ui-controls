@@ -2170,3 +2170,28 @@
 #tt_story_summary_bubble .tt-summary-prompt-foot span {
     font-size: .9em;
 }
+
+#tt_story_summary_bubble .tt-summary-preset {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+#tt_story_summary_bubble .tt-summary-preset select {
+    width: 100%;
+    min-height: 40px;
+    padding: 4px 10px;
+    box-sizing: border-box;
+    border: 1px solid var(--SmartThemeBorderColor, rgba(255,255,255,.2));
+    border-radius: 10px;
+    color: inherit;
+    font: inherit;
+    background: rgba(0,0,0,.18);
+}
+#tt_story_summary_bubble .tt-summary-preset select:disabled {
+    opacity: .5;
+}
+#tt_story_summary_bubble .tt-summary-preset-warn {
+    font-size: .82em;
+    line-height: 1.45;
+    color: #f0c27a;
+}

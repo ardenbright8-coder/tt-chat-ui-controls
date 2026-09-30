@@ -135,6 +135,61 @@ function currentPresetName() {
     return '';
 }
 
+function presetManager() {
+    try { return ctx()?.getPresetManager?.() ?? null; } catch { return null; }
+}
+
+function allPresetNames() {
+    try {
+        const names = presetManager()?.getAllPresets?.();
+        if (Array.isArray(names) && names.length) return names.map(String);
+    } catch { /* fall back to the dropdown */ }
+    const api = ctx()?.mainApi;
+    const select = api ? document.querySelector(`select[data-preset-manager-for="${api}"]`) : null;
+    return select ? [...select.options].map((o) => o.textContent.trim()) : [];
+}
+
+// '' means "follow whatever preset is selected for chatting".
+function chosenPreset() {
+    const name = ctx()?.extensionSettings?.[EXTENSION_KEY]?.summaryPresetName;
+    return typeof name === 'string' && name && allPresetNames().includes(name) ? name : '';
+}
+
+function setChosenPreset(name) {
+    const all = ctx()?.extensionSettings;
+    if (!all) return;
+    all[EXTENSION_KEY] ??= {};
+    all[EXTENSION_KEY].summaryPresetName = name || '';
+    persist();
+}
+
+// Select a preset through the host's own preset manager and wait until the
+// host has applied it.
+async function switchPreset(name) {
+    const context = ctx();
+    const manager = presetManager();
+    if (!manager || currentPresetName() === name) return;
+    const value = manager.findPreset?.(name);
+    if (value === undefined) throw new Error(`找不到预设“${name}”`);
+    const events = context?.eventSource;
+    const type = (context?.eventTypes ?? context?.event_types)?.PRESET_CHANGED;
+    const applied = new Promise((resolve) => {
+        let done = false;
+        const finish = () => {
+            if (done) return;
+            done = true;
+            try { events?.removeListener?.(type, onChanged); } catch { /* ignore */ }
+            resolve();
+        };
+        const onChanged = (data) => { if (!data?.name || data.name === name) finish(); };
+        if (events?.on && type) events.on(type, onChanged);
+        setTimeout(finish, context?.mainApi === 'openai' ? 8000 : 1500);
+    });
+    manager.selectPreset(value);
+    await applied;
+    if (currentPresetName() !== name) throw new Error(`切换到预设“${name}”没有成功`);
+}
+
 function usePreset() {
     const value = ctx()?.extensionSettings?.[EXTENSION_KEY]?.summaryUsePreset;
     return value !== false;
@@ -443,12 +498,38 @@ function lengthControl() {
     const check = document.createElement('input');
     check.type = 'checkbox';
     check.checked = usePreset();
-    check.addEventListener('change', () => setUsePreset(check.checked));
     const text = document.createElement('span');
-    text.textContent = `使用预设：${currentPresetName() || '当前预设'}（推荐）`;
-    toggle.title = '用你平时聊天的预设来生成总结，不带世界书和作者注释；拿不到内容时自动改用直接请求';
+    text.textContent = '使用预设生成（推荐）';
+    toggle.title = '用预设来生成总结，不带世界书和作者注释；拿不到内容时自动改用直接请求';
     toggle.append(check, text);
-    box.append(lengthRow(), toggle, promptEditor());
+
+    const pick = document.createElement('div');
+    pick.className = 'tt-summary-preset';
+    const select = document.createElement('select');
+    const follow = document.createElement('option');
+    follow.value = '';
+    follow.textContent = `跟随当前（${currentPresetName() || '当前预设'}）`;
+    select.append(follow);
+    for (const name of allPresetNames()) {
+        const option = document.createElement('option');
+        option.value = name;
+        option.textContent = name;
+        select.append(option);
+    }
+    select.value = chosenPreset();
+    const warn = document.createElement('div');
+    warn.className = 'tt-summary-preset-warn';
+    warn.textContent = '选了别的预设时，总结会临时切过去、完成后切回；当前预设里没点保存的改动会被还原，请先保存。';
+    const sync = () => {
+        select.disabled = !check.checked;
+        warn.hidden = !check.checked || !select.value || select.value === currentPresetName();
+    };
+    select.addEventListener('change', () => { setChosenPreset(select.value); sync(); });
+    check.addEventListener('change', () => { setUsePreset(check.checked); sync(); });
+    sync();
+    pick.append(select, warn);
+
+    box.append(lengthRow(), toggle, pick, promptEditor());
     return box;
 }
 
@@ -761,12 +842,30 @@ async function runSummary(force = false) {
             preset: async () => {
                 if (typeof context.generateQuietPrompt !== 'function') throw new Error('当前酒馆不支持');
                 const instruction = `${systemPrompt(words)}\n\n现在暂停角色扮演，根据以上全部聊天记录，按要求输出约 ${words} 字的剧情总结。`;
-                return context.generateQuietPrompt({ quietPrompt: instruction, skipWIAN: true, responseLength: responseTokens, removeReasoning: true });
+                const original = currentPresetName();
+                const target = chosenPreset();
+                const switching = !!target && target !== original;
+                if (switching) {
+                    setLoadingText(`正在临时切换到预设“${target}”…`);
+                    await switchPreset(target);
+                    setLoadingText(`正在用预设“${target}”整理总结…`);
+                }
+                try {
+                    presetUsed = currentPresetName() || '当前预设';
+                    return await context.generateQuietPrompt({ quietPrompt: instruction, skipWIAN: true, responseLength: responseTokens, removeReasoning: true });
+                } finally {
+                    if (switching && original) {
+                        try { await switchPreset(original); } catch (error) {
+                            globalThis.toastr?.warning?.(`没能切回预设“${original}”，请手动切回：${error?.message || error}`);
+                        }
+                    }
+                }
             },
             direct: () => context.generateRaw({ prompt, responseLength: responseTokens, trimNames: false }),
         };
         let text = '';
         let used = '';
+        let presetUsed = '';
         const problems = [];
         for (const [index, route] of routes.entries()) {
             if (index > 0) setLoadingText(`${names[routes[0]]}没有拿到内容，正在改用${names[route]}重试…`);
@@ -783,9 +882,8 @@ async function runSummary(force = false) {
             fail(`总结失败。${problems.join('；')}。可以稍后重试，或换个模型再试。`);
             return;
         }
-        const presetName = currentPresetName() || '当前预设';
         const note = [
-            used === 'preset' ? `这次用的预设：${presetName}` : '这次是直接请求，没有用预设。',
+            used === 'preset' ? `这次用的预设：${presetUsed || '当前预设'}` : '这次是直接请求，没有用预设。',
             used !== routes[0] ? `（${names[routes[0]]}没有拿到内容，已自动改用${names[used]}）` : '',
             used === 'direct' && built.skipped > 0 ? `对话太长，只带了最近 ${built.total - built.skipped} 条（共 ${built.total} 条）。` : '',
         ].filter(Boolean).join('\n');
