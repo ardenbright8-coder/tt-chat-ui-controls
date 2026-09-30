@@ -223,6 +223,77 @@ async function switchPreset(name) {
     if (currentPresetName() !== name) throw new Error(`切换到预设“${name}”没有成功`);
 }
 
+// ---- model choice (Chat Completion only)
+function modelSelect() {
+    const context = ctx();
+    if (context?.mainApi !== 'openai') return null;
+    const source = String(context?.chatCompletionSettings?.chat_completion_source ?? '');
+    if (!source) return null;
+    const id = source === 'makersuite' ? 'model_google_select' : `model_${source}_select`;
+    const select = document.getElementById(id);
+    return select instanceof HTMLSelectElement ? select : null;
+}
+
+function modelOptions() {
+    const select = modelSelect();
+    if (!select) return [];
+    const seen = new Set();
+    return [...select.querySelectorAll('option')]
+        .filter((option) => option.value && !option.value.startsWith('__') && !seen.has(option.value) && seen.add(option.value))
+        .map((option) => ({ value: option.value, label: option.textContent.trim() || option.value }));
+}
+
+function currentModel() {
+    try { return String(ctx()?.getChatCompletionModel?.() ?? ''); } catch { return ''; }
+}
+
+// '' means "follow the model currently selected for chatting".
+function chosenModel() {
+    const value = ctx()?.extensionSettings?.[EXTENSION_KEY]?.summaryModel;
+    return typeof value === 'string' && value && modelOptions().some((o) => o.value === value) ? value : '';
+}
+
+function setChosenModel(value) {
+    const all = ctx()?.extensionSettings;
+    if (!all) return;
+    all[EXTENSION_KEY] ??= {};
+    all[EXTENSION_KEY].summaryModel = value || '';
+    persist();
+}
+
+// Select a model through the host's own model dropdown and wait until the
+// host reports it as the active model.
+async function switchModel(value) {
+    if (!value || currentModel() === value) return;
+    const select = modelSelect();
+    if (!select) throw new Error('找不到模型列表');
+    select.value = value;
+    if (select.value !== value) throw new Error(`模型列表里没有“${value}”`);
+    const jq = globalThis.jQuery;
+    if (jq) jq(select).trigger('change');
+    else select.dispatchEvent(new Event('change', { bubbles: true }));
+    for (let waited = 0; waited < 5000 && currentModel() !== value; waited += 100) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    if (currentModel() !== value) throw new Error(`切换到模型“${value}”没有成功`);
+}
+
+// Run fn with the chosen summary model, then switch back.
+async function withSummaryModel(fn, onSwitch) {
+    const target = chosenModel();
+    const original = currentModel();
+    if (!target || target === original) return fn();
+    onSwitch?.(target);
+    await switchModel(target);
+    try {
+        return await fn();
+    } finally {
+        try { await switchModel(original); } catch (error) {
+            globalThis.toastr?.warning?.(`没能切回模型“${original}”，请手动切回：${error?.message || error}`);
+        }
+    }
+}
+
 function usePreset() {
     const value = ctx()?.extensionSettings?.[EXTENSION_KEY]?.summaryUsePreset;
     return value !== false;
@@ -562,7 +633,31 @@ function lengthControl() {
     sync();
     pick.append(select, warn);
 
-    box.append(lengthRow(), toggle, pick, promptEditor());
+    const models = modelOptions();
+    let modelPick = null;
+    if (models.length) {
+        modelPick = document.createElement('div');
+        modelPick.className = 'tt-summary-preset tt-summary-model';
+        const label = document.createElement('span');
+        label.className = 'tt-summary-model-label';
+        label.textContent = '总结用的模型';
+        const modelSelectEl = document.createElement('select');
+        const followModel = document.createElement('option');
+        followModel.value = '';
+        followModel.textContent = `跟随当前（${currentModel() || '当前模型'}）`;
+        modelSelectEl.append(followModel);
+        for (const model of models) {
+            const option = document.createElement('option');
+            option.value = model.value;
+            option.textContent = model.label;
+            modelSelectEl.append(option);
+        }
+        modelSelectEl.value = chosenModel();
+        modelSelectEl.addEventListener('change', () => setChosenModel(modelSelectEl.value));
+        modelPick.append(label, modelSelectEl);
+    }
+
+    box.append(...[lengthRow(), toggle, pick, modelPick, promptEditor()].filter(Boolean));
     return box;
 }
 
@@ -912,7 +1007,10 @@ async function runSummary(force = false) {
                     // for the user and cut everything after it.
                     if (power) power.allow_name1_display = true;
                     if (events?.on && ready) events.on(ready, capture);
-                    return await context.generateQuietPrompt({ quietPrompt: instruction, skipWIAN: false, removeReasoning: true });
+                    return await withSummaryModel(
+                        () => context.generateQuietPrompt({ quietPrompt: instruction, skipWIAN: false, removeReasoning: true }),
+                        (model) => setLoadingText(`正在临时切换到模型“${model}”…`),
+                    );
                 } finally {
                     if (power) power.allow_name1_display = allowName;
                     try { if (ready) events?.removeListener?.(ready, capture); } catch { /* ignore */ }
@@ -924,7 +1022,10 @@ async function runSummary(force = false) {
                 }
             },
             // Same room as normal chatting: the preset's own max response length.
-            direct: () => context.generateRaw({ prompt, responseLength: presetResponseLength(context) || responseTokens, trimNames: false }),
+            direct: () => withSummaryModel(
+                () => context.generateRaw({ prompt, responseLength: presetResponseLength(context) || responseTokens, trimNames: false }),
+                (model) => setLoadingText(`正在临时切换到模型“${model}”…`),
+            ),
         };
         let text = '';
         let used = '';
@@ -959,7 +1060,7 @@ async function runSummary(force = false) {
             route: used === 'preset' ? `预设：${presetUsed || '当前预设'}` : '直接请求（未用预设）',
             maxTokens: used === 'preset' ? diagnosis?.maxTokens ?? null : (presetResponseLength(context) || responseTokens),
             stop: used === 'preset' ? diagnosis?.stop ?? [] : [],
-            model: used === 'preset' ? diagnosis?.model ?? '' : '',
+            model: used === 'preset' ? diagnosis?.model ?? '' : (chosenModel() || currentModel()),
             replyChars: reply.length,
         };
         await insertSummaryMessage(reply, note, diag);

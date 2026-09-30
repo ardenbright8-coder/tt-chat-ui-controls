@@ -2285,3 +2285,8 @@
     opacity: .6;
     word-break: break-all;
 }
+
+#tt_story_summary_bubble .tt-summary-model-label {
+    font-size: .85em;
+    opacity: .75;
+}
