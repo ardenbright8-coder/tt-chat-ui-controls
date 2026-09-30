@@ -1928,6 +1928,7 @@
     pointer-events: none;
 }
 #tt_story_summary_bubble {
+    overflow-y: auto;
     position: fixed;
     left: max(10px, env(safe-area-inset-left));
     right: max(10px, env(safe-area-inset-right));
@@ -2101,4 +2102,71 @@
     height: 20px;
     flex: 0 0 auto;
     margin: 0;
+}
+
+#tt_story_summary_bubble .tt-summary-prompt {
+    font-size: .88em;
+}
+#tt_story_summary_bubble .tt-summary-prompt > summary {
+    cursor: pointer;
+    padding: 4px 0;
+    opacity: .85;
+}
+#tt_story_summary_bubble .tt-summary-prompt-text {
+    display: block;
+    width: 100%;
+    height: 24dvh;
+    min-height: 120px;
+    margin-top: 6px;
+    padding: 10px;
+    box-sizing: border-box;
+    resize: vertical;
+    border: 1px solid var(--SmartThemeBorderColor, rgba(255,255,255,.2));
+    border-radius: 10px;
+    color: inherit;
+    font: inherit;
+    line-height: 1.55;
+    background: rgba(0,0,0,.18);
+    user-select: text;
+    -webkit-user-select: text;
+}
+#tt_story_summary_bubble .tt-summary-prompt-foot {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 6px;
+}
+#tt_story_summary_bubble .tt-summary-prompt-foot span {
+    flex: 1 1 auto;
+    min-width: 0;
+    opacity: .7;
+    line-height: 1.4;
+}
+#tt_story_summary_bubble .tt-summary-prompt-foot button {
+    flex: 0 0 auto;
+    min-height: 36px;
+    padding: 0 12px;
+    border: 1px solid var(--SmartThemeBorderColor, rgba(255,255,255,.2));
+    border-radius: 10px;
+    color: inherit;
+    font: inherit;
+    background: rgba(255,255,255,.08);
+}
+
+#tt_story_summary_bubble:has(.tt-summary-prompt[open]) {
+    max-height: 86dvh;
+}
+#tt_story_summary_bubble > .tt-summary-head,
+#tt_story_summary_bubble > .tt-summary-settings,
+#tt_story_summary_bubble > .tt-summary-note,
+#tt_story_summary_bubble > .tt-summary-actions {
+    flex: 0 0 auto;
+}
+#tt_story_summary_bubble:has(.tt-summary-prompt[open]) > .tt-summary-body {
+    flex: 0 1 auto;
+    min-height: 0;
+    max-height: 6em;
+}
+#tt_story_summary_bubble .tt-summary-prompt-foot span {
+    font-size: .9em;
 }

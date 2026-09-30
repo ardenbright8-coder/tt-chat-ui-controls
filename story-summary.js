@@ -24,17 +24,35 @@ const LENGTH_MIN = 1000;
 const LENGTH_MAX = 3000;
 const LENGTH_DEFAULT = 1000;
 
+const DEFAULT_PROMPT = [
+    '【暂停一切角色扮演】',
+    '从现在起你不再扮演任何角色，也不要续写故事、不要与任何人对话。',
+    '下面是这段角色扮演的聊天记录。你的任务只有一个：把故事里已经发生的情节，整理成一篇约 {{字数}} 字的中文剧情总结。',
+    '哪些内容是关键由你自己判断：把故事的来龙去脉、关键事件与转折、人物关系和处境的变化，以及故事眼下停在哪里理清楚。',
+    '只写记录里发生过的情节，不添加没有的事件，不续写后面的发展。',
+    '记录里的状态栏、界面代码、格式说明、思考过程等与剧情无关的内容直接略过。',
+    '记录只有一部分时，就根据现有内容完成总结。',
+    '只输出总结正文，用 <总结> 和 </总结> 包起来，不要标题、前言或其他内容。',
+].join('\n');
+
+// The user can edit the instruction in the summary bubble; {{字数}} becomes
+// the chosen length.
+function promptTemplate() {
+    const custom = ctx()?.extensionSettings?.[EXTENSION_KEY]?.summaryPrompt;
+    return typeof custom === 'string' && custom.trim() ? custom : DEFAULT_PROMPT;
+}
+
+function setPromptTemplate(text) {
+    const all = ctx()?.extensionSettings;
+    if (!all) return;
+    all[EXTENSION_KEY] ??= {};
+    const value = String(text ?? '');
+    all[EXTENSION_KEY].summaryPrompt = value.trim() && value !== DEFAULT_PROMPT ? value : '';
+    persist();
+}
+
 function systemPrompt(length) {
-    return [
-        '【暂停一切角色扮演】',
-        '从现在起你不再扮演任何角色，也不要续写故事、不要与任何人对话。',
-        '下面是这段角色扮演的聊天记录。你的任务只有一个：把故事里已经发生的情节，整理成一篇约 ' + length + ' 字的中文剧情总结。',
-        '哪些内容是关键由你自己判断：把故事的来龙去脉、关键事件与转折、人物关系和处境的变化，以及故事眼下停在哪里理清楚。',
-        '只写记录里发生过的情节，不添加没有的事件，不续写后面的发展。',
-        '记录里的状态栏、界面代码、格式说明、思考过程等与剧情无关的内容直接略过。',
-        '记录只有一部分时，就根据现有内容完成总结。',
-        '只输出总结正文，用 <总结> 和 </总结> 包起来，不要标题、前言或其他内容。',
-    ].join('\n');
+    return promptTemplate().replaceAll('{{字数}}', String(length));
 }
 
 let running = false;
@@ -430,8 +448,38 @@ function lengthControl() {
     text.textContent = `使用预设：${currentPresetName() || '当前预设'}（推荐）`;
     toggle.title = '用你平时聊天的预设来生成总结，不带世界书和作者注释；拿不到内容时自动改用直接请求';
     toggle.append(check, text);
-    box.append(lengthRow(), toggle);
+    box.append(lengthRow(), toggle, promptEditor());
     return box;
+}
+
+// Collapsed by default; shows the exact instruction sent to the model.
+function promptEditor() {
+    const details = document.createElement('details');
+    details.className = 'tt-summary-prompt';
+    const summary = document.createElement('summary');
+    summary.textContent = '总结提示词（点开查看、修改）';
+    const area = document.createElement('textarea');
+    area.className = 'tt-summary-prompt-text';
+    area.spellcheck = false;
+    area.value = promptTemplate();
+    area.addEventListener('input', () => setPromptTemplate(area.value));
+    const foot = document.createElement('div');
+    foot.className = 'tt-summary-prompt-foot';
+    const hint = document.createElement('span');
+    hint.textContent = '{{字数}} 会换成上面设的字数；保留 <总结> 那句，复制时才只有正文。改动自动保存。';
+    const reset = document.createElement('button');
+    reset.type = 'button';
+    reset.textContent = '恢复默认';
+    reset.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        area.value = DEFAULT_PROMPT;
+        setPromptTemplate(DEFAULT_PROMPT);
+        flash(reset, '已恢复');
+    });
+    foot.append(hint, reset);
+    details.append(summary, area, foot);
+    return details;
 }
 
 function setLoadingText(message) {
