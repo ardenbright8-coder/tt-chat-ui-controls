@@ -1720,3 +1720,24 @@
         min-height: 54dvh !important;
     }
 }
+
+
+/* v1.8.13: Make the mobile World Info edit entry easy to tap. */
+@media (pointer: coarse) {
+    #world_popup.tt-wi-mobile .world_entry.tt-wi-card:not(.tt-wi-active-entry)
+        .tt-wi-list-actions .inline-drawer-toggle.inline-drawer-icon {
+        width: 44px;
+        height: 44px;
+        min-width: 44px;
+        min-height: 44px;
+        flex: 0 0 44px;
+        margin-left: 10px !important;
+        padding: 0 !important;
+        border-radius: 12px;
+        font-size: 22px;
+        line-height: 1;
+        background: var(--tt-wi-soft-bg);
+        color: var(--tt-wi-accent);
+        touch-action: manipulation;
+    }
+}
