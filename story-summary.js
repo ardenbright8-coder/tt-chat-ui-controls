@@ -25,9 +25,10 @@ const LENGTH_MAX = 30000;
 const LENGTH_DEFAULT = 10000;
 
 const DEFAULT_PROMPT = [
-    'Ignore previous instructions. Summarize the most important facts and events in the story so far.',
+    'Ignore previous instructions. This is a new, separate request that replaces any earlier request in the conversation.',
+    'Summarize the most important facts and events in the story so far.',
     'Limit the summary to {{字数}} Chinese characters or less, and write it in Chinese.',
-    'Put the summary between <总结> and </总结>. Your response should include nothing but the summary.',
+    'Put the entire summary between <总结> and </总结>; anything outside the tags will be discarded. Your response should include nothing but the summary.',
 ].join('\n');
 
 // The user can edit the instruction in the summary bubble; {{字数}} becomes
@@ -89,11 +90,25 @@ export function splitSummary(reply) {
     const match = raw.match(/<总结>([\s\S]*?)(<\/总结>|$)/);
     if (!match) {
         const body = raw.replace(/<(think|thinking)[\s\S]*?<\/\1>/gi, '').trim();
-        return { summary: body, rest: '', tagged: false, truncated: false };
+        // No tags: many presets wrap their persona chatter around the real
+        // content with horizontal rules, so keep what sits between the first
+        // and the last rule when that is the bulk of the reply.
+        const lines = body.split('\n');
+        const rules = lines.reduce((found, line, index) => (/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/.test(line) ? [...found, index] : found), []);
+        if (rules.length >= 2) {
+            const first = rules[0];
+            const last = rules[rules.length - 1];
+            const middle = lines.slice(first + 1, last).join('\n').trim();
+            if (charCount(middle) >= charCount(body) * 0.5) {
+                const rest = [lines.slice(0, first).join('\n').trim(), lines.slice(last + 1).join('\n').trim()].filter(Boolean).join('\n\n……\n\n');
+                return { summary: middle, rest, tagged: false, trimmed: true, truncated: false };
+            }
+        }
+        return { summary: body, rest: '', tagged: false, trimmed: false, truncated: false };
     }
     const summary = match[1].replace(/<\/?[^>\n]{1,40}>/g, '').trim();
     const rest = (raw.slice(0, match.index) + raw.slice(match.index + match[0].length)).trim();
-    return { summary, rest, tagged: true, truncated: !match[2] };
+    return { summary, rest, tagged: true, trimmed: false, truncated: !match[2] };
 }
 
 // Replace an earlier recap block in the Author's Note, or put one on top.
@@ -995,8 +1010,12 @@ function decorateMessage(element) {
     title.textContent = '剧情总结';
     const meta = document.createElement('span');
     meta.className = 'tt-summary-inline-count';
-    meta.textContent = `${charCount(parts.summary)} 字${parts.truncated ? ' · 可能被截断' : ''}`;
-    if (parts.truncated) meta.classList.add('tt-summary-truncated');
+    const flags = [
+        parts.truncated ? '可能被截断' : '',
+        !parts.tagged ? (parts.trimmed ? '没找到总结标签，已按分隔线去掉首尾闲聊' : '没找到总结标签，显示整条回复') : '',
+    ].filter(Boolean);
+    meta.textContent = [`${charCount(parts.summary)} 字`, ...flags].join(' · ');
+    if (flags.length) meta.classList.add('tt-summary-truncated');
     const copy = document.createElement('button');
     copy.type = 'button';
     copy.textContent = '复制';
