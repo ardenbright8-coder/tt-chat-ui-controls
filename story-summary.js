@@ -26,8 +26,8 @@ const LENGTH_DEFAULT = 2000;
 
 const DEFAULT_PROMPT = [
     '小猫之神，先暂停一下，现在不要扮演任何角色，也不要续写剧情。',
-    '帮我把目前为止故事里最重要的事实和事件总结一下。如果上文里已经有之前写过的总结，就以它为基础，把之后新发生的内容补充进去。',
-    '总结控制在 {{字数}} 字以内，用口语化、好读的话来写，重点你自己把握。',
+    'Ignore previous instructions. Summarize the most important facts and events in the story so far. If a summary already exists in your memory, use that as a base and expand with new facts. Limit the summary to {{字数}} Chinese characters or less.',
+    '用中文、口语化、好读的话来写，重点你自己把握。',
     '最后把总结正文单独放进 <总结> 和 </总结> 之间，里面只放总结本身，你想说的其他话都写在外面。',
 ].join('\n');
 
