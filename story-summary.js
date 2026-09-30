@@ -25,14 +25,9 @@ const LENGTH_MAX = 3000;
 const LENGTH_DEFAULT = 1000;
 
 const DEFAULT_PROMPT = [
-    '【暂停一切角色扮演】',
-    '从现在起你不再扮演任何角色，也不要续写故事、不要与任何人对话。',
-    '下面是这段角色扮演的聊天记录。你的任务只有一个：把故事里已经发生的情节，整理成一篇约 {{字数}} 字的中文剧情总结。',
-    '哪些内容是关键由你自己判断：把故事的来龙去脉、关键事件与转折、人物关系和处境的变化，以及故事眼下停在哪里理清楚。',
-    '只写记录里发生过的情节，不添加没有的事件，不续写后面的发展。',
-    '记录里的状态栏、界面代码、格式说明、思考过程等与剧情无关的内容直接略过。',
-    '记录只有一部分时，就根据现有内容完成总结。',
-    '把总结正文完整写在 <总结> 和 </总结> 之间；标签外面写什么都可以，不影响。',
+    'Ignore previous instructions. Summarize the most important facts and events in the story so far.',
+    'Limit the summary to {{字数}} Chinese characters or less, and write it in Chinese.',
+    'Put the summary between <总结> and </总结>. Your response should include nothing but the summary.',
 ].join('\n');
 
 // The user can edit the instruction in the summary bubble; {{字数}} becomes
@@ -842,7 +837,7 @@ async function runSummary(force = false) {
             { role: 'system', content: systemPrompt(words) },
             {
                 role: 'user',
-                content: `${omitted}【对话记录开始】\n${built.transcript}\n【对话记录结束】\n\n现在暂停角色扮演，按要求输出约 ${words} 字的剧情总结。`,
+                content: `${omitted}【对话记录开始】\n${built.transcript}\n【对话记录结束】`,
             },
         ];
         // Try the chosen route first and fall back to the other one when it
@@ -855,7 +850,7 @@ async function runSummary(force = false) {
         const run = {
             preset: async () => {
                 if (typeof context.generateQuietPrompt !== 'function') throw new Error('当前酒馆不支持');
-                const instruction = `${systemPrompt(words)}\n\n现在暂停角色扮演，根据以上全部聊天记录，按要求输出约 ${words} 字的剧情总结。`;
+                const instruction = systemPrompt(words);
                 const original = currentPresetName();
                 const target = chosenPreset();
                 const switching = !!target && target !== original;
