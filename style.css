@@ -2278,3 +2278,10 @@
     overflow-y: auto;
     padding-top: 6px;
 }
+
+#chat .mes .tt-summary-diag {
+    font-size: .78em;
+    line-height: 1.45;
+    opacity: .6;
+    word-break: break-all;
+}

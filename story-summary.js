@@ -20,9 +20,9 @@ const LIBRARY_LIMIT = 30;
 const PROMPT_RESERVE_TOKENS = 1500;
 const RECAP_TITLE = '【前情提要】';
 
-const LENGTH_MIN = 1000;
-const LENGTH_MAX = 3000;
-const LENGTH_DEFAULT = 1000;
+const LENGTH_MIN = 500;
+const LENGTH_MAX = 30000;
+const LENGTH_DEFAULT = 10000;
 
 const DEFAULT_PROMPT = [
     'Ignore previous instructions. Summarize the most important facts and events in the story so far.',
@@ -551,22 +551,32 @@ function promptEditor() {
     area.className = 'tt-summary-prompt-text';
     area.spellcheck = false;
     area.value = promptTemplate();
-    area.addEventListener('input', () => setPromptTemplate(area.value));
     const foot = document.createElement('div');
     foot.className = 'tt-summary-prompt-foot';
     const hint = document.createElement('span');
-    hint.textContent = '{{字数}} 会换成上面设的字数；保留 <总结> 那句，气泡里才只有总结本身。改动自动保存。';
-    const reset = document.createElement('button');
-    reset.type = 'button';
-    reset.textContent = '恢复默认';
-    reset.addEventListener('click', (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        area.value = DEFAULT_PROMPT;
-        setPromptTemplate(DEFAULT_PROMPT);
-        flash(reset, '已恢复');
+    hint.textContent = '{{字数}} 会换成上面设的字数；保留 <总结> 那句，气泡里才只有总结本身。改完点“保存”才生效。';
+    const make = (label, onClick) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = label;
+        button.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onClick(button);
+        });
+        return button;
+    };
+    const cancel = make('取消', (button) => {
+        area.value = promptTemplate();
+        flash(button, '已取消');
     });
-    foot.append(hint, reset);
+    const save = make('保存', (button) => {
+        setPromptTemplate(area.value);
+        area.value = promptTemplate();
+        flash(button, '已保存');
+    });
+    save.classList.add('tt-summary-primary');
+    foot.append(hint, cancel, save);
     details.append(summary, area, foot);
     return details;
 }
@@ -859,10 +869,28 @@ async function runSummary(force = false) {
                     await switchPreset(target);
                     setLoadingText(`正在用预设“${target}”整理总结…`);
                 }
+                const power = context.powerUserSettings;
+                const allowName = power?.allow_name1_display;
+                const events = context.eventSource;
+                const ready = (context.eventTypes ?? context.event_types)?.CHAT_COMPLETION_SETTINGS_READY;
+                const capture = (data) => {
+                    diagnosis = {
+                        maxTokens: data?.max_tokens ?? data?.max_completion_tokens ?? data?.max_output_tokens ?? null,
+                        stop: Array.isArray(data?.stop) ? data.stop.filter(Boolean) : [],
+                        model: data?.model ?? '',
+                    };
+                };
                 try {
                     presetUsed = currentPresetName() || '当前预设';
+                    // A summary naturally names the user; the host would otherwise
+                    // treat a line starting with "<user>:" as the model speaking
+                    // for the user and cut everything after it.
+                    if (power) power.allow_name1_display = true;
+                    if (events?.on && ready) events.on(ready, capture);
                     return await context.generateQuietPrompt({ quietPrompt: instruction, skipWIAN: false, removeReasoning: true });
                 } finally {
+                    if (power) power.allow_name1_display = allowName;
+                    try { if (ready) events?.removeListener?.(ready, capture); } catch { /* ignore */ }
                     if (switching && original) {
                         try { await switchPreset(original); } catch (error) {
                             globalThis.toastr?.warning?.(`没能切回预设“${original}”，请手动切回：${error?.message || error}`);
@@ -876,6 +904,7 @@ async function runSummary(force = false) {
         let text = '';
         let used = '';
         let presetUsed = '';
+        let diagnosis = null;
         const problems = [];
         let reply = '';
         for (const [index, route] of routes.entries()) {
@@ -901,7 +930,14 @@ async function runSummary(force = false) {
         ].filter(Boolean).join('\n');
         saveToLibrary({ text, character: context.name2, chatId });
         lastResult = { chatId, chatLength, words, text, note };
-        await insertSummaryMessage(reply, note);
+        const diag = {
+            route: used === 'preset' ? `预设：${presetUsed || '当前预设'}` : '直接请求（未用预设）',
+            maxTokens: used === 'preset' ? diagnosis?.maxTokens ?? null : (presetResponseLength(context) || responseTokens),
+            stop: used === 'preset' ? diagnosis?.stop ?? [] : [],
+            model: used === 'preset' ? diagnosis?.model ?? '' : '',
+            replyChars: reply.length,
+        };
+        await insertSummaryMessage(reply, note, diag);
         closeBubble();
         globalThis.toastr?.success?.('总结已放进聊天（已隐藏，不会发给模型），并存入总结库');
     } catch (error) {
@@ -917,7 +953,7 @@ async function runSummary(force = false) {
 // The summary is added to the chat as a hidden message (the host's own
 // "hide" state: visible, but never sent to the model), so it neither costs
 // context nor steers the role-play. Clicking the ghost icon un-hides it.
-async function insertSummaryMessage(text, note) {
+async function insertSummaryMessage(text, note, diag = null) {
     const context = ctx();
     if (!context?.chat) return;
     const message = {
@@ -926,7 +962,7 @@ async function insertSummaryMessage(text, note) {
         is_system: true,
         send_date: new Date().toISOString(),
         mes: text,
-        extra: { tt_summary: { createdAt: Date.now(), note: note || '' } },
+        extra: { tt_summary: { createdAt: Date.now(), note: note || '', diag } },
     };
     context.chat.push(message);
     try { context.addOneMessage?.(message, { scroll: true }); } catch (error) { console.warn('[酒馆拓展] 显示总结消息失败', error); }
@@ -995,6 +1031,21 @@ function decorateMessage(element) {
         pre.textContent = parts.rest;
         other.append(label, pre);
         card.append(other);
+    }
+
+    const diag = message.extra.tt_summary.diag;
+    if (diag) {
+        const info = document.createElement('div');
+        info.className = 'tt-summary-diag';
+        const stop = diag.stop?.length ? `停止字符串 ${diag.stop.length} 个：${diag.stop.map((x) => JSON.stringify(x)).join('、')}` : '无停止字符串';
+        info.textContent = [
+            diag.route,
+            diag.model ? `模型 ${diag.model}` : '',
+            diag.maxTokens ? `回复上限 ${diag.maxTokens} tokens` : '',
+            stop,
+            `回复共 ${diag.replyChars} 字符`,
+        ].filter(Boolean).join(' · ');
+        card.append(info);
     }
 
     const text = element.querySelector('.mes_text');

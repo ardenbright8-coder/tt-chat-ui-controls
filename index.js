@@ -221,10 +221,12 @@ function installMobileTouchGuards() {
         element.dispatchEvent(event);
     };
 
+    // The summary length slider is left native (no direction guard) on purpose.
     const isTouchRange = (element) =>
         element instanceof HTMLInputElement
         && element.type === 'range'
-        && !element.disabled;
+        && !element.disabled
+        && !element.closest('#tt_story_summary_bubble');
 
     const settingsCheckboxFromTarget = (target) => {
         if (!(target instanceof Element)) return null;
