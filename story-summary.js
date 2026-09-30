@@ -728,6 +728,14 @@ async function countTokens(context, text) {
 
 // Newest messages are kept first; the oldest are dropped only if the model's
 // context can't hold the whole story.
+// The user's own max response length (Chat Completion: openai_max_tokens).
+function presetResponseLength(context) {
+    const value = context?.mainApi === 'openai'
+        ? Number(context?.chatCompletionSettings?.openai_max_tokens)
+        : Number(document.getElementById('amount_gen')?.value);
+    return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
 // context.maxContext is the text-completion slider; chat-completion APIs keep
 // their own limit in chatCompletionSettings.openai_max_context.
 function contextLimit(context) {
@@ -867,7 +875,8 @@ async function runSummary(force = false) {
                     }
                 }
             },
-            direct: () => context.generateRaw({ prompt, responseLength: responseTokens, trimNames: false }),
+            // Same room as normal chatting: the preset's own max response length.
+            direct: () => context.generateRaw({ prompt, responseLength: presetResponseLength(context) || responseTokens, trimNames: false }),
         };
         let text = '';
         let used = '';
