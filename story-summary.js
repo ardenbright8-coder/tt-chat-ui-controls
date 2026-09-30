@@ -26,9 +26,9 @@ const LENGTH_DEFAULT = 10000;
 
 const DEFAULT_PROMPT = [
     'Ignore previous instructions. This is a new, separate request that replaces any earlier request in the conversation.',
-    'Summarize the most important facts and events in the story so far.',
-    'Limit the summary to {{字数}} Chinese characters or less, and write it in Chinese.',
-    'Put the entire summary between <总结> and </总结>; anything outside the tags will be discarded. Your response should include nothing but the summary.',
+    'Summarize the most important facts and events in the story so far, in Chinese, within {{字数}} Chinese characters.',
+    'You may keep your usual persona, thinking and chatter outside the tags — that is fine.',
+    'But the pure summary itself (only the summary text: no greetings, comments or persona talk) must be written inside <总结> and </总结>.',
 ].join('\n');
 
 // The user can edit the instruction in the summary bubble; {{字数}} becomes
