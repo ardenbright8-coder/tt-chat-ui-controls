@@ -3,6 +3,7 @@ import { initContextLock, cleanupContextLock } from './context-lock.js';
 import { initWorldInfoMobile, cleanupWorldInfoMobile } from './world-info-mobile.js';
 import { initChatScrollGuard, cleanupChatScrollGuard } from './chat-scroll-guard.js';
 import { initExtensionNamesZh, cleanupExtensionNamesZh } from './extension-names-zh.js';
+import { initStorySummary, cleanupStorySummary } from './story-summary.js';
 
 const EXTENSION_KEY = 'chat-text-color';
 
@@ -799,6 +800,7 @@ export async function init() {
     initPromptDetachGuard();
     initWorldInfoMobile();
     initExtensionNamesZh();
+    initStorySummary();
     if (initialized) {
         mountUi();
         return;
@@ -811,6 +813,7 @@ export async function init() {
 export async function cleanup() {
     cleanupChatScrollGuard();
     cleanupExtensionNamesZh();
+    cleanupStorySummary();
     cleanupContextLock();
     cleanupPromptDetachGuard();
     stopMessageBannerFix?.();
