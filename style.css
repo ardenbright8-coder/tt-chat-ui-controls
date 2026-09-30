@@ -1828,8 +1828,14 @@
 /* v1.8.16: Cancel lives on the content heading row, long-press guarded.
    Save is automatic, so the old bottom bar is gone. */
 @media (pointer: coarse) {
+    /* Line 1: 内容 ⤢ (词符…)；line 2 (when it doesn't fit): 取消 保存 on the right. */
     #world_popup.tt-wi-mobile .tt-wi-content-heading {
-        flex-wrap: nowrap;
+        flex-wrap: wrap;
+        row-gap: 8px;
+    }
+    #world_popup.tt-wi-mobile .tt-wi-content-heading > span:first-child {
+        flex: 0 0 auto;
+        white-space: nowrap;
     }
     #world_popup.tt-wi-mobile .tt-wi-content-heading > span:not(.tt-wi-head-actions):not(:first-child) {
         flex: 1 1 auto;
@@ -1843,8 +1849,8 @@
         display: inline-flex;
         flex: 0 0 auto;
         align-items: center;
-        gap: 6px;
-        margin-left: 8px;
+        gap: 8px;
+        margin-left: auto;
     }
     #world_popup.tt-wi-mobile .tt-wi-head-actions button {
         min-height: 40px;
@@ -1868,6 +1874,16 @@
         -webkit-touch-callout: none;
         color: #ffb4a8;
         border-color: color-mix(in srgb, #e0604c 55%, transparent);
+    }
+    #world_popup.tt-wi-mobile .tt-wi-head-actions .tt-wi-edit-confirm {
+        min-width: 72px;
+        color: white;
+        border-color: transparent;
+        background: linear-gradient(
+            135deg,
+            var(--tt-wi-accent, #6a8f7a),
+            color-mix(in srgb, var(--tt-wi-accent, #6a8f7a) 70%, #ff62c7)
+        );
     }
     /* Fill bar shows how long the hold still needs. */
     #world_popup.tt-wi-mobile .tt-wi-head-actions .tt-wi-edit-cancel::before {

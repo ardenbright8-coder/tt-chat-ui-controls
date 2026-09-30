@@ -393,10 +393,16 @@ function makeEditActions(entry) {
     cancel.className = 'tt-wi-edit-cancel';
     cancel.textContent = '取消';
     cancel.title = '长按约 0.6 秒：撤回本次打开后的所有修改并返回';
-    actions.append(cancel);
 
-    // Saving is automatic (the host saves every change), and ← already returns,
-    // so the only action kept here is Cancel, next to the content heading.
+    // The host already autosaves every change; Save commits any pending editor
+    // text and closes the entry, so there is always an obvious way out.
+    const save = document.createElement('button');
+    save.type = 'button';
+    save.className = 'tt-wi-edit-confirm';
+    save.textContent = '保存';
+    save.title = '保存并返回列表';
+    actions.append(cancel, save);
+
     const heading = entry.querySelector('.tt-wi-content-heading')
         ?? entry.querySelector('label[for="content "] > small > span');
     if (heading) heading.append(actions);
@@ -413,6 +419,15 @@ function makeEditActions(entry) {
 
     cleanup.push(bindHoldToCancel(cancel, () => {
         restoreEntrySnapshot(entry);
+        clearEntrySnapshot(entry);
+        closeEntryDrawer(entry);
+    }));
+
+    cleanup.push(on(save, 'click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const content = entry.querySelector('textarea[name="content"]');
+        if (content) pullEditorText(content);
         clearEntrySnapshot(entry);
         closeEntryDrawer(entry);
     }));
