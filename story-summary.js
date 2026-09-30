@@ -17,22 +17,29 @@ const BLANK_WINDOW_MS = 60_000;
 const BUBBLE_ID = 'tt_story_summary_bubble';
 const EXTENSION_KEY = 'chat-text-color';
 const LIBRARY_LIMIT = 30;
-const RESPONSE_TOKENS = 4096;
 const PROMPT_RESERVE_TOKENS = 1500;
 const RECAP_TITLE = '【前情提要】';
 
-const SYSTEM_PROMPT = [
-    '【暂停一切角色扮演】',
-    '从现在起你不再扮演任何角色，也不要续写故事、不要与任何人对话。',
-    '你是旁观的故事整理者，任务只有一个：通读用户给出的整段对话记录，把到目前为止的故事整理成一篇约 1000 字的中文总结。',
-    '哪些内容是关键由你自己判断：把故事的来龙去脉、关键事件与转折、人物关系和处境的变化，以及故事眼下停在哪里理清楚。',
-    '只依据记录里写到的内容，不编造，不续写，不评价。',
-    '忽略记录中的状态栏、格式说明、系统提示、思考过程之类与剧情无关的内容。',
-    '输出要求：只输出总结正文，用 <总结> 和 </总结> 包起来；不要标题、不要前言后语、不要任何其他标签或格式。',
-].join('\n');
+const LENGTH_MIN = 1000;
+const LENGTH_MAX = 3000;
+const LENGTH_DEFAULT = 1000;
+
+function systemPrompt(length) {
+    return [
+        '【暂停一切角色扮演】',
+        '从现在起你不再扮演任何角色，也不要续写故事、不要与任何人对话。',
+        '下面是用户与 AI 一起进行的一段虚构角色扮演故事的聊天记录。你是旁观的整理者，任务只有一个：把这个故事里已经发生的事情，整理成一篇约 ' + length + ' 字的中文剧情总结。',
+        '把故事中的情节当作事实来陈述即可（它本来就是虚构故事，不需要说明或质疑这一点）。',
+        '哪些内容是关键由你自己判断：把故事的来龙去脉、关键事件与转折、人物关系和处境的变化，以及故事眼下停在哪里理清楚。',
+        '只写记录里发生过的情节，不添加记录里没有的事件，不续写后面的发展。',
+        '记录里的状态栏、界面代码、格式说明、系统提示、思考过程等与剧情无关的内容直接忽略。',
+        '即使记录不完整或只有一部分，也要根据现有内容尽量完成总结，不要拒绝、不要解释、不要谈论记录本身。',
+        '输出要求：只输出总结正文，用 <总结> 和 </总结> 包起来；不要标题、不要前言后语、不要任何其他标签或格式。',
+    ].join('\n');
+}
 
 let running = false;
-let lastResult = null; // { chatId, length, text, note }
+let lastResult = null; // { chatId, chatLength, words, text, note }
 let mountTimer = null;
 let observer = null;
 
@@ -45,10 +52,13 @@ const ctx = () => globalThis.SillyTavern?.getContext?.();
 export function cleanMessageText(text) {
     return String(text ?? '')
         .replace(/```[\s\S]*?```/g, ' ')
-        .replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ')
-        .replace(/<(think|thinking|details)[\s\S]*?<\/\1>/gi, ' ')
-        .replace(/<[^>\n]{1,80}>/g, ' ')
-        .replace(/[ \t]+\n/g, '\n')
+        .replace(/<!--[\s\S]*?-->/g, ' ')
+        .replace(/<(script|style)\b[\s\S]*?<\/\1>/gi, ' ')
+        .replace(/<(think|thinking|details|UpdateVariable|StatusPlaceHolderImpl)\b[\s\S]*?<\/\1>/gi, ' ')
+        .replace(/<\/?[A-Za-z\u4e00-\u9fff_][^<>]*\/?>/g, ' ')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/[ \t]+/g, ' ')
+        .replace(/ *\n */g, '\n')
         .replace(/\n{3,}/g, '\n\n')
         .trim();
 }
@@ -89,6 +99,23 @@ function library() {
     if (!Array.isArray(settings.summaryLibrary)) settings.summaryLibrary = [];
     return settings.summaryLibrary;
 }
+
+function summaryLength() {
+    const settings = ctx()?.extensionSettings?.[EXTENSION_KEY];
+    const value = Number(settings?.summaryLength);
+    return Number.isFinite(value) && value > 0 ? Math.min(LENGTH_MAX, Math.max(LENGTH_MIN, Math.round(value))) : LENGTH_DEFAULT;
+}
+
+function setSummaryLength(value) {
+    const all = ctx()?.extensionSettings;
+    if (!all) return;
+    all[EXTENSION_KEY] ??= {};
+    all[EXTENSION_KEY].summaryLength = Math.min(LENGTH_MAX, Math.max(LENGTH_MIN, Math.round(Number(value) || LENGTH_DEFAULT)));
+    persist();
+}
+
+// Chinese runs ~1–1.5 tokens per character; leave room for reasoning models.
+const responseTokensFor = (length) => Math.max(4096, Math.ceil(length * 2) + 2048);
 
 function persist() {
     try { ctx()?.saveSettingsDebounced?.(); } catch { /* next save will catch up */ }
@@ -280,7 +307,7 @@ function flash(button, label) {
 }
 
 // actions: [{ label, cls?, onClick(button), disabled? }]
-function showBubble({ title = '剧情总结', text = '', meta = '', note = '', error = '', loading = false, list = null, actions = [] }) {
+function showBubble({ title = '剧情总结', text = '', meta = '', note = '', error = '', loading = false, list = null, extra = null, actions = [] }) {
     closeBubble();
     const bubble = document.createElement('div');
     bubble.id = BUBBLE_ID;
@@ -301,10 +328,12 @@ function showBubble({ title = '剧情总结', text = '', meta = '', note = '', e
     else {
         const body = document.createElement('div');
         body.className = 'tt-summary-body';
-        body.textContent = loading ? '正在通读全文并整理，稍等片刻…' : (error || text);
+        body.textContent = loading ? `正在通读全文，整理约 ${summaryLength()} 字的总结，稍等片刻…` : (error || text);
         if (error) body.classList.add('tt-summary-error');
         bubble.append(body);
     }
+
+    if (extra) bubble.append(extra);
 
     if (note) {
         const noteEl = document.createElement('div');
@@ -334,10 +363,41 @@ function showBubble({ title = '剧情总结', text = '', meta = '', note = '', e
     return bubble;
 }
 
+function lengthControl() {
+    const row = document.createElement('div');
+    row.className = 'tt-summary-length';
+    const label = document.createElement('span');
+    label.textContent = '字数';
+    const range = document.createElement('input');
+    range.type = 'range';
+    range.min = String(LENGTH_MIN);
+    range.max = String(LENGTH_MAX);
+    range.step = '100';
+    const number = document.createElement('input');
+    number.type = 'number';
+    number.inputMode = 'numeric';
+    number.min = String(LENGTH_MIN);
+    number.max = String(LENGTH_MAX);
+    number.step = '100';
+    const value = summaryLength();
+    range.value = String(value);
+    number.value = String(value);
+    range.addEventListener('input', () => { number.value = range.value; });
+    range.addEventListener('change', () => setSummaryLength(range.value));
+    number.addEventListener('change', () => {
+        setSummaryLength(number.value);
+        number.value = String(summaryLength());
+        range.value = number.value;
+    });
+    row.append(label, range, number);
+    return row;
+}
+
 function showResult(result) {
     showBubble({
         text: result.text,
-        note: [result.note, '已自动存入总结库，开新聊天后可从菜单“总结库”取用。'].filter(Boolean).join('\n'),
+        extra: lengthControl(),
+        note: [result.note, '已自动存入总结库。调整字数后点“重新生成”即按新字数总结。'].filter(Boolean).join('\n'),
         actions: [
             { label: '复制', cls: 'tt-summary-primary', onClick: (b) => copyText(result.text, b) },
             { label: '重新生成', onClick: () => runSummary(true) },
@@ -480,7 +540,17 @@ async function countTokens(context, text) {
 
 // Newest messages are kept first; the oldest are dropped only if the model's
 // context can't hold the whole story.
-async function buildTranscript(context) {
+// context.maxContext is the text-completion slider; chat-completion APIs keep
+// their own limit in chatCompletionSettings.openai_max_context.
+function contextLimit(context) {
+    if (context.mainApi === 'openai') {
+        const limit = Number(context.chatCompletionSettings?.openai_max_context);
+        if (limit > 0) return limit;
+    }
+    return Number(context.maxContext) || 32768;
+}
+
+async function buildTranscript(context, responseTokens) {
     const lines = [];
     for (const message of context.chat ?? []) {
         if (!message || message.is_system) continue;
@@ -490,8 +560,8 @@ async function buildTranscript(context) {
     }
     if (!lines.length) return null;
 
-    const maxContext = Math.min(Number(context.maxContext) || 32768, 1_000_000);
-    const budget = Math.max(2000, maxContext - RESPONSE_TOKENS - PROMPT_RESERVE_TOKENS);
+    const maxContext = Math.min(contextLimit(context), 1_000_000);
+    const budget = Math.max(2000, maxContext - responseTokens - PROMPT_RESERVE_TOKENS);
     let kept = lines;
     let transcript = kept.join('\n\n');
     let tokens = await countTokens(context, transcript);
@@ -525,36 +595,43 @@ async function runSummary(force = false) {
         return;
     }
     const chatId = context.getCurrentChatId?.() ?? context.chatId ?? '';
-    const length = context.chat?.length ?? 0;
-    if (!force && lastResult && lastResult.chatId === chatId && lastResult.length === length) {
+    const chatLength = context.chat?.length ?? 0;
+    const words = summaryLength();
+    if (!force && lastResult && lastResult.chatId === chatId && lastResult.chatLength === chatLength && lastResult.words === words) {
         showResult(lastResult);
         return;
     }
 
     const fail = (message) => showBubble({
         error: message,
+        extra: lengthControl(),
         actions: [{ label: '重新生成', onClick: () => runSummary(true) }, { label: '关闭', onClick: closeBubble }],
     });
 
     setBusy(true);
     showBubble({ loading: true, actions: [{ label: '关闭', onClick: closeBubble }] });
     try {
-        const built = await buildTranscript(context);
+        const responseTokens = responseTokensFor(words);
+        const built = await buildTranscript(context, responseTokens);
         if (!built) {
             fail('当前聊天还没有可总结的内容。');
+            return;
+        }
+        if (charCount(built.transcript) < 30) {
+            fail('没有读到可总结的聊天正文（消息里可能全是界面代码）。');
             return;
         }
         const omitted = built.skipped > 0
             ? `（对话过长，最早的 ${built.skipped} 条已省略，以下从中途开始）\n\n`
             : '';
         const prompt = [
-            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'system', content: systemPrompt(words) },
             {
                 role: 'user',
-                content: `${omitted}【对话记录开始】\n${built.transcript}\n【对话记录结束】\n\n现在暂停角色扮演，按要求输出约 1000 字的总结。`,
+                content: `${omitted}【对话记录开始】\n${built.transcript}\n【对话记录结束】\n\n现在暂停角色扮演，按要求输出约 ${words} 字的剧情总结。`,
             },
         ];
-        const reply = await context.generateRaw({ prompt, responseLength: RESPONSE_TOKENS, trimNames: false });
+        const reply = await context.generateRaw({ prompt, responseLength: responseTokens, trimNames: false });
         const text = extractSummary(reply);
         if (!text) {
             fail('模型没有返回总结内容，可以点“重新生成”再试一次。');
@@ -564,7 +641,7 @@ async function runSummary(force = false) {
             ? `对话太长，只总结了最近 ${built.total - built.skipped} 条（共 ${built.total} 条）。`
             : '';
         saveToLibrary({ text, character: context.name2, chatId });
-        lastResult = { chatId, length, text, note };
+        lastResult = { chatId, chatLength, words, text, note };
         showResult(lastResult);
     } catch (error) {
         console.error('[酒馆拓展] 总结失败', error);
