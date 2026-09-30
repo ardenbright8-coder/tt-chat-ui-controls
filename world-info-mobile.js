@@ -1,3 +1,4 @@
+import { bindContentEditing } from './world-info-editing.js';
 const WI_MOBILE_CLASS = 'tt-wi-mobile';
 const WI_ENTRY_MARK = 'ttWiMobile';
 const WI_CONTENT_FONT_KEY = 'tt-chat-ui-controls:world-info-content-font-size';
@@ -17,6 +18,7 @@ let stopListRestore = null;
 const entryCleanup = new WeakMap();
 const entrySnapshots = new WeakMap();
 const movedNodes = new WeakMap();
+const contentEditors = new WeakMap();
 
 function isTouchMobile() {
     return globalThis.matchMedia?.('(pointer: coarse)')?.matches === true;
@@ -310,10 +312,12 @@ function makeEditActions(entry) {
     const confirm = document.createElement('button');
     confirm.type = 'button';
     confirm.className = 'tt-wi-edit-confirm';
-    confirm.textContent = '确定';
+    confirm.textContent = '保存';
 
     actions.append(cancel, confirm);
     entry.appendChild(actions);
+    const contentEditor = bindContentEditing(entry, actions);
+    contentEditors.set(entry, contentEditor);
 
     const cleanup = entryCleanup.get(entry) ?? [];
 
@@ -334,7 +338,7 @@ function makeEditActions(entry) {
         closeEntryDrawer(entry);
     }));
 
-    cleanup.push(() => actions.remove());
+    cleanup.push(() => { contentEditor.cleanup(); contentEditors.delete(entry); actions.remove(); });
     entryCleanup.set(entry, cleanup);
 }
 
@@ -366,6 +370,7 @@ function syncActiveEntry(preferred = null) {
     if (active && active !== previousActive) {
         captureEntrySnapshot(active);
         makeEditActions(active);
+        contentEditors.get(active)?.reset();
     }
 
     if (!active) {
