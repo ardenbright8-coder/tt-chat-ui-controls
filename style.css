@@ -2234,3 +2234,47 @@
     border-color: transparent;
     background: #3d7059;
 }
+
+/* v1.8.31: summary card inside the chat message; the raw reply is hidden
+   (it is shown under "其他输出" when the model wrote anything outside <总结>). */
+#chat .mes.tt-summary-mes .mes_text {
+    display: none !important;
+}
+#chat .mes .tt-summary-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 4px 0 8px;
+    padding: 12px;
+    border: 1px solid color-mix(in srgb, #3d7059 60%, transparent);
+    border-radius: 14px;
+    background: color-mix(in srgb, #3d7059 14%, transparent);
+}
+#chat .mes .tt-summary-card .tt-summary-inline {
+    margin: 0;
+}
+#chat .mes .tt-summary-card-text {
+    white-space: pre-wrap;
+    line-height: 1.7;
+    user-select: text;
+    -webkit-user-select: text;
+}
+#chat .mes .tt-summary-truncated {
+    color: #f0c27a;
+    opacity: 1;
+}
+#chat .mes .tt-summary-other {
+    font-size: .88em;
+    opacity: .8;
+}
+#chat .mes .tt-summary-other > summary {
+    cursor: pointer;
+    padding: 4px 0;
+}
+#chat .mes .tt-summary-other-text {
+    white-space: pre-wrap;
+    line-height: 1.55;
+    max-height: 40vh;
+    overflow-y: auto;
+    padding-top: 6px;
+}

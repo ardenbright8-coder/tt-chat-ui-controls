@@ -32,7 +32,7 @@ const DEFAULT_PROMPT = [
     '只写记录里发生过的情节，不添加没有的事件，不续写后面的发展。',
     '记录里的状态栏、界面代码、格式说明、思考过程等与剧情无关的内容直接略过。',
     '记录只有一部分时，就根据现有内容完成总结。',
-    '只输出总结正文，用 <总结> 和 </总结> 包起来，不要标题、前言或其他内容。',
+    '把总结正文完整写在 <总结> 和 </总结> 之间；标签外面写什么都可以，不影响。',
 ].join('\n');
 
 // The user can edit the instruction in the summary bubble; {{字数}} becomes
@@ -86,6 +86,19 @@ export function extractSummary(reply) {
     const tagged = text.match(/<总结>([\s\S]*?)(?:<\/总结>|$)/);
     const body = tagged ? tagged[1] : text.replace(/<(think|thinking)[\s\S]*?<\/\1>/gi, '');
     return body.replace(/<\/?[^>\n]{1,40}>/g, '').trim();
+}
+
+// Split a reply into the <总结> body and everything else the model wrote.
+export function splitSummary(reply) {
+    const raw = String(reply ?? '');
+    const match = raw.match(/<总结>([\s\S]*?)(<\/总结>|$)/);
+    if (!match) {
+        const body = raw.replace(/<(think|thinking)[\s\S]*?<\/\1>/gi, '').trim();
+        return { summary: body, rest: '', tagged: false, truncated: false };
+    }
+    const summary = match[1].replace(/<\/?[^>\n]{1,40}>/g, '').trim();
+    const rest = (raw.slice(0, match.index) + raw.slice(match.index + match[0].length)).trim();
+    return { summary, rest, tagged: true, truncated: !match[2] };
 }
 
 // Replace an earlier recap block in the Author's Note, or put one on top.
@@ -547,7 +560,7 @@ function promptEditor() {
     const foot = document.createElement('div');
     foot.className = 'tt-summary-prompt-foot';
     const hint = document.createElement('span');
-    hint.textContent = '{{字数}} 会换成上面设的字数；保留 <总结> 那句，复制时才只有正文。改动自动保存。';
+    hint.textContent = '{{字数}} 会换成上面设的字数；保留 <总结> 那句，气泡里才只有总结本身。改动自动保存。';
     const reset = document.createElement('button');
     reset.type = 'button';
     reset.textContent = '恢复默认';
@@ -845,7 +858,7 @@ async function runSummary(force = false) {
                 }
                 try {
                     presetUsed = currentPresetName() || '当前预设';
-                    return await context.generateQuietPrompt({ quietPrompt: instruction, skipWIAN: false, responseLength: responseTokens, removeReasoning: true });
+                    return await context.generateQuietPrompt({ quietPrompt: instruction, skipWIAN: false, removeReasoning: true });
                 } finally {
                     if (switching && original) {
                         try { await switchPreset(original); } catch (error) {
@@ -860,10 +873,12 @@ async function runSummary(force = false) {
         let used = '';
         let presetUsed = '';
         const problems = [];
+        let reply = '';
         for (const [index, route] of routes.entries()) {
             if (index > 0) setLoadingText(`${names[routes[0]]}没有拿到内容，正在改用${names[route]}重试…`);
             try {
-                text = extractSummary(await run[route]());
+                reply = String(await run[route]() ?? '');
+                text = splitSummary(reply).summary;
             } catch (error) {
                 problems.push(`${names[route]}：${error?.message || error}`);
                 continue;
@@ -882,7 +897,7 @@ async function runSummary(force = false) {
         ].filter(Boolean).join('\n');
         saveToLibrary({ text, character: context.name2, chatId });
         lastResult = { chatId, chatLength, words, text, note };
-        await insertSummaryMessage(text, note);
+        await insertSummaryMessage(reply, note);
         closeBubble();
         globalThis.toastr?.success?.('总结已放进聊天（已隐藏，不会发给模型），并存入总结库');
     } catch (error) {
@@ -921,14 +936,18 @@ function decorateMessage(element) {
     const message = Number.isInteger(id) ? context?.chat?.[id] : null;
     const isSummary = !!message?.extra?.tt_summary;
     element.classList.toggle('tt-summary-mes', isSummary);
-    const existing = element.querySelector(':scope .tt-summary-inline');
+    const existing = element.querySelector(':scope .tt-summary-card');
     if (!isSummary) { existing?.remove(); return; }
-    const count = `${charCount(message.mes)} 字`;
-    if (existing) {
-        const meta = existing.querySelector('.tt-summary-inline-count');
-        if (meta) meta.textContent = count;
-        return;
-    }
+
+    const parts = splitSummary(message.mes);
+    const signature = String(message.mes ?? '');
+    if (existing && existing.dataset.source === signature) return;
+    existing?.remove();
+
+    const card = document.createElement('div');
+    card.className = 'tt-summary-card';
+    card.dataset.source = signature;
+
     const bar = document.createElement('div');
     bar.className = 'tt-summary-inline';
     const title = document.createElement('span');
@@ -936,7 +955,8 @@ function decorateMessage(element) {
     title.textContent = '剧情总结';
     const meta = document.createElement('span');
     meta.className = 'tt-summary-inline-count';
-    meta.textContent = count;
+    meta.textContent = `${charCount(parts.summary)} 字${parts.truncated ? ' · 可能被截断' : ''}`;
+    if (parts.truncated) meta.classList.add('tt-summary-truncated');
     const copy = document.createElement('button');
     copy.type = 'button';
     copy.textContent = '复制';
@@ -944,7 +964,7 @@ function decorateMessage(element) {
         event.preventDefault();
         event.stopPropagation();
         const current = ctx()?.chat?.[Number(element.getAttribute('mesid'))];
-        copyText(String(current?.mes ?? ''), copy);
+        copyText(splitSummary(current?.mes).summary, copy);
     });
     const edit = document.createElement('button');
     edit.type = 'button';
@@ -955,8 +975,26 @@ function decorateMessage(element) {
         element.querySelector('.mes_edit')?.click();
     });
     bar.append(title, meta, copy, edit);
+
+    const body = document.createElement('div');
+    body.className = 'tt-summary-card-text';
+    body.textContent = parts.summary || '（没有找到 <总结> 里的内容）';
+    card.append(bar, body);
+
+    if (parts.rest) {
+        const other = document.createElement('details');
+        other.className = 'tt-summary-other';
+        const label = document.createElement('summary');
+        label.textContent = `其他输出（${charCount(parts.rest)} 字，点开查看）`;
+        const pre = document.createElement('div');
+        pre.className = 'tt-summary-other-text';
+        pre.textContent = parts.rest;
+        other.append(label, pre);
+        card.append(other);
+    }
+
     const text = element.querySelector('.mes_text');
-    (text?.parentElement ?? element).insertBefore(bar, text ?? null);
+    (text?.parentElement ?? element).insertBefore(card, text ?? null);
 }
 
 function decorateChat() {
