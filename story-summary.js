@@ -500,7 +500,7 @@ function lengthControl() {
     check.checked = usePreset();
     const text = document.createElement('span');
     text.textContent = '使用预设生成（推荐）';
-    toggle.title = '用预设来生成总结，不带世界书和作者注释；拿不到内容时自动改用直接请求';
+    toggle.title = '跟平时聊天完全一样的请求（预设、世界书、作者注释都带上），末尾加总结要求，能命中上下文缓存；拿不到内容时自动改用直接请求';
     toggle.append(check, text);
 
     const pick = document.createElement('div');
@@ -769,15 +769,8 @@ function openSummary() {
         showBubble({ loading: true, actions: [{ label: '关闭', onClick: closeBubble }] });
         return;
     }
-    const context = ctx();
-    const chatId = context?.getCurrentChatId?.() ?? context?.chatId ?? '';
-    const chatLength = context?.chat?.length ?? 0;
-    if (lastResult && lastResult.chatId === chatId && lastResult.chatLength === chatLength && lastResult.words === summaryLength()) {
-        showResult(lastResult);
-        return;
-    }
     showBubble({
-        text: '将暂停角色扮演，通读当前聊天，整理成一篇剧情总结。先选好字数，再点“开始总结”。',
+        text: '把当前聊天整理成一篇剧情总结，结果会作为一条隐藏消息放进聊天（不会发给模型），带复制和编辑按钮。先选好字数，再点“开始总结”。',
         meta: ' ',
         extra: lengthControl(),
         actions: [
@@ -852,7 +845,7 @@ async function runSummary(force = false) {
                 }
                 try {
                     presetUsed = currentPresetName() || '当前预设';
-                    return await context.generateQuietPrompt({ quietPrompt: instruction, skipWIAN: true, responseLength: responseTokens, removeReasoning: true });
+                    return await context.generateQuietPrompt({ quietPrompt: instruction, skipWIAN: false, responseLength: responseTokens, removeReasoning: true });
                 } finally {
                     if (switching && original) {
                         try { await switchPreset(original); } catch (error) {
@@ -889,13 +882,102 @@ async function runSummary(force = false) {
         ].filter(Boolean).join('\n');
         saveToLibrary({ text, character: context.name2, chatId });
         lastResult = { chatId, chatLength, words, text, note };
-        showResult(lastResult);
+        await insertSummaryMessage(text, note);
+        closeBubble();
+        globalThis.toastr?.success?.('总结已放进聊天（已隐藏，不会发给模型），并存入总结库');
     } catch (error) {
         console.error('[酒馆拓展] 总结失败', error);
         fail(`总结失败：${error?.message || error}`);
     } finally {
         setBusy(false);
     }
+}
+
+// ---------------------------------------------------------------- in-chat summary
+
+// The summary is added to the chat as a hidden message (the host's own
+// "hide" state: visible, but never sent to the model), so it neither costs
+// context nor steers the role-play. Clicking the ghost icon un-hides it.
+async function insertSummaryMessage(text, note) {
+    const context = ctx();
+    if (!context?.chat) return;
+    const message = {
+        name: context.name2,
+        is_user: false,
+        is_system: true,
+        send_date: new Date().toISOString(),
+        mes: text,
+        extra: { tt_summary: { createdAt: Date.now(), note: note || '' } },
+    };
+    context.chat.push(message);
+    try { context.addOneMessage?.(message, { scroll: true }); } catch (error) { console.warn('[酒馆拓展] 显示总结消息失败', error); }
+    await context.saveChat?.();
+    decorateChat();
+}
+
+function decorateMessage(element) {
+    const context = ctx();
+    const id = Number(element.getAttribute('mesid'));
+    const message = Number.isInteger(id) ? context?.chat?.[id] : null;
+    const isSummary = !!message?.extra?.tt_summary;
+    element.classList.toggle('tt-summary-mes', isSummary);
+    const existing = element.querySelector(':scope .tt-summary-inline');
+    if (!isSummary) { existing?.remove(); return; }
+    const count = `${charCount(message.mes)} 字`;
+    if (existing) {
+        const meta = existing.querySelector('.tt-summary-inline-count');
+        if (meta) meta.textContent = count;
+        return;
+    }
+    const bar = document.createElement('div');
+    bar.className = 'tt-summary-inline';
+    const title = document.createElement('span');
+    title.className = 'tt-summary-inline-title';
+    title.textContent = '剧情总结';
+    const meta = document.createElement('span');
+    meta.className = 'tt-summary-inline-count';
+    meta.textContent = count;
+    const copy = document.createElement('button');
+    copy.type = 'button';
+    copy.textContent = '复制';
+    copy.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const current = ctx()?.chat?.[Number(element.getAttribute('mesid'))];
+        copyText(String(current?.mes ?? ''), copy);
+    });
+    const edit = document.createElement('button');
+    edit.type = 'button';
+    edit.textContent = '编辑';
+    edit.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        element.querySelector('.mes_edit')?.click();
+    });
+    bar.append(title, meta, copy, edit);
+    const text = element.querySelector('.mes_text');
+    (text?.parentElement ?? element).insertBefore(bar, text ?? null);
+}
+
+function decorateChat() {
+    document.querySelectorAll('#chat .mes[mesid]').forEach(decorateMessage);
+}
+
+let chatObserver = null;
+let decorateQueued = false;
+
+function watchChat() {
+    if (chatObserver) return true;
+    const chat = document.getElementById('chat');
+    if (!chat) return false;
+    chatObserver = new MutationObserver(() => {
+        if (decorateQueued) return;
+        decorateQueued = true;
+        requestAnimationFrame(() => { decorateQueued = false; decorateChat(); });
+    });
+    chatObserver.observe(chat, { childList: true, subtree: true });
+    decorateChat();
+    return true;
 }
 
 // ---------------------------------------------------------------- menu items
@@ -958,7 +1040,14 @@ function watchMenu() {
     observer.observe(document.getElementById('options') ?? document.body, { childList: true, subtree: true });
 }
 
+let chatTimer = null;
+
 export function initStorySummary() {
+    clearInterval(chatTimer);
+    if (!watchChat()) {
+        let chatTries = 0;
+        chatTimer = setInterval(() => { if (watchChat() || ++chatTries > 60) clearInterval(chatTimer); }, 500);
+    }
     clearInterval(mountTimer);
     if (mountMenu()) {
         watchMenu();
@@ -973,6 +1062,11 @@ export function initStorySummary() {
 }
 
 export function cleanupStorySummary() {
+    clearInterval(chatTimer);
+    chatObserver?.disconnect();
+    chatObserver = null;
+    document.querySelectorAll('#chat .tt-summary-inline').forEach((el) => el.remove());
+    document.querySelectorAll('#chat .tt-summary-mes').forEach((el) => el.classList.remove('tt-summary-mes'));
     clearInterval(mountTimer);
     observer?.disconnect();
     observer = null;

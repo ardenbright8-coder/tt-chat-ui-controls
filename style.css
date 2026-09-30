@@ -2195,3 +2195,42 @@
     line-height: 1.45;
     color: #f0c27a;
 }
+
+
+/* v1.8.30: summary message inside the chat. */
+#chat .mes.tt-summary-mes .mes_block {
+    border-left: 3px solid #3d7059;
+    padding-left: 10px;
+}
+#chat .mes .tt-summary-inline {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: 4px 0 8px;
+}
+#chat .mes .tt-summary-inline-title {
+    font-weight: 700;
+}
+#chat .mes .tt-summary-inline-count {
+    flex: 1 1 auto;
+    font-size: .85em;
+    opacity: .65;
+    font-variant-numeric: tabular-nums;
+}
+#chat .mes .tt-summary-inline button {
+    min-height: 36px;
+    min-width: 64px;
+    padding: 0 14px;
+    border: 1px solid var(--SmartThemeBorderColor, rgba(255,255,255,.2));
+    border-radius: 10px;
+    color: inherit;
+    font: inherit;
+    font-weight: 700;
+    background: rgba(255,255,255,.08);
+}
+#chat .mes .tt-summary-inline button:first-of-type {
+    color: white;
+    border-color: transparent;
+    background: #3d7059;
+}
