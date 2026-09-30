@@ -1,4 +1,30 @@
 // Mobile World Info text editing. Expanded edits stay local until Save.
+
+// TauriTavern can mount a CodeMirror editor over the content textarea. The
+// editor only copies its text INTO the textarea (debounced, on blur and when
+// the entry closes); it never reads the textarea back. So any value this
+// extension writes to the textarea must also be pushed into the editor, or the
+// host's next flush silently overwrites it with the editor's old text.
+let hostEditorModule = null;
+try {
+    import(new URL('../../../tauri/codemirror-editor.js', import.meta.url).href)
+        .then(module => { hostEditorModule = module; })
+        .catch(() => {});
+} catch { /* plain SillyTavern: no code editor */ }
+
+function hostEditor(source) {
+    try { return hostEditorModule?.getMountedCodeMirrorEditor?.(source) ?? null; } catch { return null; }
+}
+
+// Commit the editor's latest text into the textarea (and the host's save).
+export function pullEditorText(source) {
+    try { hostEditor(source)?.flush?.({ input: true }); } catch { /* keep textarea as is */ }
+}
+
+// Show the textarea's current value in the editor.
+export function pushEditorText(source) {
+    try { hostEditor(source)?.reset?.(); } catch { /* no editor mounted */ }
+}
 export function createHistory(initial, limit = 150) {
     let values = [initial];
     return {
@@ -29,6 +55,7 @@ export function bindContentEditing(entry, actions) {
     const record = () => { if (!composing) { history.record(source.value); refresh(); } };
     const write = (value) => {
         source.value = value;
+        pushEditorText(source);
         // The host listens with jQuery, which also lets enhanced editors resync.
         if (globalThis.jQuery) globalThis.jQuery(source).trigger('input').trigger('change');
         else {
@@ -46,6 +73,7 @@ export function bindContentEditing(entry, actions) {
     if (jq) jq(source).on('input.ttWiUndo change.ttWiUndo', record);
     else source.addEventListener('input', record);
     const undoClick = () => {
+        pullEditorText(source);
         if (!history.canUndo) return;
         const top = source.scrollTop;
         write(history.undo());
@@ -67,6 +95,7 @@ export function bindContentEditing(entry, actions) {
         const draft = document.createElement('textarea');
         draft.className = 'tt-wi-draft-text';
         draft.setAttribute('aria-label', '世界书内容');
+        pullEditorText(source);
         draft.value = source.value;
         draft.spellcheck = false;
         draft.style.fontSize = getComputedStyle(source).fontSize;
@@ -117,7 +146,7 @@ export function bindContentEditing(entry, actions) {
     document.addEventListener('click', expand, true);
     refresh();
     return {
-        reset() { history.reset(source.value); refresh(); },
+        reset() { pullEditorText(source); history.reset(source.value); refresh(); },
         cleanup() {
             stopSelectionLimit();
             dialog?.close(); dialog?.remove(); dialog = null;

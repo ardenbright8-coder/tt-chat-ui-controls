@@ -1,4 +1,4 @@
-import { bindContentEditing } from './world-info-editing.js';
+import { bindContentEditing, pullEditorText, pushEditorText } from './world-info-editing.js';
 const WI_MOBILE_CLASS = 'tt-wi-mobile';
 const WI_ENTRY_MARK = 'ttWiMobile';
 const WI_CONTENT_FONT_KEY = 'tt-chat-ui-controls:world-info-content-font-size';
@@ -195,6 +195,12 @@ function restoreEntrySnapshot(entry) {
     const snapshot = entrySnapshots.get(entry);
     if (!snapshot) return;
 
+    // Flush pending code-editor text first so the host's own flush on close
+    // has nothing left to write back over the restored value.
+    for (const item of snapshot) {
+        if (item.element instanceof HTMLTextAreaElement && item.element.isConnected) pullEditorText(item.element);
+    }
+
     for (const item of snapshot) {
         const element = item.element;
         if (!element?.isConnected) continue;
@@ -213,6 +219,7 @@ function restoreEntrySnapshot(entry) {
         } else if ('value' in element) {
             changed = element.value !== item.value;
             element.value = item.value;
+            if (changed && element instanceof HTMLTextAreaElement) pushEditorText(element);
         }
 
         if (changed) {
