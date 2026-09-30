@@ -210,6 +210,43 @@ function scrollContainers(editable) {
     return list;
 }
 
+// Native-app style edge autoscroll (Android EditText, iOS, Google Docs):
+// while a selection handle moves through the middle of the visible text,
+// nothing scrolls. Only when the moving end reaches the top/bottom edge zone
+// does the view scroll, and only toward that edge, faster the deeper in.
+// Pulling the handle back out of the zone stops scrolling at once.
+export function edgeScrollAllowance({ direction, endTop, endBottom, visTop, visBottom, line }) {
+    const zone = Math.max(line * 2, 48);
+    let depth = 0;
+    if (direction > 0) depth = (endBottom - (visBottom - zone)) / zone;
+    else if (direction < 0) depth = ((visTop + zone) - endTop) / zone;
+    if (!(depth > 0)) return { depth: 0, rate: 0, cap: 0 };
+    const d = Math.min(depth, 1.5);
+    // Lines per second: ~3 at the zone boundary, up to ~15 when the finger is past the edge.
+    return { depth, rate: line * (3 + 8 * d), cap: line * (1 + d) };
+}
+
+function pointRect(node, offset) {
+    try {
+        const range = document.createRange();
+        range.setStart(node, offset);
+        range.collapse(true);
+        let rect = [...range.getClientRects()].at(-1) ?? range.getBoundingClientRect();
+        if ((!rect || (!rect.height && !rect.top)) && node.nodeType === Node.TEXT_NODE && offset > 0) {
+            range.setStart(node, offset - 1);
+            range.setEnd(node, offset);
+            rect = [...range.getClientRects()].at(-1);
+        }
+        if (!rect || (!rect.height && !rect.top)) {
+            const el = node.nodeType === Node.ELEMENT_NODE ? node.childNodes[offset] ?? node : node.parentElement;
+            rect = el?.getBoundingClientRect?.();
+        }
+        return rect && (rect.height || rect.top) ? rect : null;
+    } catch {
+        return null;
+    }
+}
+
 export function bindSelectionScrollLimit(source) {
     if (!globalThis.matchMedia?.('(pointer: coarse)').matches) return () => {};
     const state = new Map();
@@ -217,6 +254,8 @@ export function bindSelectionScrollLimit(source) {
     let selecting = false;
     let selectionAt = -Infinity;
     let bypassUntil = 0;
+    let ends = null;          // last anchor/focus, to tell which handle is moving
+    let moving = 'focus';
     const now = () => performance.now();
     const lineHeight = (editable) => {
         const style = getComputedStyle(editable ?? source);
@@ -226,23 +265,78 @@ export function bindSelectionScrollLimit(source) {
         state.clear();
         if (!editable) return;
         const time = now();
-        const credit = lineHeight(editable);
+        const credit = 0;
         for (const node of scrollContainers(editable)) {
             state.set(node, { top: node.scrollTop, time, credit });
             expected.delete(node);
         }
+    };
+    // How far `el` has been moved up by scrolls we have not accepted yet.
+    const pendingOffset = (el) => {
+        let sum = 0;
+        for (const [node, info] of state) {
+            if (node !== el && node.contains(el)) sum += node.scrollTop - info.top;
+        }
+        return sum;
+    };
+    // Visible band of the editor: every scroll container and the visual viewport
+    // (the on-screen keyboard shrinks the latter), in pre-scroll coordinates.
+    const visibleBand = () => {
+        const vv = globalThis.visualViewport;
+        let top = vv ? vv.offsetTop : 0;
+        let bottom = vv ? vv.offsetTop + vv.height : innerHeight;
+        for (const node of state.keys()) {
+            if (node === document.scrollingElement || node === document.documentElement || node === document.body) continue;
+            const r = node.getBoundingClientRect();
+            const shift = pendingOffset(node);
+            top = Math.max(top, r.top + node.clientTop + shift);
+            bottom = Math.min(bottom, r.top + node.clientTop + node.clientHeight + shift);
+        }
+        return bottom > top ? { top, bottom } : null;
+    };
+    const movingEndRect = (editable) => {
+        const sel = document.getSelection?.();
+        if (!sel?.rangeCount) return null;
+        const node = moving === 'anchor' ? sel.anchorNode : sel.focusNode;
+        const offset = moving === 'anchor' ? sel.anchorOffset : sel.focusOffset;
+        if (!node || !editable.contains(node)) return null;
+        const rect = pointRect(node, offset);
+        if (!rect) return null;
+        const el = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+        const shift = pendingOffset(el);
+        return { top: rect.top + shift, bottom: rect.bottom + shift };
     };
     const observeSelection = () => {
         const editable = activeEditable(source);
         if (!hasContentSelection(source, editable)) {
             selecting = false;
             selectionAt = -Infinity;
+            ends = null;
             return;
         }
         // A selection just appeared: take fresh baselines for every container.
         if (!selecting) snapshot(editable);
         selecting = true;
         selectionAt = now();
+        if (editable !== source) {
+            const sel = document.getSelection();
+            const next = { an: sel.anchorNode, ao: sel.anchorOffset, fn: sel.focusNode, fo: sel.focusOffset };
+            if (ends) {
+                const focusMoved = next.fn !== ends.fn || next.fo !== ends.fo;
+                const anchorMoved = next.an !== ends.an || next.ao !== ends.ao;
+                if (focusMoved) moving = 'focus';
+                else if (anchorMoved) moving = 'anchor';
+            } else moving = 'focus';
+            ends = next;
+        }
+    };
+    const apply = (node, previous, top, time, credit) => {
+        state.set(node, { top, time, credit });
+        if (Math.abs(top - node.scrollTop) >= 1) {
+            node.scrollTop = top;
+            expected.set(node, node.scrollTop);
+            state.get(node).top = node.scrollTop;
+        }
     };
     const scroll = event => {
         const node = event.target === document ? document.scrollingElement : event.target;
@@ -258,19 +352,38 @@ export function bindSelectionScrollLimit(source) {
         }
         expected.delete(node);
         const editable = activeEditable(source);
-        // Only scrolls that follow a moving selection are slowed down;
+        // Only scrolls that follow a moving selection are touched;
         // ordinary finger panning (selection unchanged) passes through.
         if (!hasContentSelection(source, editable) || time < bypassUntil || time - selectionAt > 120) {
-            state.set(node, { top: requested, time, credit: lineHeight(editable) });
+            state.set(node, { top: requested, time, credit: 0 });
             return;
         }
-        const next = selectionScrollStep(previous.top, requested, time - previous.time, lineHeight(editable), previous.credit);
-        state.set(node, { top: next.top, time, credit: next.credit });
-        if (Math.abs(next.top - requested) >= 1) {
-            node.scrollTop = next.top;
-            expected.set(node, node.scrollTop);
-            state.get(node).top = node.scrollTop;
+        const line = Math.max(12, lineHeight(editable));
+        const distance = requested - previous.top;
+        const end = editable === source ? null : movingEndRect(editable);
+        const band = end ? visibleBand() : null;
+        if (!end || !band) {
+            // Plain textarea or unmeasurable handle: fall back to a gentle rate limit.
+            const next = selectionScrollStep(previous.top, requested, time - previous.time, line, previous.credit);
+            apply(node, previous, next.top, time, next.credit);
+            return;
         }
+        const allow = edgeScrollAllowance({
+            direction: Math.sign(distance),
+            endTop: end.top,
+            endBottom: end.bottom,
+            visTop: band.top,
+            visBottom: band.bottom,
+            line,
+        });
+        if (!allow.rate) {
+            // Handle is away from the edge (or moving back): keep the text still.
+            apply(node, previous, previous.top, time, 0);
+            return;
+        }
+        const budget = Math.min(allow.cap, previous.credit + Math.max(0, time - previous.time) * allow.rate / 1000 + line * 0.25);
+        const used = Math.min(Math.abs(distance), budget);
+        apply(node, previous, previous.top + Math.sign(distance) * used, time, budget - used);
     };
     const inScope = event => contentScope(source).contains(event.target);
     const bypass = event => {
@@ -279,7 +392,7 @@ export function bindSelectionScrollLimit(source) {
         selectionAt = -Infinity;
     };
     const release = () => { selectionAt = -Infinity; bypassUntil = now() + 80; };
-    const focusChange = () => { selecting = false; selectionAt = -Infinity; state.clear(); };
+    const focusChange = () => { selecting = false; selectionAt = -Infinity; ends = null; state.clear(); };
     document.addEventListener('beforeinput', bypass, true);
     document.addEventListener('keydown', bypass, true);
     document.addEventListener('wheel', bypass, { capture: true, passive: true });
