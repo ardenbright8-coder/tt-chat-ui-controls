@@ -106,6 +106,19 @@ function summaryLength() {
     return Number.isFinite(value) && value > 0 ? Math.min(LENGTH_MAX, Math.max(LENGTH_MIN, Math.round(value))) : LENGTH_DEFAULT;
 }
 
+function usePreset() {
+    const value = ctx()?.extensionSettings?.[EXTENSION_KEY]?.summaryUsePreset;
+    return value !== false;
+}
+
+function setUsePreset(on) {
+    const all = ctx()?.extensionSettings;
+    if (!all) return;
+    all[EXTENSION_KEY] ??= {};
+    all[EXTENSION_KEY].summaryUsePreset = !!on;
+    persist();
+}
+
 function setSummaryLength(value) {
     const all = ctx()?.extensionSettings;
     if (!all) return;
@@ -363,7 +376,7 @@ function showBubble({ title = '剧情总结', text = '', meta = '', note = '', e
     return bubble;
 }
 
-function lengthControl() {
+function lengthRow() {
     const row = document.createElement('div');
     row.className = 'tt-summary-length';
     const label = document.createElement('span');
@@ -391,6 +404,23 @@ function lengthControl() {
     });
     row.append(label, range, number);
     return row;
+}
+
+function lengthControl() {
+    const box = document.createElement('div');
+    box.className = 'tt-summary-settings';
+    const toggle = document.createElement('label');
+    toggle.className = 'tt-summary-toggle';
+    const check = document.createElement('input');
+    check.type = 'checkbox';
+    check.checked = usePreset();
+    check.addEventListener('change', () => setUsePreset(check.checked));
+    const text = document.createElement('span');
+    text.textContent = '使用当前预设（推荐）';
+    toggle.title = '用你平时聊天的预设来生成总结，不带世界书和作者注释；拿不到内容时自动改用直接请求';
+    toggle.append(check, text);
+    box.append(lengthRow(), toggle);
+    return box;
 }
 
 function setLoadingText(message) {
@@ -661,42 +691,42 @@ async function runSummary(force = false) {
                 content: `${omitted}【对话记录开始】\n${built.transcript}\n【对话记录结束】\n\n现在暂停角色扮演，按要求输出约 ${words} 字的剧情总结。`,
             },
         ];
-        // First try a clean request without the preset. Some providers return
-        // nothing for mature stories without the preset's own settings, so
-        // retry through the current preset (world info / author's note skipped).
+        // Try the chosen route first and fall back to the other one when it
+        // errors or comes back empty. The preset route uses the user's own
+        // chat preset (world info / author's note skipped); the direct route
+        // sends only our instruction plus the cleaned transcript.
+        const presetFirst = usePreset() && typeof context.generateQuietPrompt === 'function';
+        const routes = presetFirst ? ['preset', 'direct'] : ['direct', 'preset'];
+        const names = { preset: '走预设', direct: '直接请求' };
+        const run = {
+            preset: async () => {
+                if (typeof context.generateQuietPrompt !== 'function') throw new Error('当前酒馆不支持');
+                const instruction = `${systemPrompt(words)}\n\n现在暂停角色扮演，根据以上全部聊天记录，按要求输出约 ${words} 字的剧情总结。`;
+                return context.generateQuietPrompt({ quietPrompt: instruction, skipWIAN: true, responseLength: responseTokens, removeReasoning: true });
+            },
+            direct: () => context.generateRaw({ prompt, responseLength: responseTokens, trimNames: false }),
+        };
         let text = '';
-        let rawError = null;
-        try {
-            text = extractSummary(await context.generateRaw({ prompt, responseLength: responseTokens, trimNames: false }));
-        } catch (error) {
-            rawError = error;
-        }
-        let viaPreset = false;
-        if (!text && typeof context.generateQuietPrompt === 'function') {
-            viaPreset = true;
-            setLoadingText('直接请求没有返回内容，正在改用当前预设重试…');
-            const instruction = `${systemPrompt(words)}\n\n现在暂停角色扮演，根据以上全部聊天记录，按要求输出约 ${words} 字的剧情总结。`;
+        let used = '';
+        const problems = [];
+        for (const [index, route] of routes.entries()) {
+            if (index > 0) setLoadingText(`${names[routes[0]]}没有拿到内容，正在改用${names[route]}重试…`);
             try {
-                text = extractSummary(await context.generateQuietPrompt({
-                    quietPrompt: instruction,
-                    skipWIAN: true,
-                    responseLength: responseTokens,
-                    removeReasoning: true,
-                }));
+                text = extractSummary(await run[route]());
             } catch (error) {
-                fail(`总结失败：${error?.message || error}${rawError ? `（直接请求也失败：${rawError.message || rawError}）` : ''}`);
-                return;
+                problems.push(`${names[route]}：${error?.message || error}`);
+                continue;
             }
+            if (text) { used = route; break; }
+            problems.push(`${names[route]}：模型返回为空`);
         }
         if (!text) {
-            fail(rawError
-                ? `总结失败：${rawError.message || rawError}。模型没有返回内容，可能被模型的内容审核拦下了，可以换个模型或稍后重试。`
-                : '模型没有返回总结内容，可以点“重新生成”再试一次。');
+            fail(`总结失败。${problems.join('；')}。可能是模型的内容审核拦下了，或回复长度被思考过程用完，可以稍后重试或换个模型。`);
             return;
         }
         const note = [
-            built.skipped > 0 ? `对话太长，只总结了最近 ${built.total - built.skipped} 条（共 ${built.total} 条）。` : '',
-            viaPreset ? '直接请求没有返回内容，这次是走当前预设生成的。' : '',
+            built.skipped > 0 ? `对话太长，直接请求只带了最近 ${built.total - built.skipped} 条（共 ${built.total} 条）。` : '',
+            used !== routes[0] ? `${names[routes[0]]}没有拿到内容，这次是${names[used]}生成的。` : '',
         ].filter(Boolean).join('\n');
         saveToLibrary({ text, character: context.name2, chatId });
         lastResult = { chatId, chatLength, words, text, note };
