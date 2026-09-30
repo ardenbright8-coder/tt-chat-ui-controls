@@ -142,40 +142,81 @@ export function selectionScrollStep(previous, requested, elapsed, lineHeight, cr
     return { top: previous + Math.sign(distance) * used, credit: budget - used };
 }
 
+// The host may replace the content textarea with a code editor
+// (CodeMirror: contenteditable .cm-content inside .cm-scroller). The user
+// then selects text in that editor, never in the hidden textarea, so the
+// active editable is resolved at event time instead of being fixed.
+function contentScope(source) {
+    return source.closest('.tt-wi-content-block') ?? source.parentElement ?? source;
+}
+
+function activeEditable(source) {
+    const el = document.activeElement;
+    if (!el) return null;
+    if (el === source) return el;
+    if (el.isContentEditable && contentScope(source).contains(el)) return el;
+    return null;
+}
+
+// Returns true while a non-empty selection lives in the content editor.
+function hasContentSelection(source, editable) {
+    if (!editable) return false;
+    if (editable === source) return source.selectionStart !== source.selectionEnd;
+    const sel = document.getSelection?.();
+    if (!sel || sel.isCollapsed || !sel.rangeCount) return false;
+    return editable.contains(sel.anchorNode) || editable.contains(sel.focusNode);
+}
+
+// The inline editor sits inside the World Info popup, which scrolls too.
+// Revealing a moving selection end scrolls every ancestor (the editor's own
+// scroller, the popup, the page), so all of them are limited together.
+function scrollContainers(editable) {
+    const list = [];
+    if (editable.tagName === 'TEXTAREA') list.push(editable);
+    for (let node = editable.parentElement; node; node = node.parentElement) {
+        if (/(auto|scroll|overlay)/.test(getComputedStyle(node).overflowY)) list.push(node);
+    }
+    const root = document.scrollingElement;
+    if (root && !list.includes(root)) list.push(root);
+    return list;
+}
+
 export function bindSelectionScrollLimit(source) {
     if (!globalThis.matchMedia?.('(pointer: coarse)').matches) return () => {};
-    const nodes = [source];
     const state = new Map();
     const expected = new WeakMap();
-    let selection = '';
+    let selecting = false;
     let selectionAt = -Infinity;
     let bypassUntil = 0;
     const now = () => performance.now();
-    const lineHeight = () => {
-        const style = getComputedStyle(source);
+    const lineHeight = (editable) => {
+        const style = getComputedStyle(editable ?? source);
         return Number.parseFloat(style.lineHeight) || (Number.parseFloat(style.fontSize) || 16) * 1.5;
     };
-    const reset = () => {
-        selectionAt = -Infinity;
-        selection = source.selectionStart + ':' + source.selectionEnd;
+    const snapshot = (editable) => {
+        state.clear();
+        if (!editable) return;
         const time = now();
-        for (const node of nodes) state.set(node, { top: node.scrollTop, time, credit: lineHeight() });
-        expected.delete(source);
+        const credit = lineHeight(editable);
+        for (const node of scrollContainers(editable)) {
+            state.set(node, { top: node.scrollTop, time, credit });
+            expected.delete(node);
+        }
     };
     const observeSelection = () => {
-        if (document.activeElement !== source || source.selectionStart === source.selectionEnd) {
+        const editable = activeEditable(source);
+        if (!hasContentSelection(source, editable)) {
+            selecting = false;
             selectionAt = -Infinity;
-            selection = source.selectionStart + ':' + source.selectionEnd;
             return;
         }
-        const next = source.selectionStart + ':' + source.selectionEnd;
-        if (next !== selection) {
-            selection = next;
-            selectionAt = now();
-        }
+        // A selection just appeared: take fresh baselines for every container.
+        if (!selecting) snapshot(editable);
+        selecting = true;
+        selectionAt = now();
     };
     const scroll = event => {
-        const node = event.target;
+        const node = event.target === document ? document.scrollingElement : event.target;
         const previous = state.get(node);
         if (!previous) return;
         const time = now();
@@ -183,16 +224,18 @@ export function bindSelectionScrollLimit(source) {
         if (expected.has(node) && Math.abs(expected.get(node) - requested) < 1) {
             expected.delete(node);
             previous.top = requested;
+            previous.time = time;
             return;
         }
         expected.delete(node);
-        observeSelection();
-        if (document.activeElement !== source || source.selectionStart === source.selectionEnd
-            || time < bypassUntil || time - selectionAt > 120) {
-            state.set(node, { top: requested, time, credit: lineHeight() });
+        const editable = activeEditable(source);
+        // Only scrolls that follow a moving selection are slowed down;
+        // ordinary finger panning (selection unchanged) passes through.
+        if (!hasContentSelection(source, editable) || time < bypassUntil || time - selectionAt > 120) {
+            state.set(node, { top: requested, time, credit: lineHeight(editable) });
             return;
         }
-        const next = selectionScrollStep(previous.top, requested, time - previous.time, lineHeight(), previous.credit);
+        const next = selectionScrollStep(previous.top, requested, time - previous.time, lineHeight(editable), previous.credit);
         state.set(node, { top: next.top, time, credit: next.credit });
         if (Math.abs(next.top - requested) >= 1) {
             node.scrollTop = next.top;
@@ -200,24 +243,29 @@ export function bindSelectionScrollLimit(source) {
             state.get(node).top = node.scrollTop;
         }
     };
-    const bypass = () => { bypassUntil = now() + 250; selectionAt = -Infinity; };
+    const inScope = event => contentScope(source).contains(event.target);
+    const bypass = event => {
+        if (!inScope(event)) return;
+        bypassUntil = now() + 250;
+        selectionAt = -Infinity;
+    };
     const release = () => { selectionAt = -Infinity; bypassUntil = now() + 80; };
-    reset();
-    source.addEventListener('focus', reset);
-    source.addEventListener('blur', reset);
-    source.addEventListener('beforeinput', bypass);
-    source.addEventListener('keydown', bypass);
-    source.addEventListener('wheel', bypass, { passive: true });
+    const focusChange = () => { selecting = false; selectionAt = -Infinity; state.clear(); };
+    document.addEventListener('beforeinput', bypass, true);
+    document.addEventListener('keydown', bypass, true);
+    document.addEventListener('wheel', bypass, { capture: true, passive: true });
+    document.addEventListener('focusin', focusChange, true);
+    document.addEventListener('focusout', focusChange, true);
     document.addEventListener('selectionchange', observeSelection);
     document.addEventListener('scroll', scroll, true);
     document.addEventListener('touchend', release, { passive: true });
     document.addEventListener('pointerup', release, true);
     return () => {
-        source.removeEventListener('focus', reset);
-        source.removeEventListener('blur', reset);
-        source.removeEventListener('beforeinput', bypass);
-        source.removeEventListener('keydown', bypass);
-        source.removeEventListener('wheel', bypass);
+        document.removeEventListener('beforeinput', bypass, true);
+        document.removeEventListener('keydown', bypass, true);
+        document.removeEventListener('wheel', bypass, { capture: true });
+        document.removeEventListener('focusin', focusChange, true);
+        document.removeEventListener('focusout', focusChange, true);
         document.removeEventListener('selectionchange', observeSelection);
         document.removeEventListener('scroll', scroll, true);
         document.removeEventListener('touchend', release);
