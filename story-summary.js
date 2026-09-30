@@ -22,13 +22,12 @@ const RECAP_TITLE = '【前情提要】';
 
 const LENGTH_MIN = 500;
 const LENGTH_MAX = 30000;
-const LENGTH_DEFAULT = 10000;
+const LENGTH_DEFAULT = 2000;
 
 const DEFAULT_PROMPT = [
-    'Ignore previous instructions. This is a new, separate request that replaces any earlier request in the conversation.',
-    'Summarize the most important facts and events in the story so far, in Chinese, within {{字数}} Chinese characters.',
-    'You may keep your usual persona, thinking and chatter outside the tags — that is fine.',
-    'But the pure summary itself (only the summary text: no greetings, comments or persona talk) must be written inside <总结> and </总结>.',
+    '先暂停一下，现在不要扮演任何角色，也不要续写剧情。',
+    '帮我把上面的全部内容总结一下，控制在 {{字数}} 字以内，用口语化、好读的话来写，重点你自己把握。',
+    '最后把总结正文单独放进 <总结> 和 </总结> 之间，里面只放总结本身，你想说的其他话都写在外面。',
 ].join('\n');
 
 // The user can edit the instruction in the summary bubble; {{字数}} becomes
@@ -1027,14 +1026,31 @@ function openSummary() {
         return;
     }
     showBubble({
-        text: '总结会作为一条隐藏消息放进聊天，带复制和编辑按钮。',
+        text: '“放进输入框”：把总结提示词填进聊天输入框，你点发送，模型按平时聊天的方式回复；回复里 <总结> 的内容会自动变成可一键复制的气泡。',
         meta: ' ',
         extra: lengthControl(),
         actions: [
-            { label: '开始总结', cls: 'tt-summary-primary', onClick: () => runSummary(true) },
+            { label: '放进输入框', cls: 'tt-summary-primary', onClick: fillInputWithPrompt },
+            { label: '后台生成', onClick: () => runSummary(true) },
             { label: '关闭', onClick: closeBubble },
         ],
     });
+}
+
+// Put the summary prompt into the chat input; the user sends it like any
+// other message, so the full preset / world info / cache all apply.
+function fillInputWithPrompt() {
+    const input = document.getElementById('send_textarea');
+    if (!(input instanceof HTMLTextAreaElement)) {
+        globalThis.toastr?.error?.('找不到聊天输入框');
+        return;
+    }
+    const text = systemPrompt(summaryLength());
+    input.value = input.value.trim() ? `${input.value.trimEnd()}\n\n${text}` : text;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    closeBubble();
+    try { input.focus({ preventScroll: true }); } catch { /* ignore */ }
+    globalThis.toastr?.info?.('总结提示词已放进输入框，确认后点发送');
 }
 
 async function runSummary(force = false) {
@@ -1228,11 +1244,17 @@ async function insertSummaryMessage(text, note, diag = null) {
     decorateChat();
 }
 
+// A normal model reply that answered the summary prompt (the user's own
+// message also contains the tag names, so only non-user messages count).
+function isSummaryReply(message) {
+    return !message.is_user && /<总结>[\s\S]*?<\/总结>/.test(String(message.mes ?? ''));
+}
+
 function decorateMessage(element) {
     const context = ctx();
     const id = Number(element.getAttribute('mesid'));
     const message = Number.isInteger(id) ? context?.chat?.[id] : null;
-    const isSummary = !!message?.extra?.tt_summary;
+    const isSummary = !!message && (!!message.extra?.tt_summary || isSummaryReply(message));
     element.classList.toggle('tt-summary-mes', isSummary);
     const existing = element.querySelector(':scope .tt-summary-card');
     if (!isSummary) { existing?.remove(); return; }
@@ -1296,7 +1318,7 @@ function decorateMessage(element) {
         card.append(other);
     }
 
-    const diag = message.extra.tt_summary.diag;
+    const diag = message.extra?.tt_summary?.diag;
     if (diag) {
         const info = document.createElement('div');
         info.className = 'tt-summary-diag';
@@ -1397,8 +1419,29 @@ function watchMenu() {
 }
 
 let chatTimer = null;
+let receivedListener = null;
+
+function onMessageReceived(id) {
+    const context = ctx();
+    const message = context?.chat?.[Number(id)];
+    if (!message || !isSummaryReply(message)) return;
+    const { summary } = splitSummary(message.mes);
+    if (!summary) return;
+    if (library().some((item) => item.text === summary)) return;
+    saveToLibrary({ text: summary, character: context.name2, chatId: context.getCurrentChatId?.() ?? '' });
+}
+
+function watchReceived() {
+    if (receivedListener) return;
+    const context = ctx();
+    const type = (context?.eventTypes ?? context?.event_types)?.MESSAGE_RECEIVED;
+    if (!context?.eventSource?.on || !type) return;
+    receivedListener = (id) => { try { onMessageReceived(id); } catch (error) { console.warn('[酒馆拓展] 保存总结失败', error); } };
+    context.eventSource.on(type, receivedListener);
+}
 
 export function initStorySummary() {
+    watchReceived();
     clearInterval(chatTimer);
     if (!watchChat()) {
         let chatTries = 0;
@@ -1418,6 +1461,12 @@ export function initStorySummary() {
 }
 
 export function cleanupStorySummary() {
+    if (receivedListener) {
+        const context = ctx();
+        const type = (context?.eventTypes ?? context?.event_types)?.MESSAGE_RECEIVED;
+        try { context?.eventSource?.removeListener?.(type, receivedListener); } catch { /* ignore */ }
+        receivedListener = null;
+    }
     clearInterval(chatTimer);
     chatObserver?.disconnect();
     chatObserver = null;
