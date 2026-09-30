@@ -16,6 +16,7 @@ export function createHistory(initial, limit = 150) {
 export function bindContentEditing(entry, actions) {
     const source = entry.querySelector('textarea[name="content"]');
     if (!source) return { reset() {}, cleanup() {} };
+    const stopSelectionLimit = bindSelectionScrollLimit(source);
     const history = createHistory(source.value);
     const undo = document.createElement('button');
     undo.type = 'button';
@@ -118,6 +119,7 @@ export function bindContentEditing(entry, actions) {
     return {
         reset() { history.reset(source.value); refresh(); },
         cleanup() {
+            stopSelectionLimit();
             dialog?.close(); dialog?.remove(); dialog = null;
             document.removeEventListener('click', expand, true);
             source.removeEventListener('beforeinput', beforeInput);
@@ -127,5 +129,98 @@ export function bindContentEditing(entry, actions) {
             else source.removeEventListener('input', record);
             undo.remove();
         },
+    };
+}
+
+// Rate-limit only scrolls accompanying a changing native text selection.
+// Do not rewrite selection endpoints or run a loop that fights ordinary panning.
+export function selectionScrollStep(previous, requested, elapsed, lineHeight, credit = 0) {
+    const line = Math.max(12, lineHeight);
+    const budget = Math.min(line, credit + Math.max(0, elapsed) * line * 3 / 1000);
+    const distance = requested - previous;
+    const used = Math.min(Math.abs(distance), budget);
+    return { top: previous + Math.sign(distance) * used, credit: budget - used };
+}
+
+export function bindSelectionScrollLimit(source) {
+    if (!globalThis.matchMedia?.('(pointer: coarse)').matches) return () => {};
+    const nodes = [source];
+    const state = new Map();
+    const expected = new WeakMap();
+    let selection = '';
+    let selectionAt = -Infinity;
+    let bypassUntil = 0;
+    const now = () => performance.now();
+    const lineHeight = () => {
+        const style = getComputedStyle(source);
+        return Number.parseFloat(style.lineHeight) || (Number.parseFloat(style.fontSize) || 16) * 1.5;
+    };
+    const reset = () => {
+        selectionAt = -Infinity;
+        selection = source.selectionStart + ':' + source.selectionEnd;
+        const time = now();
+        for (const node of nodes) state.set(node, { top: node.scrollTop, time, credit: lineHeight() });
+        expected.delete(source);
+    };
+    const observeSelection = () => {
+        if (document.activeElement !== source || source.selectionStart === source.selectionEnd) {
+            selectionAt = -Infinity;
+            selection = source.selectionStart + ':' + source.selectionEnd;
+            return;
+        }
+        const next = source.selectionStart + ':' + source.selectionEnd;
+        if (next !== selection) {
+            selection = next;
+            selectionAt = now();
+        }
+    };
+    const scroll = event => {
+        const node = event.target;
+        const previous = state.get(node);
+        if (!previous) return;
+        const time = now();
+        const requested = node.scrollTop;
+        if (expected.has(node) && Math.abs(expected.get(node) - requested) < 1) {
+            expected.delete(node);
+            previous.top = requested;
+            return;
+        }
+        expected.delete(node);
+        observeSelection();
+        if (document.activeElement !== source || source.selectionStart === source.selectionEnd
+            || time < bypassUntil || time - selectionAt > 120) {
+            state.set(node, { top: requested, time, credit: lineHeight() });
+            return;
+        }
+        const next = selectionScrollStep(previous.top, requested, time - previous.time, lineHeight(), previous.credit);
+        state.set(node, { top: next.top, time, credit: next.credit });
+        if (Math.abs(next.top - requested) >= 1) {
+            node.scrollTop = next.top;
+            expected.set(node, node.scrollTop);
+            state.get(node).top = node.scrollTop;
+        }
+    };
+    const bypass = () => { bypassUntil = now() + 250; selectionAt = -Infinity; };
+    const release = () => { selectionAt = -Infinity; bypassUntil = now() + 80; };
+    reset();
+    source.addEventListener('focus', reset);
+    source.addEventListener('blur', reset);
+    source.addEventListener('beforeinput', bypass);
+    source.addEventListener('keydown', bypass);
+    source.addEventListener('wheel', bypass, { passive: true });
+    document.addEventListener('selectionchange', observeSelection);
+    document.addEventListener('scroll', scroll, true);
+    document.addEventListener('touchend', release, { passive: true });
+    document.addEventListener('pointerup', release, true);
+    return () => {
+        source.removeEventListener('focus', reset);
+        source.removeEventListener('blur', reset);
+        source.removeEventListener('beforeinput', bypass);
+        source.removeEventListener('keydown', bypass);
+        source.removeEventListener('wheel', bypass);
+        document.removeEventListener('selectionchange', observeSelection);
+        document.removeEventListener('scroll', scroll, true);
+        document.removeEventListener('touchend', release);
+        document.removeEventListener('pointerup', release, true);
     };
 }
