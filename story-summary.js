@@ -223,6 +223,73 @@ async function switchPreset(name) {
     if (currentPresetName() !== name) throw new Error(`切换到预设“${name}”没有成功`);
 }
 
+// ---- connection profile choice (built-in Connection Profiles extension)
+function profileSelect() {
+    const select = document.getElementById('connection_profiles');
+    return select instanceof HTMLSelectElement ? select : null;
+}
+
+function profileOptions() {
+    const select = profileSelect();
+    if (!select) return [];
+    return [...select.querySelectorAll('option')]
+        .filter((option) => option.value)
+        .map((option) => ({ value: option.value, label: option.textContent.trim() || option.value }));
+}
+
+function currentProfile() {
+    const select = profileSelect();
+    const option = select?.selectedOptions?.[0];
+    return option?.value ? { value: option.value, label: option.textContent.trim() } : null;
+}
+
+// '' means "follow the current connection".
+function chosenProfile() {
+    const value = ctx()?.extensionSettings?.[EXTENSION_KEY]?.summaryProfile;
+    return typeof value === 'string' && value && profileOptions().some((o) => o.value === value) ? value : '';
+}
+
+function setChosenProfile(value) {
+    const all = ctx()?.extensionSettings;
+    if (!all) return;
+    all[EXTENSION_KEY] ??= {};
+    all[EXTENSION_KEY].summaryProfile = value || '';
+    persist();
+}
+
+// Select a connection profile the way the host's /profile command does and
+// wait until it reports the profile as loaded.
+async function switchProfile(value) {
+    const select = profileSelect();
+    if (!select) throw new Error('找不到连接配置列表');
+    if (select.value === value) return;
+    const context = ctx();
+    const events = context?.eventSource;
+    const types = context?.eventTypes ?? context?.event_types ?? {};
+    const loaded = new Promise((resolve) => {
+        let done = false;
+        const names = [types.CONNECTION_PROFILE_LOADED, types.MODEL_TARGET_LOADED].filter(Boolean);
+        const finish = () => {
+            if (done) return;
+            done = true;
+            names.forEach((name) => { try { events?.removeListener?.(name, finish); } catch { /* ignore */ } });
+            resolve();
+        };
+        names.forEach((name) => events?.on?.(name, finish));
+        setTimeout(finish, 10000);
+    });
+    select.value = value;
+    if (select.value !== value) throw new Error('连接配置列表里没有这一项');
+    select.dispatchEvent(new Event('change'));
+    await loaded;
+    // Give the new connection a moment to come online.
+    for (let waited = 0; waited < 3000 && ctx()?.onlineStatus === 'no_connection'; waited += 100) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+}
+
+let summaryProfileActive = false;
+
 // ---- model choice (Chat Completion only)
 function modelSelect() {
     const context = ctx();
@@ -280,7 +347,8 @@ async function switchModel(value) {
 
 // Run fn with the chosen summary model, then switch back.
 async function withSummaryModel(fn, onSwitch) {
-    const target = chosenModel();
+    // A different connection profile brings its own model; skip the model choice then.
+    const target = summaryProfileActive ? '' : chosenModel();
     const original = currentModel();
     if (!target || target === original) return fn();
     onSwitch?.(target);
@@ -657,7 +725,50 @@ function lengthControl() {
         modelPick.append(label, modelSelectEl);
     }
 
-    box.append(...[lengthRow(), toggle, pick, modelPick, promptEditor()].filter(Boolean));
+    const profiles = profileOptions();
+    let profilePick = null;
+    if (profiles.length) {
+        const current = currentProfile();
+        profilePick = document.createElement('div');
+        profilePick.className = 'tt-summary-preset tt-summary-profile';
+        const label = document.createElement('span');
+        label.className = 'tt-summary-model-label';
+        label.textContent = '总结用的连接配置';
+        const profileSelectEl = document.createElement('select');
+        const follow = document.createElement('option');
+        follow.value = '';
+        follow.textContent = `跟随当前（${current?.label || '未选配置'}）`;
+        profileSelectEl.append(follow);
+        for (const item of profiles) {
+            const option = document.createElement('option');
+            option.value = item.value;
+            option.textContent = item.label;
+            profileSelectEl.append(option);
+        }
+        profileSelectEl.value = current ? chosenProfile() : '';
+        profileSelectEl.disabled = !current;
+        const note = document.createElement('div');
+        note.className = 'tt-summary-preset-warn';
+        const sync = () => {
+            const other = !!profileSelectEl.value && profileSelectEl.value !== current?.value;
+            if (!current) {
+                note.hidden = false;
+                note.textContent = '当前没有选中连接配置，切过去后无法切回，所以这里不能选。先在连接设置里选一个配置文件。';
+            } else {
+                note.hidden = !other;
+                note.textContent = '选了别的连接配置时，总结会临时切过去（接口、模型随之改变）、完成后切回；此时下面的模型选择不生效。';
+            }
+            if (modelPick) {
+                const select = modelPick.querySelector('select');
+                if (select) select.disabled = other;
+            }
+        };
+        profileSelectEl.addEventListener('change', () => { setChosenProfile(profileSelectEl.value); sync(); });
+        profilePick.append(label, profileSelectEl, note);
+        queueMicrotask(sync);
+    }
+
+    box.append(...[lengthRow(), toggle, pick, profilePick, modelPick, promptEditor()].filter(Boolean));
     return box;
 }
 
@@ -916,7 +1027,7 @@ function openSummary() {
         return;
     }
     showBubble({
-        text: '把当前聊天整理成一篇剧情总结，结果会作为一条隐藏消息放进聊天（不会发给模型），带复制和编辑按钮。先选好字数，再点“开始总结”。',
+        text: '总结会作为一条隐藏消息放进聊天，带复制和编辑按钮。',
         meta: ' ',
         extra: lengthControl(),
         actions: [
@@ -1033,6 +1144,19 @@ async function runSummary(force = false) {
         let diagnosis = null;
         const problems = [];
         let reply = '';
+        const profileTarget = chosenProfile();
+        const profileOriginal = currentProfile();
+        const profileSwitching = !!profileTarget && !!profileOriginal && profileTarget !== profileOriginal.value;
+        const profileLabel = profileSwitching ? (profileOptions().find((o) => o.value === profileTarget)?.label ?? '') : '';
+        if (profileSwitching) {
+            setLoadingText(`正在临时切换到连接配置“${profileLabel}”…`);
+            try { await switchProfile(profileTarget); } catch (error) {
+                fail(`切换连接配置失败：${error?.message || error}`);
+                return;
+            }
+            summaryProfileActive = true;
+        }
+        try {
         for (const [index, route] of routes.entries()) {
             if (index > 0) setLoadingText(`${names[routes[0]]}没有拿到内容，正在改用${names[route]}重试…`);
             try {
@@ -1044,6 +1168,14 @@ async function runSummary(force = false) {
             }
             if (text) { used = route; break; }
             problems.push(`${names[route]}：模型返回为空`);
+        }
+        } finally {
+            summaryProfileActive = false;
+            if (profileSwitching) {
+                try { await switchProfile(profileOriginal.value); } catch (error) {
+                    globalThis.toastr?.warning?.(`没能切回连接配置“${profileOriginal.label}”，请手动切回：${error?.message || error}`);
+                }
+            }
         }
         if (!text) {
             fail(`总结失败。${problems.join('；')}。可以稍后重试，或换个模型再试。`);
@@ -1057,7 +1189,7 @@ async function runSummary(force = false) {
         saveToLibrary({ text, character: context.name2, chatId });
         lastResult = { chatId, chatLength, words, text, note };
         const diag = {
-            route: used === 'preset' ? `预设：${presetUsed || '当前预设'}` : '直接请求（未用预设）',
+            route: [profileSwitching ? `连接配置：${profileLabel}` : '', used === 'preset' ? `预设：${presetUsed || '当前预设'}` : '直接请求（未用预设）'].filter(Boolean).join(' · '),
             maxTokens: used === 'preset' ? diagnosis?.maxTokens ?? null : (presetResponseLength(context) || responseTokens),
             stop: used === 'preset' ? diagnosis?.stop ?? [] : [],
             model: used === 'preset' ? diagnosis?.model ?? '' : (chosenModel() || currentModel()),
