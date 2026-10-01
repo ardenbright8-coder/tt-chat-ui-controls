@@ -25,7 +25,7 @@ const SKIP_TYPES = new Set(['continue', 'impersonate', 'quiet', 'extension', 'fi
 
 let receivedListener = null;
 let profileListener = null;
-const PROFILE_EVENTS = ['CONNECTION_PROFILE_CREATED', 'CONNECTION_PROFILE_UPDATED', 'CONNECTION_PROFILE_DELETED'];
+const PROFILE_EVENTS = ['CONNECTION_PROFILE_CREATED', 'CONNECTION_PROFILE_UPDATED', 'CONNECTION_PROFILE_DELETED', 'CONNECTION_PROFILE_LOADED', 'MODEL_TARGET_LOADED'];
 let mountTimer = null;
 let queue = Promise.resolve();
 
@@ -45,9 +45,49 @@ function save() {
     ctx()?.saveSettingsDebounced?.();
 }
 
+// 可选的两类：酒馆的「连接配置文件」，和 TauriTavern 自己的「模型」（只存接口 + 模型 + 钥匙的轻量条目）。
+// 选项值带前缀区分：t: 开头是「模型」，其余是连接配置文件（旧版存的就是裸 id）
 function profiles() {
-    const list = ctx()?.extensionSettings?.connectionManager?.profiles;
-    return Array.isArray(list) ? list.filter((p) => p?.id).map((p) => ({ id: p.id, name: p.name || p.id })) : [];
+    const cm = ctx()?.extensionSettings?.connectionManager;
+    const list = [];
+    for (const p of Array.isArray(cm?.profiles) ? cm.profiles : []) {
+        if (p?.id) list.push({ id: p.id, name: p.name || p.id, group: '连接配置文件' });
+    }
+    for (const t of Array.isArray(cm?.modelTargets) ? cm.modelTargets : []) {
+        if (t?.id) list.push({ id: 't:' + t.id, name: t.name || t.id, group: '模型' });
+    }
+    return list;
+}
+
+function findTarget(value) {
+    if (!String(value).startsWith('t:')) return null;
+    const id = String(value).slice(2);
+    return ctx()?.extensionSettings?.connectionManager?.modelTargets?.find((t) => t.id === id) || null;
+}
+
+// 「模型」条目没有现成的发请求接口，照连接配置文件那套字段自己拼一份；不切换当前连接
+async function requestWithTarget(context, target, messages, maxTokens) {
+    const map = context.CONNECT_API_MAP?.[target.api];
+    if (!map || map.selected !== 'openai' || !map.source) throw new Error('这个「模型」不是聊天补全类型，换一个');
+    const url = target['api-url'];
+    return await context.ChatCompletionService.processRequest({
+        stream: false,
+        messages,
+        max_tokens: maxTokens,
+        model: target.model,
+        chat_completion_source: map.source,
+        custom_api_format: target['custom-api-format'] || (target.api === 'custom' ? 'openai_compat' : undefined),
+        opencode_api_format: target['custom-api-format'],
+        opencode_endpoint: url,
+        secret_id: target.secretRef?.id,
+        custom_url: url,
+        vertexai_region: url,
+        zai_endpoint: url,
+        siliconflow_endpoint: url,
+        minimax_endpoint: url,
+        moonshot_endpoint: url,
+        pollinations_endpoint: url,
+    }, { presetName: undefined }, true, null);
 }
 
 // 正文里常夹着状态栏 HTML、变量更新块、代码块，DeepSeek 只需要剧情本身
@@ -81,7 +121,7 @@ function cleanTags(reply) {
 async function writeTags(context, message, id) {
     const s = settings();
     const service = context.ConnectionManagerRequestService;
-    if (!service?.sendRequest) throw new Error('这个版本的酒馆没有「连接配置」请求接口');
+    if (!service?.sendRequest && !context.ChatCompletionService) throw new Error('这个版本的酒馆没有「连接配置」请求接口');
     if (!s.autoImageProfile || !profiles().some((p) => p.id === s.autoImageProfile)) {
         throw new Error('先在「自动配图」里选一个写画图词的连接配置');
     }
@@ -91,12 +131,11 @@ async function writeTags(context, message, id) {
     if (char?.description) parts.push(`Character ${message.name} (appearance reference):\n${plainText(char.description).slice(0, 1200)}`);
     if (prevUser?.mes) parts.push(`User's last action:\n${plainText(prevUser.mes).slice(-800)}`);
     parts.push(`Story passage to illustrate:\n${plainText(message.mes).slice(-4000)}`);
-    const result = await service.sendRequest(
-        s.autoImageProfile,
-        [{ role: 'system', content: s.autoImagePrompt }, { role: 'user', content: parts.join('\n\n') }],
-        600,
-        { includePreset: false },
-    );
+    const messages = [{ role: 'system', content: s.autoImagePrompt }, { role: 'user', content: parts.join('\n\n') }];
+    const target = findTarget(s.autoImageProfile);
+    const result = target
+        ? await requestWithTarget(context, target, messages, 600)
+        : await service.sendRequest(s.autoImageProfile, messages, 600, { includePreset: false });
     const tags = cleanTags(typeof result === 'string' ? result : result?.content);
     if (tags.split(',').length < 5) throw new Error('写画图词的模型没给出像样的标签：' + String(result?.content ?? result).slice(0, 80));
     return tags;
@@ -168,13 +207,18 @@ function fillProfiles() {
     const s = settings();
     const list = profiles();
     // 列表没变就不动它：手机上一按下就重写选项，原生下拉可能弹不出来
-    const sig = list.map((p) => p.id + '=>' + p.name).join(' ;; ');
+    const sig = list.map((p) => p.group + p.id + '=>' + p.name).join(' ;; ');
     if (select.dataset.sig === sig && select.options.length) return;
     select.dataset.sig = sig;
-    select.innerHTML = '<option value="">（未选）</option>' + list.map((p) => `<option value="${p.id}">${p.name.replace(/[<&>"]/g, '')}</option>`).join('');
+    const esc = (v) => String(v).replace(/[<&>"]/g, '');
+    const groups = ['连接配置文件', '模型'].map((g) => {
+        const items = list.filter((p) => p.group === g);
+        return items.length ? `<optgroup label="${g}">` + items.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('') + '</optgroup>' : '';
+    });
+    select.innerHTML = '<option value="">（未选）</option>' + groups.join('');
     select.value = list.some((p) => p.id === s.autoImageProfile) ? s.autoImageProfile : '';
     const hint = document.getElementById('tt-autoimg-hint');
-    if (hint) hint.textContent = list.length ? '' : '还没有连接配置：先在「API 连接」里连上 DeepSeek，在「连接配置」里存一个';
+    if (hint) hint.textContent = list.length ? '「连接配置文件」和「模型」两类都能选，跟「API 连接」页那个下拉框是同一批' : '还没有连接配置：先在「API 连接」里连上 DeepSeek，存成连接配置文件或模型';
 }
 
 function mount() {
