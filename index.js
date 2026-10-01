@@ -4,6 +4,7 @@ import { initWorldInfoMobile, cleanupWorldInfoMobile } from './world-info-mobile
 import { initChatScrollGuard, cleanupChatScrollGuard } from './chat-scroll-guard.js';
 import { initExtensionNamesZh, cleanupExtensionNamesZh } from './extension-names-zh.js';
 import { initStorySummary, cleanupStorySummary } from './story-summary.js';
+import { initStoryImage, cleanupStoryImage } from './story-image.js';
 
 const EXTENSION_KEY = 'chat-text-color';
 
@@ -803,6 +804,7 @@ export async function init() {
     initWorldInfoMobile();
     initExtensionNamesZh();
     initStorySummary();
+    initStoryImage();
     if (initialized) {
         mountUi();
         return;
@@ -816,6 +818,7 @@ export async function cleanup() {
     cleanupChatScrollGuard();
     cleanupExtensionNamesZh();
     cleanupStorySummary();
+    cleanupStoryImage();
     cleanupContextLock();
     cleanupPromptDetachGuard();
     stopMessageBannerFix?.();
