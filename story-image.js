@@ -32,13 +32,25 @@ let queue = Promise.resolve();
 function settings() {
     const context = ctx();
     const all = context?.extensionSettings;
-    if (!all) return { autoImageEnabled: false, autoImageProfile: '', autoImagePrompt: DEFAULT_PROMPT };
+    if (!all) return { autoImageEnabled: false, autoImageProfile: '', autoImagePrompt: DEFAULT_PROMPT, autoImageQuietToast: true };
     all[EXTENSION_KEY] = all[EXTENSION_KEY] || {};
     const s = all[EXTENSION_KEY];
     if (typeof s.autoImageEnabled !== 'boolean') s.autoImageEnabled = false;
     if (typeof s.autoImageProfile !== 'string') s.autoImageProfile = '';
     if (typeof s.autoImagePrompt !== 'string' || !s.autoImagePrompt.trim()) s.autoImagePrompt = DEFAULT_PROMPT;
+    if (typeof s.autoImageQuietToast !== 'boolean') s.autoImageQuietToast = true;
     return s;
+}
+
+// 生图时酒馆会挂一条「正在生成图像…」的常驻提示，挡着看正文；开着这项就把它藏起来（出错的红色提示不受影响）
+const QUIET_STYLE_ID = 'tt-autoimg-quiet-style';
+function applyQuietToast() {
+    document.body?.classList.toggle('tt-autoimg-quiet', !!settings().autoImageQuietToast);
+    if (document.getElementById(QUIET_STYLE_ID)) return;
+    const style = document.createElement('style');
+    style.id = QUIET_STYLE_ID;
+    style.textContent = 'body.tt-autoimg-quiet #toast-container > .toast:has(.action-loader-toast[data-slug="sd-image-generation"]) { display: none !important; }';
+    document.head.append(style);
 }
 
 function save() {
@@ -187,6 +199,7 @@ function settingsHtml() {
     <div class="inline-drawer-content">
       <small>主模型每写完一条正文，交给下面选的连接配置写英文画图词，再用「图像生成」画好贴到这条正文末尾。主模型和当前连接都不受影响。</small>
       <label class="checkbox_label"><input type="checkbox" id="tt-autoimg-on"> <span>每条正文自动配一张图</span></label>
+      <label class="checkbox_label"><input type="checkbox" id="tt-autoimg-quiet"> <span>画图时不弹「正在生成图像…」提示</span></label>
       <label for="tt-autoimg-profile">写画图词用哪个连接配置</label>
       <select id="tt-autoimg-profile" class="text_pole"></select>
       <small id="tt-autoimg-hint"></small>
@@ -234,6 +247,9 @@ function mount() {
     prompt.value = s.autoImagePrompt;
     fillProfiles();
     on.addEventListener('change', () => { settings().autoImageEnabled = on.checked; save(); });
+    const quiet = document.getElementById('tt-autoimg-quiet');
+    quiet.checked = s.autoImageQuietToast;
+    quiet.addEventListener('change', () => { settings().autoImageQuietToast = quiet.checked; save(); applyQuietToast(); });
     select.addEventListener('change', () => { settings().autoImageProfile = select.value; save(); });
     // 手机上点下拉框时 focus 不一定先触发，按下就刷一次；连接配置增删改也跟着刷
     ['focus', 'pointerdown', 'touchstart', 'mousedown'].forEach((name) => select.addEventListener(name, fillProfiles, { passive: true }));
@@ -266,6 +282,7 @@ async function drawAndAttachForce(id) {
 
 export function initStoryImage() {
     const context = ctx();
+    applyQuietToast();
     const type = (context?.eventTypes ?? context?.event_types)?.MESSAGE_RECEIVED;
     if (!receivedListener && context?.eventSource?.on && type) {
         receivedListener = (id, kind) => onReceived(id, kind);
@@ -296,6 +313,8 @@ export function cleanupStoryImage() {
     }
     clearInterval(mountTimer);
     document.getElementById(SETTINGS_ID)?.remove();
+    document.getElementById(QUIET_STYLE_ID)?.remove();
+    document.body?.classList.remove('tt-autoimg-quiet');
 }
 
 // 给电脑上的自测脚本用
