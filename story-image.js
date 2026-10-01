@@ -24,6 +24,8 @@ Example: explicit, 1girl, 1boy, hetero, mature female, black hair, hair bun, gol
 const SKIP_TYPES = new Set(['continue', 'impersonate', 'quiet', 'extension', 'first_message']);
 
 let receivedListener = null;
+let profileListener = null;
+const PROFILE_EVENTS = ['CONNECTION_PROFILE_CREATED', 'CONNECTION_PROFILE_UPDATED', 'CONNECTION_PROFILE_DELETED'];
 let mountTimer = null;
 let queue = Promise.resolve();
 
@@ -165,6 +167,10 @@ function fillProfiles() {
     if (!select) return;
     const s = settings();
     const list = profiles();
+    // 列表没变就不动它：手机上一按下就重写选项，原生下拉可能弹不出来
+    const sig = list.map((p) => p.id + '=>' + p.name).join(' ;; ');
+    if (select.dataset.sig === sig && select.options.length) return;
+    select.dataset.sig = sig;
     select.innerHTML = '<option value="">（未选）</option>' + list.map((p) => `<option value="${p.id}">${p.name.replace(/[<&>"]/g, '')}</option>`).join('');
     select.value = list.some((p) => p.id === s.autoImageProfile) ? s.autoImageProfile : '';
     const hint = document.getElementById('tt-autoimg-hint');
@@ -185,7 +191,9 @@ function mount() {
     fillProfiles();
     on.addEventListener('change', () => { settings().autoImageEnabled = on.checked; save(); });
     select.addEventListener('change', () => { settings().autoImageProfile = select.value; save(); });
-    select.addEventListener('focus', fillProfiles);
+    // 手机上点下拉框时 focus 不一定先触发，按下就刷一次；连接配置增删改也跟着刷
+    ['focus', 'pointerdown', 'touchstart', 'mousedown'].forEach((name) => select.addEventListener(name, fillProfiles, { passive: true }));
+    document.querySelector(`#${SETTINGS_ID} .inline-drawer-toggle`)?.addEventListener('click', fillProfiles);
     prompt.addEventListener('change', () => { settings().autoImagePrompt = prompt.value.trim() || DEFAULT_PROMPT; save(); });
     document.getElementById('tt-autoimg-reset').addEventListener('click', () => {
         prompt.value = DEFAULT_PROMPT; settings().autoImagePrompt = DEFAULT_PROMPT; save();
@@ -219,6 +227,11 @@ export function initStoryImage() {
         receivedListener = (id, kind) => onReceived(id, kind);
         context.eventSource.on(type, receivedListener);
     }
+    const types = context?.eventTypes ?? context?.event_types;
+    if (!profileListener && context?.eventSource?.on && types) {
+        profileListener = () => fillProfiles();
+        PROFILE_EVENTS.forEach((name) => types[name] && context.eventSource.on(types[name], profileListener));
+    }
     clearInterval(mountTimer);
     if (mount()) return;
     let tries = 0;
@@ -231,6 +244,11 @@ export function cleanupStoryImage() {
     if (receivedListener) {
         try { context?.eventSource?.removeListener?.(type, receivedListener); } catch { /* ignore */ }
         receivedListener = null;
+    }
+    const types = context?.eventTypes ?? context?.event_types;
+    if (profileListener && types) {
+        PROFILE_EVENTS.forEach((name) => { try { context?.eventSource?.removeListener?.(types[name], profileListener); } catch { /* ignore */ } });
+        profileListener = null;
     }
     clearInterval(mountTimer);
     document.getElementById(SETTINGS_ID)?.remove();
