@@ -9,6 +9,7 @@
 const EXTENSION_KEY = 'chat-text-color';
 const SETTINGS_ID = 'tt-autoimg-settings';
 const CAST_KEY = 'tt_autoimg_cast';
+// 🚨 别再升：v1.15.4 起写词说明归用户，升这个号不会再替换手机上的说明（见 AGENTS.md）
 const PROMPT_VERSION = 8;
 const ctx = () => globalThis.SillyTavern?.getContext?.();
 
@@ -99,15 +100,23 @@ function settings() {
     const s = all[EXTENSION_KEY];
     if (typeof s.autoImageEnabled !== 'boolean') s.autoImageEnabled = false;
     if (typeof s.autoImageProfile !== 'string') s.autoImageProfile = '';
-    // 写词说明换了格式（v2 起要回 JSON），旧版存下的说明不能再用，换成新的默认
     if (!Array.isArray(s.autoImageCustomPresets)) s.autoImageCustomPresets = [];
     if (typeof s.autoImagePresetId !== 'string' || !presetById(s.autoImagePresetId, s)) s.autoImagePresetId = 'default';
-    if (s.autoImagePromptVersion !== PROMPT_VERSION || typeof s.autoImagePrompt !== 'string' || !s.autoImagePrompt.trim()) {
-        // v8 去掉了内容限制，自己另存的套装里那几句也一起删
-        for (const p of s.autoImageCustomPresets) if (typeof p?.text === 'string') p.text = stripOldLimits(p.text);
-        s.autoImagePrompt = presetById(s.autoImagePresetId, s).text;
-        s.autoImagePromptVersion = PROMPT_VERSION;
+    if (!s.autoImageMyTexts || typeof s.autoImageMyTexts !== 'object') s.autoImageMyTexts = {};
+    // v1.15.4 起写词说明归用户：5 套内置的各留一份用户自己的，改了就存，更新扩展不再替换。
+    // 这段只在头一次升到这版时跑：v8 以前的旧说明先换成 v8（去掉内容限制），再把当时的说明收成用户自己的。
+    if (!s.autoImagePromptsOwned) {
+        if (s.autoImagePromptVersion !== PROMPT_VERSION || typeof s.autoImagePrompt !== 'string' || !s.autoImagePrompt.trim()) {
+            for (const p of s.autoImageCustomPresets) if (typeof p?.text === 'string') p.text = stripOldLimits(p.text);
+            s.autoImagePrompt = presetById(s.autoImagePresetId, s).text;
+            s.autoImagePromptVersion = PROMPT_VERSION;
+        }
+        if (PRESETS.some((p) => p.id === s.autoImagePresetId)) s.autoImageMyTexts[s.autoImagePresetId] = s.autoImagePrompt;
+        s.autoImagePromptsOwned = true;
     }
+    // 以后新加的内置套装，用户还没有自己那份时才补上
+    for (const p of PRESETS) if (typeof s.autoImageMyTexts[p.id] !== 'string') s.autoImageMyTexts[p.id] = p.text;
+    if (typeof s.autoImagePrompt !== 'string' || !s.autoImagePrompt.trim()) s.autoImagePrompt = presetText(s.autoImagePresetId, s);
     if (typeof s.autoImageQuietToast !== 'boolean') s.autoImageQuietToast = true;
     if (typeof s.autoImagePortrait !== 'boolean') s.autoImagePortrait = true;
     if (typeof s.autoImageCleanView !== 'boolean') s.autoImageCleanView = true;
@@ -125,6 +134,13 @@ function stripOldLimits(text) {
 // 内置套装 + 自己另存的套装
 function presetById(id, s) {
     return PRESETS.find((p) => p.id === id) || (s?.autoImageCustomPresets || []).find((p) => p.id === id) || null;
+}
+
+// 这套现在用的说明：内置套装用用户自己那份，自己另存的套装用它存的
+function presetText(id, s) {
+    const builtIn = PRESETS.find((p) => p.id === id);
+    if (builtIn) return typeof s?.autoImageMyTexts?.[id] === 'string' ? s.autoImageMyTexts[id] : builtIn.text;
+    return presetById(id, s)?.text || s?.autoImageMyTexts?.default || DEFAULT_PROMPT;
 }
 
 function save() {
@@ -577,14 +593,8 @@ function settingsHtml() {
       <b>角色长相（这段聊天的）</b>
       <small>每个角色的脸、发型、身材定在这里，之后每张图都照这个画；衣服动作随剧情变。下面英文可以直接改，也可以在「想怎么改」里写中文。</small>
       <div id="tt-autoimg-cast"></div>
-      <label for="tt-autoimg-preset">写词套装（画面怎么写：尺度、构图、镜头）</label>
-      <select id="tt-autoimg-preset" class="text_pole"></select>
-      <label for="tt-autoimg-prompt">这套的写词说明（英文，可改；开头要它回 JSON 的那几行别动）</label>
-      <textarea id="tt-autoimg-prompt" class="text_pole" rows="8"></textarea>
+      <div class="tt-prompt-editor"></div>
       <div class="flex-container">
-        <div id="tt-autoimg-saveas" class="menu_button">另存为我的套装</div>
-        <div id="tt-autoimg-delpreset" class="menu_button">删除这个套装</div>
-        <div id="tt-autoimg-reset" class="menu_button">恢复这套原样</div>
         <div id="tt-autoimg-now" class="menu_button">给最后一条正文配一张</div>
       </div>
     </div>
@@ -658,6 +668,134 @@ function fillProfiles() {
     if (hint) hint.textContent = list.length ? '「连接配置文件」和「模型」两类都能选，跟「API 连接」页那个下拉框是同一批' : '还没有连接配置：先在「API 连接」里连上 DeepSeek，存成连接配置文件或模型';
 }
 
+// 改写词说明那一块：扩展设置里一份，魔法棒弹窗里一份，两边改的是同一份设置
+const promptEditors = new Set();
+const WAND_ID = 'tt-autoimg-wand';
+
+async function confirmPopup(text) {
+    const context = ctx();
+    if (context?.callGenericPopup && context?.POPUP_TYPE?.CONFIRM !== undefined) return !!(await context.callGenericPopup(text, context.POPUP_TYPE.CONFIRM));
+    return globalThis.confirm(text);
+}
+
+function bindPromptEditor(root) {
+    if (!root) return null;
+    root.innerHTML = `
+  <label>写词套装（画面怎么写：尺度、构图、镜头）</label>
+  <select class="text_pole tt-pe-preset"></select>
+  <label>这套的写词说明（英文，可改；开头要它回 JSON 的那几行别动）</label>
+  <small>改完自动存在手机里，换套装、更新扩展都不会动它。</small>
+  <textarea class="text_pole tt-pe-text" rows="8"></textarea>
+  <div class="flex-container">
+    <div class="menu_button tt-pe-saveas">另存为我的套装</div>
+    <div class="menu_button tt-pe-del">删除这个套装</div>
+    <div class="menu_button tt-pe-latest">换成扩展里的新版</div>
+  </div>`;
+    const presetSel = root.querySelector('.tt-pe-preset');
+    const prompt = root.querySelector('.tt-pe-text');
+    const fill = () => {
+        const cur = settings();
+        const mine = cur.autoImageCustomPresets.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
+        presetSel.innerHTML = '<optgroup label="内置">' + PRESETS.map((p) => `<option value="${p.id}">${esc(p.name)}</option>`).join('') + '</optgroup>'
+            + (mine ? `<optgroup label="我的">${mine}</optgroup>` : '');
+        presetSel.value = cur.autoImagePresetId;
+        prompt.value = cur.autoImagePrompt;
+    };
+    const fillOthers = () => promptEditors.forEach((f) => f !== fill && f());
+    const fillAll = () => promptEditors.forEach((f) => f());
+    promptEditors.add(fill);
+    fill();
+
+    presetSel.addEventListener('change', () => {
+        const cur = settings();
+        if (!presetById(presetSel.value, cur)) return;
+        cur.autoImagePresetId = presetSel.value;
+        cur.autoImagePrompt = presetText(presetSel.value, cur);
+        save();
+        fillAll();
+    });
+    // 边打边存：手机上关弹窗时不一定先触发 change，等它会丢字
+    prompt.addEventListener('input', () => {
+        const text = prompt.value.trim();
+        if (!text) return;
+        const cur = settings();
+        cur.autoImagePrompt = text;
+        const mine = cur.autoImageCustomPresets.find((p) => p.id === cur.autoImagePresetId);
+        if (mine) mine.text = text;
+        else cur.autoImageMyTexts[cur.autoImagePresetId] = text;
+        save();
+    });
+    prompt.addEventListener('change', fillOthers);
+    root.querySelector('.tt-pe-latest').addEventListener('click', async () => {
+        const cur = settings();
+        const builtIn = PRESETS.find((p) => p.id === cur.autoImagePresetId);
+        if (!builtIn) { toast('info', '自己另存的套装没有扩展版，只能自己改'); return; }
+        if (cur.autoImageMyTexts[builtIn.id] === builtIn.text) { toast('info', '这套已经是扩展里的版本了'); return; }
+        if (!await confirmPopup(`用扩展里的新版换掉「${builtIn.name}」？你在这套上改的会被替换掉。`)) return;
+        cur.autoImageMyTexts[builtIn.id] = builtIn.text;
+        cur.autoImagePrompt = builtIn.text;
+        save();
+        fillAll();
+        toast('success', `「${builtIn.name}」换成扩展里的版本了`);
+    });
+    root.querySelector('.tt-pe-saveas').addEventListener('click', async () => {
+        const context = ctx();
+        const name = context?.callGenericPopup && context?.POPUP_TYPE?.INPUT !== undefined
+            ? await context.callGenericPopup('给这套起个名字', context.POPUP_TYPE.INPUT, '我的套装')
+            : globalThis.prompt('给这套起个名字', '我的套装');
+        if (typeof name !== 'string' || !name.trim()) return;
+        const cur = settings();
+        const preset = { id: 'c' + Date.now(), name: name.trim(), text: prompt.value.trim() || cur.autoImagePrompt };
+        cur.autoImageCustomPresets.push(preset);
+        cur.autoImagePresetId = preset.id;
+        cur.autoImagePrompt = preset.text;
+        save();
+        fillAll();
+        toast('success', `存好了：${preset.name}`);
+    });
+    root.querySelector('.tt-pe-del').addEventListener('click', () => {
+        const cur = settings();
+        const i = cur.autoImageCustomPresets.findIndex((p) => p.id === cur.autoImagePresetId);
+        if (i < 0) { toast('info', '内置套装删不了，只能删自己另存的'); return; }
+        const [gone] = cur.autoImageCustomPresets.splice(i, 1);
+        cur.autoImagePresetId = 'default';
+        cur.autoImagePrompt = presetText('default', cur);
+        save();
+        fillAll();
+        toast('success', `删掉了：${gone.name}`);
+    });
+    return fill;
+}
+
+// 左下角魔法棒菜单里的「改配图提示词」，点开弹窗直接改，不用去翻扩展设置
+async function openPromptPopup() {
+    const context = ctx();
+    if (!context?.callGenericPopup) { toast('info', '弹不出窗口，去扩展设置「自动配图」最下面改'); return; }
+    const box = document.createElement('div');
+    box.className = 'tt-prompt-popup';
+    box.innerHTML = '<h3>改配图提示词</h3><div class="tt-prompt-editor"></div>';
+    const fill = bindPromptEditor(box.querySelector('.tt-prompt-editor'));
+    try {
+        await context.callGenericPopup(box, context.POPUP_TYPE.TEXT, '', { wide: true, large: true, okButton: '关闭', allowVerticalScrolling: true });
+    } finally {
+        promptEditors.delete(fill);
+    }
+}
+
+function mountWandItem() {
+    if (document.getElementById(WAND_ID)) return true;
+    const menu = document.getElementById('extensionsMenu');
+    if (!menu) return false;
+    const item = document.createElement('div');
+    item.id = WAND_ID;
+    item.className = 'list-group-item flex-container flexGap5 interactable';
+    item.tabIndex = 0;
+    item.innerHTML = '<div class="fa-solid fa-pen-to-square extensionsMenuExtensionButton"></div><span>改配图提示词</span>';
+    item.addEventListener('click', openPromptPopup);
+    menu.appendChild(item);
+    return true;
+}
+
 function mount() {
     const host = document.getElementById('extensions_settings2') || document.getElementById('extensions_settings');
     if (!host) return false;
@@ -686,67 +824,7 @@ function mount() {
     castBox.addEventListener('change', onCastChange);
     renderCast();
 
-    const prompt = document.getElementById('tt-autoimg-prompt');
-    const presetSel = document.getElementById('tt-autoimg-preset');
-    const fillPresets = () => {
-        const cur = settings();
-        const mine = cur.autoImageCustomPresets.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
-        presetSel.innerHTML = '<optgroup label="内置">' + PRESETS.map((p) => `<option value="${p.id}">${esc(p.name)}</option>`).join('') + '</optgroup>'
-            + (mine ? `<optgroup label="我的">${mine}</optgroup>` : '');
-        presetSel.value = cur.autoImagePresetId;
-        prompt.value = cur.autoImagePrompt;
-    };
-    fillPresets();
-    presetSel.addEventListener('change', () => {
-        const cur = settings();
-        const preset = presetById(presetSel.value, cur);
-        if (!preset) return;
-        cur.autoImagePresetId = preset.id;
-        cur.autoImagePrompt = preset.text;
-        prompt.value = preset.text;
-        save();
-    });
-    prompt.addEventListener('change', () => {
-        const cur = settings();
-        cur.autoImagePrompt = prompt.value.trim() || presetById(cur.autoImagePresetId, cur)?.text || DEFAULT_PROMPT;
-        // 自己的套装改了就直接存回这一套；内置套装改动只算临时，换套装或点「恢复这套原样」就回去
-        const mine = cur.autoImageCustomPresets.find((p) => p.id === cur.autoImagePresetId);
-        if (mine) mine.text = cur.autoImagePrompt;
-        save();
-    });
-    document.getElementById('tt-autoimg-reset').addEventListener('click', () => {
-        const cur = settings();
-        const preset = presetById(cur.autoImagePresetId, cur) || PRESETS[0];
-        cur.autoImagePrompt = preset.text;
-        prompt.value = preset.text;
-        save();
-    });
-    document.getElementById('tt-autoimg-saveas').addEventListener('click', async () => {
-        const context = ctx();
-        const name = context?.callGenericPopup && context?.POPUP_TYPE?.INPUT !== undefined
-            ? await context.callGenericPopup('给这套起个名字', context.POPUP_TYPE.INPUT, '我的套装')
-            : globalThis.prompt('给这套起个名字', '我的套装');
-        if (typeof name !== 'string' || !name.trim()) return;
-        const cur = settings();
-        const preset = { id: 'c' + Date.now(), name: name.trim(), text: prompt.value.trim() || cur.autoImagePrompt };
-        cur.autoImageCustomPresets.push(preset);
-        cur.autoImagePresetId = preset.id;
-        cur.autoImagePrompt = preset.text;
-        save();
-        fillPresets();
-        toast('success', `存好了：${preset.name}`);
-    });
-    document.getElementById('tt-autoimg-delpreset').addEventListener('click', () => {
-        const cur = settings();
-        const i = cur.autoImageCustomPresets.findIndex((p) => p.id === cur.autoImagePresetId);
-        if (i < 0) { toast('info', '内置套装删不了，只能删自己另存的'); return; }
-        const [gone] = cur.autoImageCustomPresets.splice(i, 1);
-        cur.autoImagePresetId = 'default';
-        cur.autoImagePrompt = PRESETS[0].text;
-        save();
-        fillPresets();
-        toast('success', `删掉了：${gone.name}`);
-    });
+    bindPromptEditor(document.querySelector(`#${SETTINGS_ID} .tt-prompt-editor`));
     document.getElementById('tt-autoimg-now').addEventListener('click', () => {
         const chat = ctx()?.chat || [];
         let id = chat.length - 1;
@@ -777,7 +855,7 @@ export function initStoryImage() {
         }
     }
     clearInterval(mountTimer);
-    const ready = () => mount() & watchChatImages();
+    const ready = () => mount() & watchChatImages() & mountWandItem();
     if (ready()) return;
     let tries = 0;
     mountTimer = setInterval(() => { if (ready() || ++tries > 60) clearInterval(mountTimer); }, 500);
@@ -799,9 +877,11 @@ export function cleanupStoryImage() {
     document.removeEventListener('click', onChatClickCapture, true);
     document.querySelectorAll('.tt-img-tools').forEach((el) => el.remove());
     document.getElementById(SETTINGS_ID)?.remove();
+    document.getElementById(WAND_ID)?.remove();
+    promptEditors.clear();
     document.getElementById(QUIET_STYLE_ID)?.remove();
     document.body?.classList.remove('tt-autoimg-quiet');
 }
 
 // 给电脑上的自测脚本用
-export const __test = { cleanTags, plainText, parsePlan, buildPrompt, portraitPrompt, DEFAULT_PROMPT, REVISE_PROMPT, PRESETS };
+export const __test = { cleanTags, plainText, parsePlan, buildPrompt, portraitPrompt, DEFAULT_PROMPT, REVISE_PROMPT, PRESETS, settings, presetText };
