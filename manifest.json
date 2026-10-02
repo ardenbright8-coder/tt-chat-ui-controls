@@ -7,7 +7,7 @@
   "js": "index.js",
   "css": "style.css",
   "author": "OpenAI",
-  "version": "1.9.3",
+  "version": "1.10.0",
   "auto_update": false,
   "minimum_client_version": "1.18.0",
   "hooks": {
