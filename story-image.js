@@ -2,9 +2,9 @@
 // 读这段正文规划一张图，再走酒馆自带的图像生成（/sd），把图贴回这条消息末尾。
 // 主模型完全不知道出图这件事，不用在预设里塞生图指令；也不切换当前连接。
 //
-// 长相档案：每段聊天记一本「谁长什么样」（存在聊天自己的 metadata 里，换故事就是另一本）。
+// 长相档案：每张角色卡记一本「谁长什么样」（存在扩展设置里，新开聊天也是这一本；群聊存在聊天自己的 metadata 里）。
 // 写词模型只负责「这一幕有谁、穿什么、在干嘛」，每个人的长相由这里原样抄进画图词，所以同一个人每张图都一个样。
-// 新角色第一次出场先出一张定妆照；不满意在设置里用中文说怎么改，改完再出一张。
+// 新角色第一次出场先出一张定妆照；不满意在魔法棒「看定妆照」里用中文说怎么改，改完再出一张。
 
 const EXTENSION_KEY = 'chat-text-color';
 const SETTINGS_ID = 'tt-autoimg-settings';
@@ -145,7 +145,7 @@ function settings() {
     if (!Array.isArray(s.autoImageCustomPresets)) s.autoImageCustomPresets = [];
     if (typeof s.autoImagePresetId !== 'string' || !presetById(s.autoImagePresetId, s)) s.autoImagePresetId = 'default';
     if (!s.autoImageMyTexts || typeof s.autoImageMyTexts !== 'object') s.autoImageMyTexts = {};
-    // v1.15.4 起写词说明归用户：5 套内置的各留一份用户自己的，改了就存，更新扩展不再替换。
+    // v1.15.4 起写词说明归用户：每套内置的各留一份用户自己的，改了就存，更新扩展不再替换。
     // 这段只在头一次升到这版时跑：v8 以前的旧说明先换成 v8（去掉内容限制），再把当时的说明收成用户自己的。
     if (!s.autoImagePromptsOwned) {
         if (s.autoImagePromptVersion !== PROMPT_VERSION || typeof s.autoImagePrompt !== 'string' || !s.autoImagePrompt.trim()) {
@@ -366,7 +366,7 @@ function buildPrompt(plan, cast) {
     return prompt;
 }
 
-// 定妆照：只放在设置的「角色长相」里看，不贴进聊天。照样要带点情欲感
+// 定妆照：只放在魔法棒「看定妆照」里看，不贴进聊天。照样要带点情欲感
 function portraitPrompt(look) {
     return cleanTags(`sensitive, 1girl, solo, ${look}, upper body, looking at viewer, seductive smile, blush, bare shoulders, off shoulder, collarbone, cleavage, hanfu, indoors, chinese style room, blurry background, ${BRIGHT_TAGS}`);
 }
@@ -477,7 +477,7 @@ async function drawAndAttach(id, type, job = latestJob) {
     const fresh = Object.entries(plan.new_looks || {}).filter(([name, look]) => name && cleanTags(look) && !known[name]);
     for (const [name, look] of fresh) {
         known[name] = { look: cleanTags(look), portrait: '' };
-        toast('success', `新角色「${name}」的长相定下了。不满意去「扩展 → 自动配图 → 角色长相」里说怎么改`);
+        toast('success', `新角色「${name}」的长相定下了。不满意去魔法棒「看定妆照」里说怎么改`);
     }
     if (fresh.length) await saveCast();
     if (stale(job)) return; // 写词那几十秒里又来了新消息
@@ -487,7 +487,7 @@ async function drawAndAttach(id, type, job = latestJob) {
     if (url) attach(context, id, message, url, prompt);
     await context.saveChat();
 
-    // 定妆照放最后画、不贴进聊天，只在设置的「角色长相」里看；有新消息等着就先让它
+    // 定妆照放最后画、不贴进聊天，只在魔法棒「看定妆照」里看；有新消息等着就先让它
     if (s.autoImagePortrait) {
         for (const [name] of fresh) {
             if (stale(job)) break;
@@ -535,7 +535,7 @@ async function reviseLook(name, request) {
     if (url) {
         entry.portrait = url;
         await saveCast();
-        toast('success', `「${name}」改好了，设置里那一行有新的定妆照`);
+        toast('success', `「${name}」改好了，魔法棒「看定妆照」里那一行有新的定妆照`);
     }
 }
 
@@ -645,7 +645,7 @@ function renderCast() {
     if (!box) return;
     const entries = Object.entries(cast());
     if (!entries.length) {
-        box.innerHTML = '<small>这段聊天还没有角色。配第一张图时会自动建。</small>';
+        box.innerHTML = '<small>还没有定好长相的角色。配第一张图时会自动建。</small>';
         return;
     }
     box.innerHTML = entries.map(([name, c]) => `

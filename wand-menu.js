@@ -154,6 +154,7 @@ function apply() {
 let pending = 0;
 let runs = [];
 let pausedUntil = 0;
+let pauseTimer = 0;
 function schedule() {
     if (pending) return;
     pending = setTimeout(() => {
@@ -167,7 +168,7 @@ function schedule() {
             runs = [];
             observer?.disconnect();
             console.warn('[酒馆拓展] 魔法棒菜单被反复改动，先停 10 秒');
-            setTimeout(() => { apply(); renderPanel(); }, 10000);
+            pauseTimer = setTimeout(() => { pauseTimer = 0; apply(); renderPanel(); }, 10000);
             return;
         }
         apply();
@@ -265,6 +266,8 @@ export function cleanupWandMenu() {
     observer = null;
     clearTimeout(pending);
     pending = 0;
+    clearTimeout(pauseTimer); // 刹车停手那 10 秒里关了扩展，到点也别再回来改菜单
+    pauseTimer = 0;
     document.querySelectorAll('[data-tt-wand-order]').forEach((el) => { el.style.order = ''; delete el.dataset[ORDER_KEY]; });
     document.querySelectorAll(`.${HIDDEN_CLASS}`).forEach((el) => el.classList.remove(HIDDEN_CLASS));
     document.querySelectorAll('.tt-wand-text').forEach((label) => {

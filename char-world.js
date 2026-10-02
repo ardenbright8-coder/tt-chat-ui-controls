@@ -54,7 +54,14 @@ async function importEmbedded({ context, chid, character }) {
     return bookName;
 }
 
-async function onChatChanged() {
+// 排队一个一个来：打开酒馆时自己跑的那遍和酒馆发的「聊天换了」挨得很近，同时跑会把卡里的书导两遍、弹两次提示
+let chain = Promise.resolve();
+function onChatChanged() {
+    chain = chain.then(attachWorld);
+    return chain;
+}
+
+async function attachWorld() {
     try {
         const found = currentCharacter();
         if (!found) return;
