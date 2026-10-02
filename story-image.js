@@ -252,30 +252,46 @@ function placeWord(i, n) {
     return `number ${i + 1}`;
 }
 
-// 规划 + 长相档案 → 最终画图词。长相原样从档案抄，不让写词模型改
+// 人多时长相只留一眼认得出的：发色发型、眼睛、胸型、记号、年龄感。脸型、腰、皮肤这些砍掉，给动作和背景腾地方
+const KEY_LOOK = /hair|twintails|twin-tails|ponytail|bun|braid|bangs|eyes|breasts|mole|mark|scar|tattoo|freckles|petite|mature|loli|elf|ears|horns/i;
+function shortLook(look) {
+    const kept = look.split(/,\s*/).filter((t) => KEY_LOOK.test(t) && !/beautiful detailed/i.test(t));
+    return kept.length ? kept.join(', ') : look;
+}
+
+const PROMPT_LIMIT = 1800;
+
+// 规划 + 长相档案 → 最终画图词。长相原样从档案抄，不让写词模型改。
+// 动作、地点、光线（scene）一个字都不许被截掉——以前人一多就把它们挤出上限，图只剩白底
 function buildPrompt(plan, cast) {
     const people = Array.isArray(plan.people) ? plan.people.filter((p) => p && p.name) : [];
     const girls = people.filter((p) => String(p.sex).toLowerCase() !== 'male');
     const boys = people.filter((p) => String(p.sex).toLowerCase() === 'male');
-    const parts = [cleanTags(plan.rating) || 'sensitive'];
-    if (girls.length) parts.push(countTag(girls.length, 'girl'));
-    if (boys.length) parts.push(countTag(boys.length, 'boy'));
-    if (girls.length && boys.length) parts.push('hetero');
-    if (!girls.length && !boys.length) parts.push('no humans');
-    const looks = girls.map((g) => cleanTags(cast[g.name]?.look || plan.new_looks?.[g.name] || 'mature female'));
-    if (looks.length === 1) {
-        parts.push(looks[0]);
-    } else if (looks.length > 1) {
+    const head = [cleanTags(plan.rating) || 'sensitive'];
+    if (girls.length) head.push(countTag(girls.length, 'girl'));
+    if (boys.length) head.push(countTag(boys.length, 'boy'));
+    if (girls.length && boys.length) head.push('hetero');
+    if (!girls.length && !boys.length) head.push('no humans');
+    const tail = [boys.length ? 'mature male' : '', cleanTags(plan.scene), BRIGHT_TAGS];
+    let looks = girls.map((g) => cleanTags(cast[g.name]?.look || plan.new_looks?.[g.name] || 'mature female'));
+    if (looks.length >= 3) looks = looks.map(shortLook);
+    const lookText = (list) => list.length === 1 ? list[0]
         // 多个女角色：用整句把长相绑在位置上，减少 A 的发色跑到 B 头上
-        parts.push(looks.map((l, i) => `the woman ${placeWord(i, looks.length)} has ${l.replace(/,\s*/g, ' and ')}`).join(', '));
+        : list.map((l, i) => `the woman ${placeWord(i, list.length)} has ${l.replace(/,\s*/g, ' and ')}`).join(', ');
+    const join = (middle) => cleanTags([...head, middle, ...tail].filter(Boolean).join(', '));
+    let prompt = join(lookText(looks));
+    if (prompt.length > PROMPT_LIMIT && looks.length) prompt = join(lookText(looks.map(shortLook)));
+    if (prompt.length > PROMPT_LIMIT) {
+        // 还超：砍长相那段，scene 留全
+        const room = Math.max(0, PROMPT_LIMIT - join('').length - 2);
+        prompt = join(lookText(looks.map(shortLook)).slice(0, room).replace(/[^,]*$/, ''));
     }
-    if (boys.length) parts.push('mature male');
-    parts.push(cleanTags(plan.scene), BRIGHT_TAGS);
-    return cleanTags(parts.filter(Boolean).join(', ')).slice(0, 1400);
+    return prompt;
 }
 
+// 定妆照：只放在设置的「角色长相」里看，不贴进聊天。照样要带点情欲感
 function portraitPrompt(look) {
-    return cleanTags(`safe, 1girl, solo, ${look}, upper body, portrait, looking at viewer, gentle smile, simple light background, ${BRIGHT_TAGS}`);
+    return cleanTags(`sensitive, 1girl, solo, ${look}, upper body, looking at viewer, seductive smile, blush, bare shoulders, off shoulder, collarbone, cleavage, hanfu, indoors, chinese style room, blurry background, ${BRIGHT_TAGS}`);
 }
 
 // ---------------------------------------------------------------- 长相档案
@@ -303,23 +319,29 @@ async function draw(context, prompt) {
     return typeof url === 'string' && url.trim() ? url : '';
 }
 
+// 一条消息只留一张配图：重新生成（左右滑）、手动配图再来一张，都是换掉旧的，不往下摞
 function attach(context, id, message, url, title) {
     // 画图要一分钟，期间这条可能被删了或换了：对不上就不贴
     if (context.chat[id] !== message) return false;
     message.extra = message.extra || {};
     if (!Array.isArray(message.extra.media)) message.extra.media = [];
-    message.extra.media.push({ url, type: 'image', title, source: 'generated' });
+    message.extra.media = message.extra.media.filter((m) => m?.source !== 'generated'); // 以前版本贴的定妆照、配图也一并换掉
+    message.extra.media.push({ url, type: 'image', title, source: 'generated', tt_autoimg: true });
     message.extra.media_index = message.extra.media.length - 1;
     message.extra.inline_image = true; // false 会把正文藏起来只显示图
-    message.extra.media_display = 'list'; // 定妆照和配图上下排开，都直接看得到，不用左右滑
+    message.extra.media_display = 'list';
     const el = globalThis.jQuery?.(`#chat .mes[mesid="${id}"]`);
-    if (el?.length) context.appendMediaToMessage(message, el);
+    if (el?.length) context.appendMediaToMessage(message, el); // 它会把整块图清空重画，换掉的旧图自己没了
     return true;
 }
 
-async function drawAndAttach(id, type) {
+// 只给最新那条画：排着队的旧消息，等轮到它时已经有更新的消息了，就不画，免得图半天后贴到上面去
+let latestJob = 0;
+const stale = (job) => job !== latestJob;
+
+async function drawAndAttach(id, type, job = latestJob) {
     const s = settings();
-    if (!s.autoImageEnabled || SKIP_TYPES.has(type)) return;
+    if (!s.autoImageEnabled || SKIP_TYPES.has(type) || stale(job)) return;
     const context = ctx();
     const message = context?.chat?.[id];
     if (!message || message.is_user || message.is_system || !plainText(message.mes)) return;
@@ -338,24 +360,28 @@ async function drawAndAttach(id, type) {
     if (!plan) { toast('warning', '这段没配图：写词模型没按格式回答（可能是不肯写）'); return; }
     if (plan.skip) { toast('info', '这段跳过，不配图'); return; }
 
-    // 新角色先进档案、先出定妆照
+    // 新角色先进档案（长相定下来，这张配图就照它画）
     const fresh = Object.entries(plan.new_looks || {}).filter(([name, look]) => name && cleanTags(look) && !known[name]);
     for (const [name, look] of fresh) {
         known[name] = { look: cleanTags(look), portrait: '' };
-        if (s.autoImagePortrait) {
-            const url = await draw(context, portraitPrompt(known[name].look));
-            if (url) {
-                known[name].portrait = url;
-                attach(context, id, message, url, `定妆照：${name}`);
-            }
-        }
         toast('success', `新角色「${name}」的长相定下了。不满意去「扩展 → 自动配图 → 角色长相」里说怎么改`);
     }
     if (fresh.length) await saveCast();
+    if (stale(job)) return; // 写词那几十秒里又来了新消息
 
-    const url = await draw(context, buildPrompt(plan, known));
-    if (url) attach(context, id, message, url, buildPrompt(plan, known));
+    const prompt = buildPrompt(plan, known);
+    const url = await draw(context, prompt);
+    if (url) attach(context, id, message, url, prompt);
     await context.saveChat();
+
+    // 定妆照放最后画、不贴进聊天，只在设置的「角色长相」里看；有新消息等着就先让它
+    if (s.autoImagePortrait) {
+        for (const [name] of fresh) {
+            if (stale(job)) break;
+            const p = await draw(context, portraitPrompt(known[name].look));
+            if (p && known[name]) { known[name].portrait = p; await saveCast(); }
+        }
+    }
 }
 
 function enqueue(job, label) {
@@ -367,8 +393,9 @@ function enqueue(job, label) {
 }
 
 function onReceived(id, type) {
-    if (!settings().autoImageEnabled) return;
-    enqueue(() => drawAndAttach(Number(id), type), '自动配图');
+    if (!settings().autoImageEnabled || SKIP_TYPES.has(type)) return;
+    const job = ++latestJob;
+    enqueue(() => drawAndAttach(Number(id), type, job), '自动配图');
 }
 
 // 手动按钮：不看开关，直接给这条配
@@ -511,7 +538,7 @@ function settingsHtml() {
     <div class="inline-drawer-content">
       <small>主模型每写完一条正文，交给下面选的连接配置规划一张图，再用「图像生成」画好贴到这条正文末尾。主模型和当前连接都不受影响。</small>
       <label class="checkbox_label"><input type="checkbox" id="tt-autoimg-on"> <span>每条正文自动配一张图</span></label>
-      <label class="checkbox_label"><input type="checkbox" id="tt-autoimg-portrait"> <span>新角色第一次出场先出一张定妆照</span></label>
+      <label class="checkbox_label"><input type="checkbox" id="tt-autoimg-portrait"> <span>新角色出场后补一张定妆照（只在下面「角色长相」里看，不进聊天）</span></label>
       <label class="checkbox_label"><input type="checkbox" id="tt-autoimg-quiet"> <span>画图时不弹「正在生成图像…」提示</span></label>
       <label class="checkbox_label"><input type="checkbox" id="tt-autoimg-clean"> <span>聊天里的图铺满气泡，点图不放大，右上角只留「复制」「改词重画」</span></label>
       <label for="tt-autoimg-profile">写画图词用哪个连接配置</label>
