@@ -9,24 +9,65 @@
 const EXTENSION_KEY = 'chat-text-color';
 const SETTINGS_ID = 'tt-autoimg-settings';
 const CAST_KEY = 'tt_autoimg_cast';
-const PROMPT_VERSION = 3;
+const PROMPT_VERSION = 4;
 const ctx = () => globalThis.SillyTavern?.getContext?.();
 
 // 画面要亮：模型和写词都容易往「夜里、烛光、昏暗」走，出来又灰又压抑
 const BRIGHT_TAGS = 'bright lighting, well-lit, warm colors, vivid colors';
 
-const DEFAULT_PROMPT = `You plan ONE illustration of a story passage for a local anime-style image model that reads Danbooru tags.
+// 写词说明 = 公共部分（回 JSON 的格式、跳过规则、长相档案规则）+ 各套装自己的「画面怎么写」。
+// 公共部分每套都一样，保证长相照档案画、强迫场面跳过；套装只换画面风格。
+const BASE_RULES = `You plan ONE illustration of a story passage for a local anime-style image model that reads Danbooru tags.
 Reply with ONLY one JSON object, no markdown, no explanation:
 {"skip": false, "rating": "", "people": [{"name": "", "sex": "female"}], "new_looks": {}, "scene": ""}
 
 Rules:
 - skip: true if nothing visual is worth drawing, or if the passage depicts sexual activity that is forced, coerced or non-consensual. Then leave the other fields empty.
 - rating: safe / sensitive / nsfw / explicit. Use explicit whenever genitals or sex are visible; if the passage shows or clearly implies consensual intercourse, use explicit even when the wording is poetic.
-- people: everyone visible, left to right. name = the name as written in the story (keep Chinese names as they are), or a short role such as "the man". sex = female or male.
+- people: everyone visible, left to right. name = the name as written in the story (keep Chinese names as they are), or a short role such as "the man". sex = female or male. The user's own character ("you" / 你 in the story) is a man: when he is in the picture (being kissed, touched, held, in bed with her), list him as {"name": "the man", "sex": "male"}; leave him out only for pov shots.
 - new_looks: ONLY for female characters that are NOT in the known cast list. For each, give a fixed appearance as tags: mature female, beautiful detailed face, face shape, eye shape and color, hair color, hair length and style, body (unless the story says otherwise: large breasts, narrow waist, wide hips, curvy), skin, one distinctive mark. No clothing, no expression. Never redescribe the known cast.
-- scene: English Danbooru tags, lowercase, comma-separated, 20-35 tags, in this order: what each person is wearing right now; expression, at least two; pose and action with exact terms (missionary, cowgirl position, doggystyle, fellatio, vaginal, penis, spread legs); camera (cowboy shot, from side, from above, dutch angle...); place; time and light. Do NOT put hair, eye, face or body-shape tags in scene, those come from the cast list.
-- Sensual by default: this is an adult romance story. Even in everyday, non-sexual moments make her alluring and use at least sensitive: keep what the story says she wears, but show it in a tempting way (cleavage, bare shoulders, off shoulder, collarbone, thighs, sheer or loosened fabric, wet clothes, clothes clinging to body, garter, side slit), give her a seductive or shy-flirty look (seductive smile, bedroom eyes, blush, biting lip, looking at viewer) and an attractive pose (leaning forward, arched back, crossed legs, hand on own chest, hair over shoulder).
-- Mood and light: bright, warm and well-lit by default (soft daylight, sunlight, warm lantern glow, bright room), pleasant and romantic. Only when the passage itself is clearly dark (danger, grief, battle, horror) may the mood turn darker, and the picture must still stay clear and readable. Never gothic, never gloomy for no reason.`;
+- scene never contains hair, eye, face or body-shape tags; those come from the cast list.
+- Always name the shot (portrait, upper body, cowboy shot, full body, close-up) and the angle. Earlier tags weigh more, so put the most important visual first.
+- Mood and light: bright, warm and well-lit by default (soft daylight, sunlight, warm lantern glow, bright room). Only when the passage itself is clearly dark (danger, grief, battle, horror) may the mood turn darker, and the picture must still stay clear and readable. Never gothic, never gloomy for no reason.
+`;
+
+const STYLE_RULES = {
+    default: `
+Style of this set: sensual Chinese-fantasy romance.
+- scene: English Danbooru tags, lowercase, comma-separated, 20-35 tags, in this order: what each person is wearing right now; expression, at least two; pose and action with exact terms (missionary, cowgirl position, doggystyle, fellatio, vaginal, penis, spread legs); shot and angle; place; time and light.
+- Sensual by default: this is an adult romance story. Even in everyday, non-sexual moments make her alluring and use at least sensitive: keep what the story says she wears, but show it in a tempting way (cleavage, bare shoulders, off shoulder, collarbone, thighs, sheer or loosened fabric, wet clothes, clothes clinging to body, garter, side slit), give her a seductive or shy-flirty look (seductive smile, bedroom eyes, blush, biting lip, looking at viewer) and an attractive pose (leaning forward, arched back, crossed legs, hand on own chest, hair over shoulder).`,
+    bold: `
+Style of this set: bold and revealing.
+- scene: English Danbooru tags, lowercase, comma-separated, 25-40 tags, in this order: clothing state; expression, at least two; pose and action with exact terms; shot and angle; place; time and light.
+- Push exposure one level above what the text strictly needs. Private or flirtatious moments use at least nsfw: clothes half off, open robe, no bra, see-through, nipples visible through fabric, panties, bare thighs, pulled-up skirt. Any intimate contact uses explicit with precise anatomy (nipples, pussy, penis, vaginal, cum where the story implies it) and body reactions (sweat, blush, heavy breathing, trembling, toes curling, open mouth, tongue out, lustful eyes).
+- Prefer poses that show her body: arched back, spread legs, on back, on all fours, straddling, from below, from behind with looking back.`,
+    elegant: `
+Style of this set: elegant and suggestive, like a game key visual.
+- scene: English Danbooru tags, lowercase, comma-separated, 20-30 tags, in this order: clothing; expression; pose; shot and angle; scenery details; light and atmosphere.
+- Keep it mostly sensitive: beauty, longing and tension rather than nudity. Intimate moments are shown by suggestion (embrace, kiss, hand on cheek, covered by silk sheets, back view, bare shoulders, fallen hairpin, loosened collar). Use explicit only if the passage is unmistakably a sex scene, and even then frame it tastefully (from side, from behind, partially covered).
+- Spend tags on composition and atmosphere: depth of field, floating petals, light rays, reflections, flowing sleeves, wind, framed by doorway or curtains, rich background.`,
+    sentence: `
+Style of this set: natural-language description (the image model understands full English sentences, and sentences keep several people from mixing up).
+- scene: 2-4 English sentences that describe exactly what the camera sees: who stands or lies where, what each one wears now, their expressions, what their hands and bodies are doing, then the place and light. After the sentences add 8-15 Danbooru tags for shot, angle and key details.
+- Refer to people by position and sex ("the woman on the left", "the man behind her"), never by Chinese name inside the sentences. If a man is present, say clearly that he is a man.
+- Describe the light as bright and warm in the sentences (soft lantern glow filling the room, warm sunlight), unless the passage is clearly dark.
+- Same sensual default as an adult romance: tempting clothing, seductive looks, attractive poses; explicit anatomy words when the passage is a consensual sex scene.`,
+    camera: `
+Style of this set: cinematic camera work.
+- scene: English Danbooru tags, lowercase, comma-separated, 20-35 tags, starting with a strong shot choice, then clothing, expression, pose and action, place, light.
+- Pick the most dramatic framing for the moment and say it clearly: close-up on face or hands, extreme close-up, pov (the viewer is the user's character), from below, from above, dutch angle, foreshortening, over the shoulder, reflection in mirror, depth of field with blurred foreground. Vary it between pictures; avoid flat front-facing full body shots.
+- Same sensual default as an adult romance; in sex scenes prefer pov or close framing that shows faces and contact.`,
+};
+
+const PRESETS = [
+    { id: 'default', name: '① 默认·国风情欲' },
+    { id: 'bold', name: '② 更放得开' },
+    { id: 'elegant', name: '③ 唯美含蓄' },
+    { id: 'sentence', name: '④ 整句描述（多人不串）' },
+    { id: 'camera', name: '⑤ 镜头感' },
+].map((p) => ({ ...p, text: BASE_RULES + STYLE_RULES[p.id] }));
+
+const DEFAULT_PROMPT = PRESETS[0].text;
 
 const REVISE_PROMPT = `You maintain one character's fixed appearance for an anime image model that reads Danbooru tags.
 You get her current appearance tags and the user's request in Chinese. Change ONLY what the request asks for; copy every other tag over unchanged (hairstyle, body, skin, marks stay as they are unless the request mentions them).
@@ -54,14 +95,21 @@ function settings() {
     if (typeof s.autoImageEnabled !== 'boolean') s.autoImageEnabled = false;
     if (typeof s.autoImageProfile !== 'string') s.autoImageProfile = '';
     // 写词说明换了格式（v2 起要回 JSON），旧版存下的说明不能再用，换成新的默认
+    if (!Array.isArray(s.autoImageCustomPresets)) s.autoImageCustomPresets = [];
+    if (typeof s.autoImagePresetId !== 'string' || !presetById(s.autoImagePresetId, s)) s.autoImagePresetId = 'default';
     if (s.autoImagePromptVersion !== PROMPT_VERSION || typeof s.autoImagePrompt !== 'string' || !s.autoImagePrompt.trim()) {
-        s.autoImagePrompt = DEFAULT_PROMPT;
+        s.autoImagePrompt = presetById(s.autoImagePresetId, s).text;
         s.autoImagePromptVersion = PROMPT_VERSION;
     }
     if (typeof s.autoImageQuietToast !== 'boolean') s.autoImageQuietToast = true;
     if (typeof s.autoImagePortrait !== 'boolean') s.autoImagePortrait = true;
     if (typeof s.autoImageCleanView !== 'boolean') s.autoImageCleanView = true;
     return s;
+}
+
+// 内置套装 + 自己另存的套装
+function presetById(id, s) {
+    return PRESETS.find((p) => p.id === id) || (s?.autoImageCustomPresets || []).find((p) => p.id === id) || null;
 }
 
 function save() {
@@ -472,10 +520,14 @@ function settingsHtml() {
       <b>角色长相（这段聊天的）</b>
       <small>每个角色的脸、发型、身材定在这里，之后每张图都照这个画；衣服动作随剧情变。下面英文可以直接改，也可以在「想怎么改」里写中文。</small>
       <div id="tt-autoimg-cast"></div>
-      <label for="tt-autoimg-prompt">给它的写词说明（英文，可改；要求它回 JSON，格式别改）</label>
+      <label for="tt-autoimg-preset">写词套装（画面怎么写：尺度、构图、镜头）</label>
+      <select id="tt-autoimg-preset" class="text_pole"></select>
+      <label for="tt-autoimg-prompt">这套的写词说明（英文，可改；开头要它回 JSON 的那几行别动）</label>
       <textarea id="tt-autoimg-prompt" class="text_pole" rows="8"></textarea>
       <div class="flex-container">
-        <div id="tt-autoimg-reset" class="menu_button">恢复默认说明</div>
+        <div id="tt-autoimg-saveas" class="menu_button">另存为我的套装</div>
+        <div id="tt-autoimg-delpreset" class="menu_button">删除这个套装</div>
+        <div id="tt-autoimg-reset" class="menu_button">恢复这套原样</div>
         <div id="tt-autoimg-now" class="menu_button">给最后一条正文配一张</div>
       </div>
     </div>
@@ -578,10 +630,65 @@ function mount() {
     renderCast();
 
     const prompt = document.getElementById('tt-autoimg-prompt');
-    prompt.value = s.autoImagePrompt;
-    prompt.addEventListener('change', () => { settings().autoImagePrompt = prompt.value.trim() || DEFAULT_PROMPT; save(); });
+    const presetSel = document.getElementById('tt-autoimg-preset');
+    const fillPresets = () => {
+        const cur = settings();
+        const mine = cur.autoImageCustomPresets.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
+        presetSel.innerHTML = '<optgroup label="内置">' + PRESETS.map((p) => `<option value="${p.id}">${esc(p.name)}</option>`).join('') + '</optgroup>'
+            + (mine ? `<optgroup label="我的">${mine}</optgroup>` : '');
+        presetSel.value = cur.autoImagePresetId;
+        prompt.value = cur.autoImagePrompt;
+    };
+    fillPresets();
+    presetSel.addEventListener('change', () => {
+        const cur = settings();
+        const preset = presetById(presetSel.value, cur);
+        if (!preset) return;
+        cur.autoImagePresetId = preset.id;
+        cur.autoImagePrompt = preset.text;
+        prompt.value = preset.text;
+        save();
+    });
+    prompt.addEventListener('change', () => {
+        const cur = settings();
+        cur.autoImagePrompt = prompt.value.trim() || presetById(cur.autoImagePresetId, cur)?.text || DEFAULT_PROMPT;
+        // 自己的套装改了就直接存回这一套；内置套装改动只算临时，换套装或点「恢复这套原样」就回去
+        const mine = cur.autoImageCustomPresets.find((p) => p.id === cur.autoImagePresetId);
+        if (mine) mine.text = cur.autoImagePrompt;
+        save();
+    });
     document.getElementById('tt-autoimg-reset').addEventListener('click', () => {
-        prompt.value = DEFAULT_PROMPT; settings().autoImagePrompt = DEFAULT_PROMPT; save();
+        const cur = settings();
+        const preset = presetById(cur.autoImagePresetId, cur) || PRESETS[0];
+        cur.autoImagePrompt = preset.text;
+        prompt.value = preset.text;
+        save();
+    });
+    document.getElementById('tt-autoimg-saveas').addEventListener('click', async () => {
+        const context = ctx();
+        const name = context?.callGenericPopup && context?.POPUP_TYPE?.INPUT !== undefined
+            ? await context.callGenericPopup('给这套起个名字', context.POPUP_TYPE.INPUT, '我的套装')
+            : globalThis.prompt('给这套起个名字', '我的套装');
+        if (typeof name !== 'string' || !name.trim()) return;
+        const cur = settings();
+        const preset = { id: 'c' + Date.now(), name: name.trim(), text: prompt.value.trim() || cur.autoImagePrompt };
+        cur.autoImageCustomPresets.push(preset);
+        cur.autoImagePresetId = preset.id;
+        cur.autoImagePrompt = preset.text;
+        save();
+        fillPresets();
+        toast('success', `存好了：${preset.name}`);
+    });
+    document.getElementById('tt-autoimg-delpreset').addEventListener('click', () => {
+        const cur = settings();
+        const i = cur.autoImageCustomPresets.findIndex((p) => p.id === cur.autoImagePresetId);
+        if (i < 0) { toast('info', '内置套装删不了，只能删自己另存的'); return; }
+        const [gone] = cur.autoImageCustomPresets.splice(i, 1);
+        cur.autoImagePresetId = 'default';
+        cur.autoImagePrompt = PRESETS[0].text;
+        save();
+        fillPresets();
+        toast('success', `删掉了：${gone.name}`);
     });
     document.getElementById('tt-autoimg-now').addEventListener('click', () => {
         const chat = ctx()?.chat || [];
@@ -640,4 +747,4 @@ export function cleanupStoryImage() {
 }
 
 // 给电脑上的自测脚本用
-export const __test = { cleanTags, plainText, parsePlan, buildPrompt, portraitPrompt, DEFAULT_PROMPT, REVISE_PROMPT };
+export const __test = { cleanTags, plainText, parsePlan, buildPrompt, portraitPrompt, DEFAULT_PROMPT, REVISE_PROMPT, PRESETS };
