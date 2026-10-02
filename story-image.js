@@ -65,13 +65,55 @@ Style of this set: cinematic camera work.
 - Same sensual default as an adult romance; in sex scenes prefer pov or close framing that shows faces and contact.`,
 };
 
+// ⑥ 用户 2026-10-02 发来的整份说明（给 Qwen-Image 写整句、国风 3D 质感），原样收进来，不套 BASE_RULES
+const QWEN3D_TEXT = `You plan ONE illustration of a story passage for a local image model that understands full English sentences (Qwen-Image).
+Reply with ONLY one JSON object, no markdown, no explanation:
+{"skip": false, "rating": "", "people": [{"name": "", "sex": "female"}], "new_looks": {}, "scene": ""}
+
+Rules:
+- skip: true if nothing visual is worth drawing. Then leave the other fields empty.
+- rating: safe / sensitive / nsfw / explicit. Use explicit whenever genitals or sex are visible.
+- people: everyone visible, left to right. name = the name as written in the story (keep Chinese names as they are), or a short role such as "the man". sex = female or male.
+- The picture is about the women. The user's own character ("you" / 你) is a man; list him as {"name": "the man", "sex": "male"} only when his body takes part in the sexual contact, and then show him from his own first-person view: only his hands, hips and penis are in frame. In other moments show only her and her reaction.
+- Draw ONE moment: the last and most important beat of the passage, with one clear action, as the passage describes it.
+- Include every woman who takes part in this moment (up to 5).
+- Place: concrete setting details that match the story's era. Unless the story is clearly modern, it is ancient / fantasy China: carved lattice windows, paper lanterns, folding screens, canopy bed with silk curtains, jade bath, pavilion, blossoming garden.
+- Vary the pose and the camera from picture to picture.
+- new_looks: only for female characters that are not in the known cast list. Give a fixed appearance as tags: mature female, face shape, eye shape and color, hair color, hair length and style, body (large breasts, narrow waist, wide hips unless the story says otherwise), skin, one distinctive mark. No clothing, no expression.
+- scene leaves out hair, eye, face and body-shape details; those come from the cast list.
+- Mood and light: bright, warm and dreamy by default; darker only when the passage itself is dark.
+
+Style of this set: Chinese 3D donghua CG, written as natural sentences.
+- scene: 3-5 English sentences that describe exactly what the camera sees. Start with the shot and angle (close-up, upper body, full body, first-person view, from the side, from behind, from below). Then say where each person is and how their bodies are placed: who lies, kneels, sits or straddles, where the legs, arms and hands are. Then what each one wears right now, their expressions, then the place and the light.
+- Refer to people by position and sex ("the woman on the left", "the man's hands"), and keep Chinese names out of the sentences.
+- In sex scenes name the act and the contact plainly and precisely (missionary, cowgirl, doggy style, spooning, standing sex, fellatio; his penis inside her pussy; her breasts and pink nipples) and the body reactions (flushed cheeks, sweat, parted lips, half-closed eyes, trembling thighs).
+- Make her alluring in every moment: tempting clothing, bare shoulders, sheer silk, wet skin, seductive or shy looks, graceful poses that show her body.
+- End the scene with the look of the picture: glossy porcelain skin, gold jewelry and hair ornaments, glowing flowers, soft bloom light.`;
+
+// ⑦ 空白：只留扩展读结果必需的回答格式和几个字段的意思，画风、写法留给用户自己填
+const BLANK_TEXT = `You plan ONE illustration of a story passage for a local image model.
+Reply with ONLY one JSON object, no markdown, no explanation:
+{"skip": false, "rating": "", "people": [{"name": "", "sex": "female"}], "new_looks": {}, "scene": ""}
+
+Fields:
+- skip: true if nothing visual is worth drawing. Then leave the other fields empty.
+- rating: safe / sensitive / nsfw / explicit.
+- people: everyone visible, left to right. name = the name as written in the story, or a short role such as "the man". sex = female or male.
+- new_looks: a fixed appearance as tags, only for female characters that are not in the known cast list.
+- scene: what the camera sees in this picture.
+
+Style of this set:
+- `;
+
 const PRESETS = [
     { id: 'default', name: '① 默认·国风情欲' },
     { id: 'bold', name: '② 更放得开' },
     { id: 'elegant', name: '③ 唯美含蓄' },
     { id: 'sentence', name: '④ 整句描述（多人不串）' },
     { id: 'camera', name: '⑤ 镜头感' },
-].map((p) => ({ ...p, text: BASE_RULES + STYLE_RULES[p.id] }));
+    { id: 'qwen3d', name: '⑥ 国风3D·整句（Qwen）', text: QWEN3D_TEXT },
+    { id: 'blank', name: '⑦ 空白（只留格式，自己填）', text: BLANK_TEXT },
+].map((p) => ({ ...p, text: p.text || BASE_RULES + STYLE_RULES[p.id] }));
 
 const DEFAULT_PROMPT = PRESETS[0].text;
 

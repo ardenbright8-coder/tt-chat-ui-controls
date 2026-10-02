@@ -7,12 +7,13 @@
   "js": "index.js",
   "css": "style.css",
   "author": "OpenAI",
-  "version": "1.16.1",
+  "version": "1.16.2",
   "auto_update": false,
   "minimum_client_version": "1.18.0",
   "hooks": {
     "activate": "init",
     "enable": "init",
-    "disable": "cleanup"
+    "disable": "cleanup",
+    "update": "onUpdate"
   }
 }
