@@ -12,6 +12,9 @@ const ctx = () => globalThis.SillyTavern?.getContext?.();
 // 本扩展自己加进菜单的项。排最前的在菜单最底下；以后新加的写在后面，就排在前面那些的上面。
 const OWN_WAND = ['tt-autoimg-wand', 'tt-cast-wand', 'tt-autoimg-settings-wand'];
 const OWN_OPTIONS = ['option_tt_blank_opening', 'option_tt_summary_library', 'option_tt_story_summary'];
+// 别家的项用户指定的位置（2026-10-02）：这几项排最上面（从上往下）；这几项紧贴在本扩展那些上面（从上往下）。其余保持原样
+const WAND_TOP = ['inspect', 'vars', 'logs'];
+const WAND_ABOVE_OWN = ['sd', 'attach'];
 
 // 认菜单项靠它原来的名字（中文界面和英文界面各一个）
 const ITEMS = [
@@ -103,6 +106,23 @@ function pinToBottom(box, order) {
     want.forEach((el) => box.appendChild(el));
 }
 
+// 魔法棒整体顺序：WAND_TOP → 其余原样 → WAND_ABOVE_OWN → 本扩展的项（OWN_WAND[0] 最底下）。
+// 装在 .extension_container 里的项连容器一起挪，别家扩展按容器找自己的按钮
+function arrangeWand(box) {
+    const blockOf = (key) => {
+        const item = menuItems().find((el) => itemKey(el) === key);
+        if (!item) return null;
+        return item.parentElement !== box && item.parentElement?.classList.contains('extension_container') ? item.parentElement : item;
+    };
+    const top = WAND_TOP.map(blockOf).filter(Boolean);
+    const mid = WAND_ABOVE_OWN.map(blockOf).filter(Boolean);
+    const own = OWN_WAND.map((id) => document.getElementById(id)).filter((el) => el?.parentElement === box).reverse();
+    const fixed = new Set([...top, ...mid, ...own]);
+    const want = [...top, ...[...box.children].filter((el) => !fixed.has(el)), ...mid, ...own];
+    if (want.length === box.children.length && want.every((el, i) => box.children[i] === el)) return;
+    want.forEach((el) => box.appendChild(el));
+}
+
 function apply() {
     const box = menu();
     if (!box) return false;
@@ -116,7 +136,7 @@ function apply() {
         const hide = hidden.has(key);
         if (item.classList.contains(HIDDEN_CLASS) !== hide) item.classList.toggle(HIDDEN_CLASS, hide);
     }
-    pinToBottom(box, OWN_WAND);
+    arrangeWand(box);
     pinToBottom(document.querySelector('#options .options-content'), OWN_OPTIONS);
     observe();
     return true;
