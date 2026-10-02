@@ -107,20 +107,27 @@ function pinToBottom(box, order) {
 }
 
 // 魔法棒整体顺序：WAND_TOP → 其余原样 → WAND_ABOVE_OWN → 本扩展的项（OWN_WAND[0] 最底下）。
-// 装在 .extension_container 里的项连容器一起挪，别家扩展按容器找自己的按钮
+// 🚨 只给每块标 CSS order（菜单本身是竖排 flex），不搬 DOM：v1.15.9 真搬过，「酒馆助手」的按钮会被它自己摆回原位，
+// 两边来回抢，手机卡到几秒才动一下（2026-10-02）。标号是改 style 属性，不会触发别人的「子节点变了」监听。
+const ORDER_KEY = 'ttWandOrder';
 function arrangeWand(box) {
     const blockOf = (key) => {
         const item = menuItems().find((el) => itemKey(el) === key);
         if (!item) return null;
         return item.parentElement !== box && item.parentElement?.classList.contains('extension_container') ? item.parentElement : item;
     };
-    const top = WAND_TOP.map(blockOf).filter(Boolean);
-    const mid = WAND_ABOVE_OWN.map(blockOf).filter(Boolean);
-    const own = OWN_WAND.map((id) => document.getElementById(id)).filter((el) => el?.parentElement === box).reverse();
-    const fixed = new Set([...top, ...mid, ...own]);
-    const want = [...top, ...[...box.children].filter((el) => !fixed.has(el)), ...mid, ...own];
-    if (want.length === box.children.length && want.every((el, i) => box.children[i] === el)) return;
-    want.forEach((el) => box.appendChild(el));
+    const want = new Map();
+    WAND_TOP.forEach((key, i) => { const el = blockOf(key); if (el) want.set(el, -100 + i); });
+    WAND_ABOVE_OWN.forEach((key, i) => { const el = blockOf(key); if (el) want.set(el, 100 + i); });
+    [...OWN_WAND].reverse().forEach((id, i) => { const el = document.getElementById(id); if (el?.parentElement === box) want.set(el, 200 + i); });
+    for (const el of box.querySelectorAll(`[data-tt-wand-order]`)) {
+        if (!want.has(el)) { el.style.order = ''; delete el.dataset[ORDER_KEY]; }
+    }
+    for (const [el, order] of want) {
+        if (el.dataset[ORDER_KEY] === String(order) && el.style.order === String(order)) continue;
+        el.style.order = String(order);
+        el.dataset[ORDER_KEY] = String(order);
+    }
 }
 
 function apply() {
@@ -142,8 +149,34 @@ function apply() {
     return true;
 }
 
+// 刹车：菜单变一次不马上跟，攒 60 毫秒做一次；3 秒里跟了 30 次以上，说明在跟别的扩展来回较劲，
+// 停手 10 秒再看。宁可名字、顺序暂时不对，也不让手机卡死
+let pending = 0;
+let runs = [];
+let pausedUntil = 0;
+function schedule() {
+    if (pending) return;
+    pending = setTimeout(() => {
+        pending = 0;
+        const now = Date.now();
+        if (now < pausedUntil) return;
+        runs = runs.filter((at) => now - at < 3000);
+        runs.push(now);
+        if (runs.length > 30) {
+            pausedUntil = now + 10000;
+            runs = [];
+            observer?.disconnect();
+            console.warn('[酒馆拓展] 魔法棒菜单被反复改动，先停 10 秒');
+            setTimeout(() => { apply(); renderPanel(); }, 10000);
+            return;
+        }
+        apply();
+        renderPanel();
+    }, 60);
+}
+
 function observe() {
-    if (!observer) observer = new MutationObserver(() => { apply(); renderPanel(); });
+    if (!observer) observer = new MutationObserver(schedule);
     const box = menu();
     if (box) observer.observe(box, { childList: true, subtree: true });
     const options = document.querySelector('#options .options-content');
@@ -230,6 +263,9 @@ export function cleanupWandMenu() {
     clearInterval(mountTimer);
     observer?.disconnect();
     observer = null;
+    clearTimeout(pending);
+    pending = 0;
+    document.querySelectorAll('[data-tt-wand-order]').forEach((el) => { el.style.order = ''; delete el.dataset[ORDER_KEY]; });
     document.querySelectorAll(`.${HIDDEN_CLASS}`).forEach((el) => el.classList.remove(HIDDEN_CLASS));
     document.querySelectorAll('.tt-wand-text').forEach((label) => {
         const item = label.closest('[data-tt-wand-original]');

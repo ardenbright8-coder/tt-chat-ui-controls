@@ -25,7 +25,19 @@ export function initChatInputHint() {
         if (!box) return false;
         apply(box);
         observer?.disconnect();
-        observer = new MutationObserver(() => apply(box));
+        // 刹车：要是有别的代码一直把灰字改回去，两边会来回抢；3 秒里改了 20 次以上就不再管，灰字随它
+        let runs = [];
+        observer = new MutationObserver(() => {
+            const now = Date.now();
+            runs = runs.filter((at) => now - at < 3000);
+            runs.push(now);
+            if (runs.length > 20) {
+                observer.disconnect();
+                console.warn('[酒馆拓展] 输入框灰字被反复改回去，不再接管');
+                return;
+            }
+            apply(box);
+        });
         observer.observe(box, { attributes: true, attributeFilter: ['placeholder', 'connected_text'] });
         return true;
     };
