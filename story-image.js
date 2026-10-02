@@ -6,6 +6,8 @@
 // 写词模型只负责「这一幕有谁、穿什么、在干嘛」，每个人的长相由这里原样抄进画图词，所以同一个人每张图都一个样。
 // 新角色第一次出场先出一张定妆照；不满意在魔法棒「看定妆照」里用中文说怎么改，改完再出一张。
 
+import { tip } from './tip.js';
+
 const EXTENSION_KEY = 'chat-text-color';
 const SETTINGS_ID = 'tt-autoimg-settings';
 const CAST_KEY = 'tt_autoimg_cast';
@@ -622,18 +624,16 @@ function settingsHtml() {
       <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
     </div>
     <div class="inline-drawer-content">
-      <small>主模型每写完一条正文，交给下面选的连接配置规划一张图，再用「图像生成」画好贴到这条正文末尾。主模型和当前连接都不受影响。</small>
-      <label class="checkbox_label"><input type="checkbox" id="tt-autoimg-on"> <span>每条正文自动配一张图</span></label>
-      <label class="checkbox_label"><input type="checkbox" id="tt-autoimg-portrait"> <span>新角色出场后补一张定妆照（在魔法棒「看定妆照」里看，不进聊天）</span></label>
-      <label class="checkbox_label"><input type="checkbox" id="tt-autoimg-quiet"> <span>画图时不弹「正在生成图像…」提示</span></label>
-      <label class="checkbox_label"><input type="checkbox" id="tt-autoimg-clean"> <span>聊天里的图铺满气泡，点图不放大，图上只留右上角「存到手机」</span></label>
-      <label for="tt-autoimg-profile">写画图词用哪个连接配置</label>
+      <div class="tt-tip-row"><label class="checkbox_label tt-hold-check"><input type="checkbox" id="tt-autoimg-on"> <span>每条正文自动配一张图</span></label>${tip('主模型每写完一条正文，交给下面选的模型规划一张图，再用「图像生成」画好贴到这条正文末尾。主模型和当前连接都不受影响。手机上勾选框要按住半秒才会变，防手滑。')}</div>
+      <div class="tt-tip-row"><label class="checkbox_label tt-hold-check"><input type="checkbox" id="tt-autoimg-portrait"> <span>新角色补一张定妆照</span></label>${tip('新角色出场后补画一张定妆照。不进聊天，在左下角魔法棒「看定妆照」里看，长相也在那里改。')}</div>
+      <div class="tt-tip-row"><label class="checkbox_label tt-hold-check"><input type="checkbox" id="tt-autoimg-quiet"> <span>画图时不弹提示</span></label>${tip('画图时酒馆会一直挂着一条「正在生成图像…」，挡着看正文。勾上就不弹它，出错的红色提示照样弹。')}</div>
+      <div class="tt-tip-row"><label class="checkbox_label tt-hold-check"><input type="checkbox" id="tt-autoimg-clean"> <span>图铺满气泡</span></label>${tip('聊天里的图铺满气泡宽度，点图不放大，图上只留右上角一个「存到手机」按钮。')}</div>
+      <div class="tt-tip-row"><label for="tt-autoimg-profile">用哪个模型写提示词</label>${tip('', 'tt-autoimg-hint')}</div>
       <select id="tt-autoimg-profile" class="text_pole"></select>
-      <small id="tt-autoimg-hint"></small>
-      <small>角色长相和定妆照在左下角魔法棒「看定妆照」里。</small>
+      <small id="tt-autoimg-empty" hidden>还没有能选的模型：先在「API 连接」里连上 DeepSeek，存成连接配置文件或模型</small>
       <div class="tt-prompt-editor"></div>
       <div class="flex-container">
-        <div id="tt-autoimg-now" class="menu_button">给最后一条正文配一张</div>
+        <div id="tt-autoimg-now" class="menu_button">给最后一条补张图</div>
       </div>
     </div>
   </div>
@@ -660,11 +660,13 @@ function renderCast() {
 </div>`).join('');
 }
 
-function onCastClick(event) {
+async function onCastClick(event) {
     const row = event.target.closest('.tt-cast-row');
     if (!row) return;
     const name = row.dataset.name;
     if (event.target.closest('.tt-cast-del')) {
+        // 删东西一律先问（v1.16.5）：这一行连定妆照一起没了，手滑点到找不回来
+        if (!await confirmPopup(`删掉「${name}」？这个角色的长相和定妆照都会没了。`)) return;
         delete cast()[name];
         saveCast();
         return;
@@ -703,10 +705,12 @@ function fillProfiles() {
     select.innerHTML = '<option value="">（未选）</option>' + groups.join('');
     select.value = list.some((p) => p.id === s.autoImageProfile) ? s.autoImageProfile : '';
     const hint = document.getElementById('tt-autoimg-hint');
-    if (hint) hint.textContent = list.length ? '「连接配置文件」和「模型」两类都能选，跟「API 连接」页那个下拉框是同一批' : '还没有连接配置：先在「API 连接」里连上 DeepSeek，存成连接配置文件或模型';
+    if (hint) hint.dataset.tip = '选一个便宜的模型（比如 DeepSeek），它读正文、写画图用的提示词。「连接配置文件」和「模型」两类都能选，跟「API 连接」页那个下拉框是同一批。';
+    const empty = document.getElementById('tt-autoimg-empty');
+    if (empty) empty.hidden = !!list.length;
 }
 
-// 改写词说明那一块：扩展设置里一份，魔法棒弹窗里一份，两边改的是同一份设置
+// 改提示词那一块：扩展设置里一份，魔法棒弹窗里一份，两边改的是同一份设置
 const promptEditors = new Set();
 const WAND_ID = 'tt-autoimg-wand';
 
@@ -716,7 +720,18 @@ async function confirmPopup(text) {
     return globalThis.confirm(text);
 }
 
-// 套装列表：内置的（没被删的）+ 自己加的，按用户拖出来的顺序；顺序里没有的（新加的）接在最后。
+// 提示词改了还没保存时问一句：'save' 保存 / 'drop' 不要了 / null 关掉这句话＝先不走，接着改
+async function askUnsaved() {
+    const context = ctx();
+    const text = '这套的提示词改了还没保存。';
+    if (!context?.callGenericPopup || context?.POPUP_TYPE?.CONFIRM === undefined) return globalThis.confirm(text + '\n点「确定」保存，点「取消」不要了') ? 'save' : 'drop';
+    const result = await context.callGenericPopup(text, context.POPUP_TYPE.CONFIRM, '', { okButton: '保存', cancelButton: '不要了' });
+    if (result === 1) return 'save';
+    if (result === 0) return 'drop';
+    return null;
+}
+
+// 风格列表：内置的（没被删的）+ 自己加的，按用户拖出来的顺序；顺序里没有的（新加的）接在最后。
 // 用户 2026-10-02：常用的拖到下面（离手指近），不常用的放上面。序号按位置现排，不写死在名字里
 const shortName = (name) => String(name).replace(/^[①-⑳]\s*/, '');
 
@@ -737,39 +752,76 @@ async function askName(title, value) {
         : globalThis.prompt(title, value);
 }
 
+// 提示词要点「保存」才算数（v1.16.5）。以前边打边存，用户看不出存没存：「我都不知道我是写进去是保存还是写进去是取消」。
+// 改了没保存就换风格、新加一套、关窗口，先问一句保存还是不要了
 function bindPromptEditor(root) {
     if (!root) return null;
     root.innerHTML = `
-  <label>写词套装（点一下换上；按住右边 ≡ 上下拖，常用的拖到下面）</label>
+  <div class="tt-tip-row"><label>提示词风格</label>${tip('点一下换上这套。按住右边 ≡ 上下拖排顺序，常用的拖到下面。扩展自带的那几套删了也能找回。')}</div>
   <div class="tt-pe-list"></div>
   <div class="flex-container">
-    <div class="menu_button tt-pe-add">＋ 新建一套</div>
-    <div class="menu_button tt-pe-del">删除这个套装</div>
+    <div class="menu_button tt-pe-add">＋ 新加一套（空白的）</div>
+    <div class="menu_button tt-pe-del">删掉这套</div>
   </div>
   <small class="tt-pe-restore"></small>
-  <label>这套的写词说明（英文，可改；开头要它回 JSON 的那几行别动）</label>
-  <small>改完自动存在手机里，换套装、更新扩展都不会动它。</small>
+  <div class="tt-tip-row"><label>这套的提示词</label><span class="tt-pe-dirty" hidden>● 没保存</span>${tip('英文写的，可以改；开头要它回 JSON 的那几行别动。改完点「保存」才算数，换风格、更新扩展都不会动它。「取消」改回上次保存的样子。')}</div>
   <textarea class="text_pole tt-pe-text" rows="8"></textarea>
   <div class="flex-container">
-    <div class="menu_button tt-pe-saveas">另存为我的套装</div>
-    <div class="menu_button tt-pe-latest">换成扩展里的新版</div>
+    <div class="menu_button tt-pe-save">保存</div>
+    <div class="menu_button tt-pe-cancel">取消</div>
+  </div>
+  <div class="flex-container">
+    <div class="menu_button tt-pe-copy">复制一套</div>
+    <div class="menu_button tt-pe-latest">恢复原版</div>
   </div>`;
     const list = root.querySelector('.tt-pe-list');
     const prompt = root.querySelector('.tt-pe-text');
     const restore = root.querySelector('.tt-pe-restore');
+    const dirtyMark = root.querySelector('.tt-pe-dirty');
+    const isDirty = () => prompt.value.trim() !== String(settings().autoImagePrompt).trim();
+    const showDirty = () => { dirtyMark.hidden = !isDirty(); };
+    let keepText = false; // 只是列表变了（拖动、找回），输入框里还没保存的字留着
     const fill = () => {
         const cur = settings();
-        list.innerHTML = presetList(cur).map((p, i) => `
-<div class="tt-pe-item${p.id === cur.autoImagePresetId ? ' active' : ''}" data-id="${esc(p.id)}">
-  <span class="tt-pe-num">${i + 1}</span><span class="tt-pe-name">${esc(shortName(p.name))}</span><span class="tt-pe-grip fa-solid fa-grip-lines" title="按住上下拖"></span>
-</div>`).join('');
+        list.innerHTML = presetList(cur).map((p, i) => {
+            const on = p.id === cur.autoImagePresetId;
+            return `
+<div class="tt-pe-item${on ? ' active' : ''}" data-id="${esc(p.id)}">
+  <span class="tt-pe-num">${i + 1}</span><span class="tt-pe-name">${esc(shortName(p.name))}</span>${on ? '<span class="tt-pe-on">✓ 正在用</span>' : ''}<span class="tt-pe-grip fa-solid fa-grip-lines" title="按住上下拖"></span>
+</div>`;
+        }).join('');
         const hiddenCount = (cur.autoImageHiddenPresets || []).length;
-        restore.textContent = hiddenCount ? `删掉的内置套装 ${hiddenCount} 套，点这里恢复` : '';
+        restore.textContent = hiddenCount ? `找回删掉的 ${hiddenCount} 套` : '';
         restore.hidden = !hiddenCount;
-        prompt.value = cur.autoImagePrompt;
+        if (!(keepText && isDirty())) prompt.value = cur.autoImagePrompt;
+        keepText = false;
+        showDirty();
     };
-    const fillOthers = () => promptEditors.forEach((f) => f !== fill && f());
-    const fillAll = () => promptEditors.forEach((f) => f());
+    const fillAll = () => promptEditors.forEach((e) => e.fill());
+    const saveText = () => {
+        const text = prompt.value.trim();
+        if (!text) { toast('info', '提示词是空的，没保存'); return false; }
+        const cur = settings();
+        cur.autoImagePrompt = text;
+        const mine = cur.autoImageCustomPresets.find((p) => p.id === cur.autoImagePresetId);
+        if (mine) mine.text = text;
+        else cur.autoImageMyTexts[cur.autoImagePresetId] = text;
+        save();
+        fillAll();
+        return true;
+    };
+    const discard = () => {
+        prompt.value = settings().autoImagePrompt;
+        showDirty();
+    };
+    // 要离开这套之前：没改过直接走；改过了问一句。返回 false 就是不走了
+    const leave = async () => {
+        if (!isDirty()) return true;
+        const answer = await askUnsaved();
+        if (answer === 'save') return saveText();
+        if (answer === 'drop') { discard(); return true; }
+        return false;
+    };
     const choose = (id) => {
         const cur = settings();
         if (!presetById(id, cur)) return;
@@ -778,13 +830,15 @@ function bindPromptEditor(root) {
         save();
         fillAll();
     };
-    promptEditors.add(fill);
+    const editor = { fill, isDirty, leave };
+    promptEditors.add(editor);
     fill();
 
-    list.addEventListener('click', (event) => {
+    list.addEventListener('click', async (event) => {
         if (event.target.closest('.tt-pe-grip')) return;
         const row = event.target.closest('.tt-pe-item');
-        if (row) choose(row.dataset.id);
+        if (!row || row.dataset.id === settings().autoImagePresetId) return;
+        if (await leave()) choose(row.dataset.id);
     });
     // 按住 ≡ 拖：只挪这个列表自己的行，松手时按新顺序存
     list.addEventListener('pointerdown', (event) => {
@@ -806,57 +860,62 @@ function bindPromptEditor(root) {
             row.classList.remove('dragging');
             settings().autoImagePresetOrder = [...list.querySelectorAll('.tt-pe-item')].map((r) => r.dataset.id);
             save();
+            keepText = true;
             fillAll();
         };
         grip.addEventListener('pointermove', move);
         grip.addEventListener('pointerup', up);
         grip.addEventListener('pointercancel', up);
     });
-    // 边打边存：手机上关弹窗时不一定先触发 change，等它会丢字
-    prompt.addEventListener('input', () => {
-        const text = prompt.value.trim();
-        if (!text) return;
-        const cur = settings();
-        cur.autoImagePrompt = text;
-        const mine = cur.autoImageCustomPresets.find((p) => p.id === cur.autoImagePresetId);
-        if (mine) mine.text = text;
-        else cur.autoImageMyTexts[cur.autoImagePresetId] = text;
-        save();
+    prompt.addEventListener('input', showDirty);
+    root.querySelector('.tt-pe-save').addEventListener('click', () => {
+        if (!isDirty()) { toast('info', '没改动，不用保存'); return; }
+        if (saveText()) toast('success', '保存好了');
     });
-    prompt.addEventListener('change', fillOthers);
-    // ＋ 新建：从空白模板起一套，名字默认「我的套装 N」，新建完切过去直接写
+    root.querySelector('.tt-pe-cancel').addEventListener('click', () => {
+        if (!isDirty()) return;
+        discard();
+        toast('info', '改回上次保存的样子了');
+    });
+    // ＋ 新加：从空白模板起一套，名字默认「我的套装 N」，加完切过去直接写
     root.querySelector('.tt-pe-add').addEventListener('click', async () => {
+        if (!await leave()) return;
         const cur = settings();
-        const name = await askName('给新套装起个名字', `我的套装 ${cur.autoImageCustomPresets.length + 1}`);
+        const name = await askName('给新的这套起个名字', `我的套装 ${cur.autoImageCustomPresets.length + 1}`);
         if (typeof name !== 'string' || !name.trim()) return;
         const preset = { id: 'c' + Date.now(), name: name.trim(), text: BLANK_TEXT };
         cur.autoImageCustomPresets.push(preset);
         choose(preset.id);
         prompt.focus();
-        toast('success', `新建好了：${preset.name}，在下面接着写画风`);
+        toast('success', `加好了：${preset.name}。在下面写这套的提示词，写完点保存`);
     });
     root.querySelector('.tt-pe-latest').addEventListener('click', async () => {
         const cur = settings();
         const builtIn = PRESETS.find((p) => p.id === cur.autoImagePresetId);
-        if (!builtIn) { toast('info', '自己加的套装没有扩展版，只能自己改'); return; }
-        if (cur.autoImageMyTexts[builtIn.id] === builtIn.text) { toast('info', '这套已经是扩展里的版本了'); return; }
-        if (!await confirmPopup(`用扩展里的新版换掉「${shortName(builtIn.name)}」？你在这套上改的会被替换掉。`)) return;
+        if (!builtIn) { toast('info', '自己加的这套没有原版'); return; }
+        if (cur.autoImageMyTexts[builtIn.id] === builtIn.text && !isDirty()) { toast('info', '这套已经是原版了'); return; }
+        if (!await confirmPopup(`把「${shortName(builtIn.name)}」恢复成原版？你在这套上改的会没了。`)) return;
         cur.autoImageMyTexts[builtIn.id] = builtIn.text;
         cur.autoImagePrompt = builtIn.text;
+        prompt.value = builtIn.text;
         save();
         fillAll();
-        toast('success', `「${shortName(builtIn.name)}」换成扩展里的版本了`);
+        toast('success', `「${shortName(builtIn.name)}」恢复成原版了`);
     });
-    root.querySelector('.tt-pe-saveas').addEventListener('click', async () => {
-        const name = await askName('给这套起个名字', '我的套装');
-        if (typeof name !== 'string' || !name.trim()) return;
+    // 复制一套：把输入框里现在的提示词（改了没保存的也算）抄成新的一套，原来那套不动
+    root.querySelector('.tt-pe-copy').addEventListener('click', async () => {
         const cur = settings();
-        const preset = { id: 'c' + Date.now(), name: name.trim(), text: prompt.value.trim() || cur.autoImagePrompt };
+        const from = presetById(cur.autoImagePresetId, cur);
+        const name = await askName('给复制出来的这套起个名字', `${shortName(from?.name || '我的套装')} 复制`);
+        if (typeof name !== 'string' || !name.trim()) return;
+        const text = prompt.value.trim() || cur.autoImagePrompt;
+        const preset = { id: 'c' + Date.now(), name: name.trim(), text };
         cur.autoImageCustomPresets.push(preset);
+        prompt.value = cur.autoImagePrompt; // 原来那套没保存的改动跟着搬走了，不再算原来那套的
         choose(preset.id);
-        toast('success', `存好了：${preset.name}`);
+        toast('success', `复制好了：${preset.name}`);
     });
-    // 删除：自己加的直接删；内置的只是藏起来（扩展里还带着它），下面能点「恢复」
+    // 删掉：自己加的直接删；内置的只是藏起来（扩展里还带着它），下面能找回
     root.querySelector('.tt-pe-del').addEventListener('click', async () => {
         const cur = settings();
         const id = cur.autoImagePresetId;
@@ -866,16 +925,21 @@ function bindPromptEditor(root) {
         const i = cur.autoImageCustomPresets.findIndex((p) => p.id === id);
         if (i >= 0) cur.autoImageCustomPresets.splice(i, 1);
         else cur.autoImageHiddenPresets = [...new Set([...(cur.autoImageHiddenPresets || []), id])];
+        prompt.value = cur.autoImagePrompt; // 这套都删了，没保存的改动一起作废
         choose(presetList(cur)[0].id);
         toast('success', `删掉了：${shortName(preset?.name || id)}`);
     });
     restore.addEventListener('click', () => {
         settings().autoImageHiddenPresets = [];
         save();
+        keepText = true;
         fillAll();
     });
-    return fill;
+    return editor;
 }
+
+// 弹窗关之前：里面的提示词改了没保存就问一句，点到外面关掉那句话就先不关
+const closingGuard = (editor) => async () => (editor ? await editor.leave() : true);
 
 // 左下角魔法棒菜单里的「改配图提示词」，点开弹窗直接改，不用去翻扩展设置
 async function openPromptPopup() {
@@ -884,11 +948,11 @@ async function openPromptPopup() {
     const box = document.createElement('div');
     box.className = 'tt-prompt-popup';
     box.innerHTML = '<h3>改配图提示词</h3><div class="tt-prompt-editor"></div>';
-    const fill = bindPromptEditor(box.querySelector('.tt-prompt-editor'));
+    const editor = bindPromptEditor(box.querySelector('.tt-prompt-editor'));
     try {
-        await context.callGenericPopup(box, context.POPUP_TYPE.TEXT, '', { wide: true, large: true, okButton: '关闭', allowVerticalScrolling: true });
+        await context.callGenericPopup(box, context.POPUP_TYPE.TEXT, '', { wide: true, large: true, okButton: '关闭', allowVerticalScrolling: true, onClosing: closingGuard(editor) });
     } finally {
-        promptEditors.delete(fill);
+        promptEditors.delete(editor);
     }
 }
 
@@ -899,7 +963,7 @@ function getCastPanel() {
     if (castPanel) return castPanel;
     castPanel = document.createElement('div');
     castPanel.className = 'tt-autoimg tt-cast-popup';
-    castPanel.innerHTML = '<h3>看定妆照</h3><small>这张角色卡里每个角色的脸、发型、身材定在这里，之后每张图都照这个画，衣服动作随剧情变。新开聊天也是这一套。英文可以直接改，也可以在「想怎么改」里写中文。</small><div id="tt-autoimg-cast"></div>';
+    castPanel.innerHTML = `<h3 class="tt-tip-row">看定妆照 ${tip('这张角色卡里每个角色的脸、发型、身材定在这里，之后每张图都照这个画，衣服动作随剧情变。新开聊天也是这一套。英文可以直接改，也可以在「想怎么改」里写中文。')}</h3><div id="tt-autoimg-cast"></div>`;
     const box = castPanel.querySelector('#tt-autoimg-cast');
     box.addEventListener('click', onCastClick);
     box.addEventListener('change', onCastChange);
@@ -915,6 +979,8 @@ async function openCastPopup() {
 }
 
 // 魔法棒「自动配图设置」：把扩展页「自动配图」那块内容借到弹窗里，关了再放回去（同一份，不重复绑定）
+let settingsEditor = null;
+
 async function openSettingsPopup() {
     const context = ctx();
     const content = document.querySelector(`#${SETTINGS_ID} .inline-drawer-content`);
@@ -929,7 +995,7 @@ async function openSettingsPopup() {
     box.append(content);
     fillProfiles();
     try {
-        await context.callGenericPopup(box, context.POPUP_TYPE.TEXT, '', { wide: true, large: true, okButton: '关闭', allowVerticalScrolling: true });
+        await context.callGenericPopup(box, context.POPUP_TYPE.TEXT, '', { wide: true, large: true, okButton: '关闭', allowVerticalScrolling: true, onClosing: closingGuard(settingsEditor) });
     } finally {
         home.insertBefore(content, next);
         content.style.display = display;
@@ -982,7 +1048,7 @@ function mount() {
     ['focus', 'pointerdown', 'touchstart', 'mousedown'].forEach((name) => select.addEventListener(name, fillProfiles, { passive: true }));
     document.querySelector(`#${SETTINGS_ID} .inline-drawer-toggle`)?.addEventListener('click', () => { fillProfiles(); renderCast(); });
 
-    bindPromptEditor(document.querySelector(`#${SETTINGS_ID} .tt-prompt-editor`));
+    settingsEditor = bindPromptEditor(document.querySelector(`#${SETTINGS_ID} .tt-prompt-editor`));
     document.getElementById('tt-autoimg-now').addEventListener('click', () => {
         const chat = ctx()?.chat || [];
         let id = chat.length - 1;
@@ -1037,6 +1103,7 @@ export function cleanupStoryImage() {
     document.getElementById(SETTINGS_ID)?.remove();
     WAND_ITEMS.forEach((w) => document.getElementById(w.id)?.remove());
     castPanel = null;
+    settingsEditor = null;
     promptEditors.clear();
     document.getElementById(QUIET_STYLE_ID)?.remove();
     document.body?.classList.remove('tt-autoimg-quiet');

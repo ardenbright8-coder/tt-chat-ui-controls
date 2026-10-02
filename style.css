@@ -86,29 +86,34 @@
      * Settings checkboxes: tap does nothing.
      * Hold the actual checkbox for 500 ms without moving >10px to toggle.
      */
-    #user-settings-block label.checkbox_label > input[type="checkbox"]:not(.displayNone) {
+    #user-settings-block label.checkbox_label > input[type="checkbox"]:not(.displayNone),
+    label.checkbox_label.tt-hold-check > input[type="checkbox"]:not(.displayNone) {
         touch-action: pan-y;
         transition: transform 100ms ease, box-shadow 100ms ease, filter 100ms ease;
     }
 
-    #user-settings-block label.checkbox_label > input[type="checkbox"].tt-touch-hold-pending {
+    #user-settings-block label.checkbox_label > input[type="checkbox"].tt-touch-hold-pending,
+    label.checkbox_label.tt-hold-check > input[type="checkbox"].tt-touch-hold-pending {
         transform: scale(1.12);
         box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.22);
     }
 
-    #user-settings-block label.checkbox_label > input[type="checkbox"].tt-touch-hold-fired.tt-touch-hold-on {
+    #user-settings-block label.checkbox_label > input[type="checkbox"].tt-touch-hold-fired.tt-touch-hold-on,
+    label.checkbox_label.tt-hold-check > input[type="checkbox"].tt-touch-hold-fired.tt-touch-hold-on {
         transform: scale(1.16);
         box-shadow: 0 0 0 4px rgba(46, 213, 98, 0.42);
         filter: brightness(1.15);
     }
 
-    #user-settings-block label.checkbox_label > input[type="checkbox"].tt-touch-hold-fired.tt-touch-hold-off {
+    #user-settings-block label.checkbox_label > input[type="checkbox"].tt-touch-hold-fired.tt-touch-hold-off,
+    label.checkbox_label.tt-hold-check > input[type="checkbox"].tt-touch-hold-fired.tt-touch-hold-off {
         transform: scale(1.16);
         box-shadow: 0 0 0 4px rgba(255, 92, 92, 0.42);
         filter: brightness(1.05);
     }
 
-    #user-settings-block label.checkbox_label.tt-touch-hold-label {
+    #user-settings-block label.checkbox_label.tt-touch-hold-label,
+    label.checkbox_label.tt-hold-check.tt-touch-hold-label {
         -webkit-user-select: none;
         user-select: none;
     }
@@ -2467,4 +2472,51 @@
     cursor: pointer;
     text-decoration: underline;
     opacity: .75;
+}
+
+/* v1.16.5: panel notes live behind a small (i) icon (tap for a bubble); the prompt editor
+   has explicit save / cancel; the set in use says so. */
+.tt-tip-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.tt-tip-row > label {
+    margin: 0;
+}
+
+.tt-tip {
+    flex: none;
+    font-size: .95em;
+    opacity: .55;
+    padding: 4px;
+    cursor: pointer;
+}
+
+.tt-tip-bubble {
+    margin: 2px 0 6px;
+    padding: 6px 10px;
+    border-radius: 10px;
+    border: 1px solid var(--SmartThemeBorderColor);
+    background: rgba(0, 0, 0, .25);
+    font-size: .85em;
+    line-height: 1.45;
+    white-space: normal;
+}
+
+.tt-pe-on {
+    flex: none;
+    font-size: .8em;
+    color: var(--SmartThemeQuoteColor, #e0a050);
+}
+
+.tt-pe-dirty {
+    font-size: .8em;
+    color: #e0a050;
+}
+
+.tt-pe-dirty[hidden] {
+    display: none;
 }

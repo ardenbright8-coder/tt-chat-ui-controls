@@ -4,6 +4,8 @@
 // 3. 本扩展加的菜单项固定贴在最底下（离手指最近），别的扩展晚加载也挪回来
 // 菜单项是别的扩展建的，这里只改名字、加说明、藏起来、调顺序，不碰它们的点击功能。
 
+import { tip } from './tip.js';
+
 const EXTENSION_KEY = 'chat-text-color';
 const SETTINGS_ID = 'tt-wand-settings';
 const HIDDEN_CLASS = 'tt-wand-hidden';
@@ -196,7 +198,7 @@ function renderPanel() {
         const name = info?.name || item.dataset.ttWandOriginal || key;
         return `
 <div class="tt-wand-row" data-key="${esc(key)}">
-  <label class="checkbox_label"><input type="checkbox" class="tt-wand-hide" ${hidden.has(key) ? 'checked' : ''}> <span>收起来</span></label>
+  <label class="checkbox_label tt-hold-check"><input type="checkbox" class="tt-wand-hide" ${hidden.has(key) ? 'checked' : ''}> <span>收起来</span></label>
   <div class="tt-wand-row-text"><b>${esc(name)}</b>${info ? `<small>${esc(info.desc)}</small>` : ''}</div>
   <div class="menu_button tt-wand-use">用一下</div>
 </div>`;
@@ -239,7 +241,7 @@ function mountPanel() {
       <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
     </div>
     <div class="inline-drawer-content">
-      <small>左下角魔法棒里的每一项。勾「收起来」就从魔法棒里藏掉，功能还在，要用时在这里点「用一下」。</small>
+      <div class="tt-tip-row"><span>左下角魔法棒里的每一项</span>${tip('勾「收起来」就从魔法棒里藏掉，功能还在，要用时在这里点「用一下」。手机上勾选框要按住半秒才会变，防手滑。')}</div>
       <div class="tt-wand-list"></div>
     </div>
   </div>

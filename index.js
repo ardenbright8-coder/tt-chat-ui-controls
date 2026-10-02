@@ -8,6 +8,7 @@ import { initStoryImage, cleanupStoryImage } from './story-image.js';
 import { initWandMenu, cleanupWandMenu } from './wand-menu.js';
 import { initCharWorld, cleanupCharWorld } from './char-world.js';
 import { initChatInputHint, cleanupChatInputHint } from './chat-input-hint.js';
+import { initTips, cleanupTips } from './tip.js';
 
 const EXTENSION_KEY = 'chat-text-color';
 
@@ -235,7 +236,8 @@ function installMobileTouchGuards() {
     const settingsCheckboxFromTarget = (target) => {
         if (!(target instanceof Element)) return null;
 
-        const label = target.closest('#user-settings-block label.checkbox_label');
+        // 用户设置页的勾选框 + 本扩展面板里标了 tt-hold-check 的勾选框（v1.16.5 统一：都要按住半秒才切换，防手滑）
+        const label = target.closest('#user-settings-block label.checkbox_label, label.checkbox_label.tt-hold-check');
         if (!label) return null;
 
         const checkbox = label.querySelector(':scope > input[type="checkbox"]');
@@ -519,14 +521,14 @@ function installMobileTouchGuards() {
         activeRanges.clear();
         activeHolds.clear();
 
-        document.querySelectorAll('#user-settings-block .tt-touch-hold-pending, #user-settings-block .tt-touch-hold-fired')
+        document.querySelectorAll('.tt-touch-hold-pending, .tt-touch-hold-fired')
             .forEach((element) => element.classList.remove(
                 'tt-touch-hold-pending',
                 'tt-touch-hold-fired',
                 'tt-touch-hold-on',
                 'tt-touch-hold-off',
             ));
-        document.querySelectorAll('#user-settings-block .tt-touch-hold-label')
+        document.querySelectorAll('.tt-touch-hold-label')
             .forEach((element) => element.classList.remove('tt-touch-hold-label'));
 
         document.removeEventListener('pointerdown', onPointerDown, true);
@@ -811,6 +813,7 @@ export async function init() {
     initWandMenu();
     initCharWorld();
     initChatInputHint();
+    initTips();
     if (initialized) {
         mountUi();
         return;
@@ -835,6 +838,7 @@ export async function cleanup() {
     cleanupWandMenu();
     cleanupCharWorld();
     cleanupChatInputHint();
+    cleanupTips();
     cleanupContextLock();
     cleanupPromptDetachGuard();
     stopMessageBannerFix?.();
