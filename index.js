@@ -7,6 +7,7 @@ import { initStorySummary, cleanupStorySummary } from './story-summary.js';
 import { initStoryImage, cleanupStoryImage } from './story-image.js';
 import { initWandMenu, cleanupWandMenu } from './wand-menu.js';
 import { initCharWorld, cleanupCharWorld } from './char-world.js';
+import { initChatInputHint, cleanupChatInputHint } from './chat-input-hint.js';
 
 const EXTENSION_KEY = 'chat-text-color';
 
@@ -809,6 +810,7 @@ export async function init() {
     initStoryImage();
     initWandMenu();
     initCharWorld();
+    initChatInputHint();
     if (initialized) {
         mountUi();
         return;
@@ -825,6 +827,7 @@ export async function cleanup() {
     cleanupStoryImage();
     cleanupWandMenu();
     cleanupCharWorld();
+    cleanupChatInputHint();
     cleanupContextLock();
     cleanupPromptDetachGuard();
     stopMessageBannerFix?.();

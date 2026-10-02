@@ -10,7 +10,7 @@ const HIDDEN_CLASS = 'tt-wand-hidden';
 const ctx = () => globalThis.SillyTavern?.getContext?.();
 
 // 本扩展自己加进菜单的项。排最前的在菜单最底下；以后新加的写在后面，就排在前面那些的上面。
-const OWN_WAND = ['tt-autoimg-wand'];
+const OWN_WAND = ['tt-autoimg-wand', 'tt-cast-wand', 'tt-autoimg-settings-wand'];
 const OWN_OPTIONS = ['option_tt_blank_opening', 'option_tt_summary_library', 'option_tt_story_summary'];
 
 // 认菜单项靠它原来的名字（中文界面和英文界面各一个）
@@ -20,6 +20,8 @@ const ITEMS = [
     { key: 'attach', match: ['附加文件', 'Attach a File'], name: '发图片或文件', desc: '发消息时顺带一张图片或一个文件' },
     { key: 'sd', match: ['生成图片', 'Generate Image'], name: '生成图片', desc: '手动画一张图。自动配图也是靠它画的' },
     { key: 'autoimg', match: ['改配图提示词'], name: '改配图提示词', desc: '改自动配图时，模型把剧情写成画面用的那段说明' },
+    { key: 'cast', match: ['看定妆照'], name: '看定妆照', desc: '这张角色卡里每个角色长什么样，能改长相、重出定妆照；新开聊天也是这一套' },
+    { key: 'autoimgset', match: ['自动配图设置'], name: '自动配图设置', desc: '开关自动配图、选哪个模型写画图词、给最后一条补一张' },
     // 官方「提示词查看器」是个开关，开着时它自己把名字换成「停止检查」，这里跟着换，免得看不出开没开
     {
         key: 'inspect', id: 'inspectNextPromptButton', match: ['提示词查看器', 'Inspect Prompts', 'Stop Inspecting'],

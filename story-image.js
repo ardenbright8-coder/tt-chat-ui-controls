@@ -331,16 +331,41 @@ function portraitPrompt(look) {
 
 // ---------------------------------------------------------------- 长相档案
 
+// 长相档案跟着角色卡走（v1.15.8）：一张卡一套，存在扩展设置里按角色卡头像文件名分；新开聊天照样是这一套。
+// 群聊没有单一角色卡，还存在这段聊天里。v1.15.8 以前存在聊天里的，打开那段聊天时并进角色卡那套（卡里已有的名字不覆盖）。
+function castOwner() {
+    const context = ctx();
+    if (!context || context.groupId) return '';
+    const chid = context.characterId;
+    if (chid === undefined || chid === null || chid === '') return '';
+    return context.characters?.[chid]?.avatar || '';
+}
+
 function cast() {
     const meta = ctx()?.chatMetadata;
-    if (!meta) return {};
-    if (!meta[CAST_KEY] || typeof meta[CAST_KEY] !== 'object') meta[CAST_KEY] = {};
-    return meta[CAST_KEY];
+    const owner = castOwner();
+    if (!owner) {
+        if (!meta) return {};
+        if (!meta[CAST_KEY] || typeof meta[CAST_KEY] !== 'object') meta[CAST_KEY] = {};
+        return meta[CAST_KEY];
+    }
+    const s = settings();
+    if (!s.autoImageCastByChar || typeof s.autoImageCastByChar !== 'object') s.autoImageCastByChar = {};
+    const book = s.autoImageCastByChar[owner] = s.autoImageCastByChar[owner] || {};
+    const old = meta?.[CAST_KEY];
+    if (old && typeof old === 'object' && !meta.tt_autoimg_cast_moved) {
+        for (const [name, entry] of Object.entries(old)) if (!book[name]) book[name] = entry;
+        meta.tt_autoimg_cast_moved = true;
+        save();
+        ctx()?.saveMetadataDebounced?.();
+    }
+    return book;
 }
 
 async function saveCast() {
     const context = ctx();
-    if (context?.saveMetadataDebounced) context.saveMetadataDebounced();
+    if (castOwner()) save();
+    else if (context?.saveMetadataDebounced) context.saveMetadataDebounced();
     else await context?.saveMetadata?.();
     renderCast();
 }
@@ -561,15 +586,13 @@ function settingsHtml() {
     <div class="inline-drawer-content">
       <small>主模型每写完一条正文，交给下面选的连接配置规划一张图，再用「图像生成」画好贴到这条正文末尾。主模型和当前连接都不受影响。</small>
       <label class="checkbox_label"><input type="checkbox" id="tt-autoimg-on"> <span>每条正文自动配一张图</span></label>
-      <label class="checkbox_label"><input type="checkbox" id="tt-autoimg-portrait"> <span>新角色出场后补一张定妆照（只在下面「角色长相」里看，不进聊天）</span></label>
+      <label class="checkbox_label"><input type="checkbox" id="tt-autoimg-portrait"> <span>新角色出场后补一张定妆照（在魔法棒「看定妆照」里看，不进聊天）</span></label>
       <label class="checkbox_label"><input type="checkbox" id="tt-autoimg-quiet"> <span>画图时不弹「正在生成图像…」提示</span></label>
       <label class="checkbox_label"><input type="checkbox" id="tt-autoimg-clean"> <span>聊天里的图铺满气泡，点图不放大，图上只留右上角「复制」</span></label>
       <label for="tt-autoimg-profile">写画图词用哪个连接配置</label>
       <select id="tt-autoimg-profile" class="text_pole"></select>
       <small id="tt-autoimg-hint"></small>
-      <b>角色长相（这段聊天的）</b>
-      <small>每个角色的脸、发型、身材定在这里，之后每张图都照这个画；衣服动作随剧情变。下面英文可以直接改，也可以在「想怎么改」里写中文。</small>
-      <div id="tt-autoimg-cast"></div>
+      <small>角色长相和定妆照在左下角魔法棒「看定妆照」里。</small>
       <div class="tt-prompt-editor"></div>
       <div class="flex-container">
         <div id="tt-autoimg-now" class="menu_button">给最后一条正文配一张</div>
@@ -580,7 +603,7 @@ function settingsHtml() {
 }
 
 function renderCast() {
-    const box = document.getElementById('tt-autoimg-cast');
+    const box = castPanel?.querySelector('#tt-autoimg-cast');
     if (!box) return;
     const entries = Object.entries(cast());
     if (!entries.length) {
@@ -759,17 +782,70 @@ async function openPromptPopup() {
     }
 }
 
+// 魔法棒「看定妆照」：角色长相档案只放在这个弹窗里，一张角色卡一套
+let castPanel = null;
+
+function getCastPanel() {
+    if (castPanel) return castPanel;
+    castPanel = document.createElement('div');
+    castPanel.className = 'tt-autoimg tt-cast-popup';
+    castPanel.innerHTML = '<h3>看定妆照</h3><small>这张角色卡里每个角色的脸、发型、身材定在这里，之后每张图都照这个画，衣服动作随剧情变。新开聊天也是这一套。英文可以直接改，也可以在「想怎么改」里写中文。</small><div id="tt-autoimg-cast"></div>';
+    const box = castPanel.querySelector('#tt-autoimg-cast');
+    box.addEventListener('click', onCastClick);
+    box.addEventListener('change', onCastChange);
+    return castPanel;
+}
+
+async function openCastPopup() {
+    const context = ctx();
+    if (!context?.callGenericPopup) { toast('info', '弹不出窗口'); return; }
+    const panel = getCastPanel();
+    renderCast();
+    await context.callGenericPopup(panel, context.POPUP_TYPE.TEXT, '', { wide: true, large: true, okButton: '关闭', allowVerticalScrolling: true });
+}
+
+// 魔法棒「自动配图设置」：把扩展页「自动配图」那块内容借到弹窗里，关了再放回去（同一份，不重复绑定）
+async function openSettingsPopup() {
+    const context = ctx();
+    const content = document.querySelector(`#${SETTINGS_ID} .inline-drawer-content`);
+    if (!context?.callGenericPopup || !content) { toast('info', '弹不出窗口，去扩展页「自动配图」里改'); return; }
+    const home = content.parentElement;
+    const next = content.nextSibling;
+    const display = content.style.display;
+    const box = document.createElement('div');
+    box.className = 'tt-autoimg tt-settings-popup';
+    box.innerHTML = '<h3>自动配图设置</h3>';
+    content.style.display = 'block';
+    box.append(content);
+    fillProfiles();
+    try {
+        await context.callGenericPopup(box, context.POPUP_TYPE.TEXT, '', { wide: true, large: true, okButton: '关闭', allowVerticalScrolling: true });
+    } finally {
+        home.insertBefore(content, next);
+        content.style.display = display;
+    }
+}
+
+// 本扩展在魔法棒里的项。贴底顺序在 wand-menu.js 的 OWN_WAND 里管
+const WAND_ITEMS = [
+    { id: WAND_ID, icon: 'fa-pen-to-square', text: '改配图提示词', open: openPromptPopup },
+    { id: 'tt-cast-wand', icon: 'fa-id-badge', text: '看定妆照', open: openCastPopup },
+    { id: 'tt-autoimg-settings-wand', icon: 'fa-sliders', text: '自动配图设置', open: openSettingsPopup },
+];
+
 function mountWandItem() {
-    if (document.getElementById(WAND_ID)) return true;
     const menu = document.getElementById('extensionsMenu');
     if (!menu) return false;
-    const item = document.createElement('div');
-    item.id = WAND_ID;
-    item.className = 'list-group-item flex-container flexGap5 interactable';
-    item.tabIndex = 0;
-    item.innerHTML = '<div class="fa-solid fa-pen-to-square extensionsMenuExtensionButton"></div><span>改配图提示词</span>';
-    item.addEventListener('click', openPromptPopup);
-    menu.appendChild(item);
+    for (const w of WAND_ITEMS) {
+        if (document.getElementById(w.id)) continue;
+        const item = document.createElement('div');
+        item.id = w.id;
+        item.className = 'list-group-item flex-container flexGap5 interactable';
+        item.tabIndex = 0;
+        item.innerHTML = `<div class="fa-solid ${w.icon} extensionsMenuExtensionButton"></div><span>${w.text}</span>`;
+        item.addEventListener('click', () => w.open());
+        menu.appendChild(item);
+    }
     return true;
 }
 
@@ -795,11 +871,6 @@ function mount() {
     // 手机上点下拉框时 focus 不一定先触发，按下就刷一次；连接配置增删改也跟着刷
     ['focus', 'pointerdown', 'touchstart', 'mousedown'].forEach((name) => select.addEventListener(name, fillProfiles, { passive: true }));
     document.querySelector(`#${SETTINGS_ID} .inline-drawer-toggle`)?.addEventListener('click', () => { fillProfiles(); renderCast(); });
-
-    const castBox = document.getElementById('tt-autoimg-cast');
-    castBox.addEventListener('click', onCastClick);
-    castBox.addEventListener('change', onCastChange);
-    renderCast();
 
     bindPromptEditor(document.querySelector(`#${SETTINGS_ID} .tt-prompt-editor`));
     document.getElementById('tt-autoimg-now').addEventListener('click', () => {
@@ -854,11 +925,12 @@ export function cleanupStoryImage() {
     document.removeEventListener('click', onChatClickCapture, true);
     document.querySelectorAll('.tt-img-tools').forEach((el) => el.remove());
     document.getElementById(SETTINGS_ID)?.remove();
-    document.getElementById(WAND_ID)?.remove();
+    WAND_ITEMS.forEach((w) => document.getElementById(w.id)?.remove());
+    castPanel = null;
     promptEditors.clear();
     document.getElementById(QUIET_STYLE_ID)?.remove();
     document.body?.classList.remove('tt-autoimg-quiet');
 }
 
 // 给电脑上的自测脚本用
-export const __test = { cleanTags, plainText, parsePlan, buildPrompt, portraitPrompt, DEFAULT_PROMPT, REVISE_PROMPT, PRESETS, settings, presetText };
+export const __test = { cleanTags, plainText, parsePlan, buildPrompt, portraitPrompt, DEFAULT_PROMPT, REVISE_PROMPT, PRESETS, settings, presetText, cast };
