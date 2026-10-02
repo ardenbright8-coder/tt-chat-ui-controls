@@ -2323,3 +2323,51 @@
         margin-left: auto;
     }
 }
+
+/* v1.15.5: wand menu items get plain names with a one-line note; rarely used ones are
+   hidden here and listed in the extension page block "魔法棒菜单". */
+#extensionsMenu {
+    width: min(92vw, 400px);
+}
+
+#extensionsMenu .tt-wand-hidden {
+    display: none !important;
+}
+
+#extensionsMenu .tt-wand-text {
+    display: flex;
+    flex-direction: column;
+    white-space: normal;
+    line-height: 1.3;
+}
+
+#extensionsMenu .tt-wand-text small {
+    font-size: .72em;
+    opacity: .8;
+    margin-top: 2px;
+}
+
+#tt-wand-settings .tt-wand-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--SmartThemeBorderColor);
+}
+
+#tt-wand-settings .tt-wand-row-text {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+#tt-wand-settings .tt-wand-row-text small {
+    opacity: .75;
+}
+
+#tt-wand-settings .tt-wand-row .checkbox_label,
+#tt-wand-settings .tt-wand-use {
+    flex: none;
+    white-space: nowrap;
+}

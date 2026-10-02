@@ -5,6 +5,7 @@ import { initChatScrollGuard, cleanupChatScrollGuard } from './chat-scroll-guard
 import { initExtensionNamesZh, cleanupExtensionNamesZh } from './extension-names-zh.js';
 import { initStorySummary, cleanupStorySummary } from './story-summary.js';
 import { initStoryImage, cleanupStoryImage } from './story-image.js';
+import { initWandMenu, cleanupWandMenu } from './wand-menu.js';
 
 const EXTENSION_KEY = 'chat-text-color';
 
@@ -805,6 +806,7 @@ export async function init() {
     initExtensionNamesZh();
     initStorySummary();
     initStoryImage();
+    initWandMenu();
     if (initialized) {
         mountUi();
         return;
@@ -819,6 +821,7 @@ export async function cleanup() {
     cleanupExtensionNamesZh();
     cleanupStorySummary();
     cleanupStoryImage();
+    cleanupWandMenu();
     cleanupContextLock();
     cleanupPromptDetachGuard();
     stopMessageBannerFix?.();
