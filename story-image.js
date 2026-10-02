@@ -238,12 +238,15 @@ function parsePlan(reply) {
     const start = text.indexOf('{');
     const end = text.lastIndexOf('}');
     if (start < 0 || end <= start) return null;
-    try {
-        const plan = JSON.parse(text.slice(start, end + 1));
-        return plan && typeof plan === 'object' ? plan : null;
-    } catch {
-        return null;
+    const body = text.slice(start, end + 1);
+    // 第二次：修常见的小毛病再试——中文引号、末尾多一个逗号
+    for (const s of [body, body.replace(/[“”]/g, '"').replace(/,\s*([}\]])/g, '$1')]) {
+        try {
+            const plan = JSON.parse(s);
+            if (plan && typeof plan === 'object') return plan;
+        } catch { /* 试下一种 */ }
     }
+    return null;
 }
 
 function countTag(n, word) {
@@ -361,9 +364,20 @@ async function drawAndAttach(id, type, job = latestJob) {
     if (prevUser?.mes) parts.push(`User's last action:\n${plainText(prevUser.mes).slice(-800)}`);
     parts.push(`Story passage to illustrate:\n${plainText(message.mes).slice(-4000)}`);
 
-    const reply = await askModel(context, [{ role: 'system', content: s.autoImagePrompt }, { role: 'user', content: parts.join('\n\n') }], 4000);
-    const plan = parsePlan(reply);
-    if (!plan) { toast('warning', '这段没配图：写词模型没按格式回答（可能是不肯写）'); return; }
+    // 回得不对就再问一次：长正文时它可能想太久把额度用完、回个空的；偶尔也会格式写歪
+    const messages = [{ role: 'system', content: s.autoImagePrompt }, { role: 'user', content: parts.join('\n\n') }];
+    let reply = '';
+    let plan = null;
+    for (let tries = 0; tries < 2 && !plan; tries++) {
+        if (stale(job)) return;
+        reply = await askModel(context, messages, 8000);
+        plan = parsePlan(reply);
+    }
+    if (!plan) {
+        const said = plainText(reply).replace(/\s+/g, ' ').slice(0, 80);
+        toast('warning', `这段没配图：写词模型两次都没按格式回答。它回的是：${said || '（空的）'}`);
+        return;
+    }
     if (plan.skip) { toast('info', '这段跳过，不配图'); return; }
 
     // 新角色先进档案（长相定下来，这张配图就照它画）
