@@ -2290,3 +2290,36 @@
     font-size: .85em;
     opacity: .75;
 }
+
+/* v1.15.3: phone chat input gets its own full-width row; the left and right
+   button groups (menu, wand, continue, agent, send...) move to the row below. */
+@media (pointer: coarse) {
+    #nonQRFormItems {
+        flex-wrap: wrap;
+        row-gap: 2px;
+    }
+
+    #nonQRFormItems > #send_textarea {
+        order: 0;
+        flex: 1 1 100%;
+        width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
+    }
+
+    #nonQRFormItems > #leftSendForm,
+    #nonQRFormItems > #rightSendForm {
+        width: auto;
+        height: auto;
+        flex-wrap: nowrap;
+    }
+
+    #nonQRFormItems > #leftSendForm {
+        order: 1;
+    }
+
+    #nonQRFormItems > #rightSendForm {
+        order: 2;
+        margin-left: auto;
+    }
+}
