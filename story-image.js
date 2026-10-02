@@ -716,41 +716,101 @@ async function confirmPopup(text) {
     return globalThis.confirm(text);
 }
 
+// 套装列表：内置的（没被删的）+ 自己加的，按用户拖出来的顺序；顺序里没有的（新加的）接在最后。
+// 用户 2026-10-02：常用的拖到下面（离手指近），不常用的放上面。序号按位置现排，不写死在名字里
+const shortName = (name) => String(name).replace(/^[①-⑳]\s*/, '');
+
+function presetList(s) {
+    const hidden = new Set(s.autoImageHiddenPresets || []);
+    const all = [...PRESETS.filter((p) => !hidden.has(p.id)), ...s.autoImageCustomPresets];
+    const byId = new Map(all.map((p) => [p.id, p]));
+    const order = Array.isArray(s.autoImagePresetOrder) ? s.autoImagePresetOrder : [];
+    const out = order.filter((id) => byId.has(id)).map((id) => byId.get(id));
+    for (const p of all) if (!out.includes(p)) out.push(p);
+    return out;
+}
+
+async function askName(title, value) {
+    const context = ctx();
+    return context?.callGenericPopup && context?.POPUP_TYPE?.INPUT !== undefined
+        ? await context.callGenericPopup(title, context.POPUP_TYPE.INPUT, value)
+        : globalThis.prompt(title, value);
+}
+
 function bindPromptEditor(root) {
     if (!root) return null;
     root.innerHTML = `
-  <label>写词套装（画面怎么写：尺度、构图、镜头）</label>
-  <select class="text_pole tt-pe-preset"></select>
+  <label>写词套装（点一下换上；按住右边 ≡ 上下拖，常用的拖到下面）</label>
+  <div class="tt-pe-list"></div>
+  <div class="flex-container">
+    <div class="menu_button tt-pe-add">＋ 新建一套</div>
+    <div class="menu_button tt-pe-del">删除这个套装</div>
+  </div>
+  <small class="tt-pe-restore"></small>
   <label>这套的写词说明（英文，可改；开头要它回 JSON 的那几行别动）</label>
   <small>改完自动存在手机里，换套装、更新扩展都不会动它。</small>
   <textarea class="text_pole tt-pe-text" rows="8"></textarea>
   <div class="flex-container">
     <div class="menu_button tt-pe-saveas">另存为我的套装</div>
-    <div class="menu_button tt-pe-del">删除这个套装</div>
     <div class="menu_button tt-pe-latest">换成扩展里的新版</div>
   </div>`;
-    const presetSel = root.querySelector('.tt-pe-preset');
+    const list = root.querySelector('.tt-pe-list');
     const prompt = root.querySelector('.tt-pe-text');
+    const restore = root.querySelector('.tt-pe-restore');
     const fill = () => {
         const cur = settings();
-        const mine = cur.autoImageCustomPresets.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
-        presetSel.innerHTML = '<optgroup label="内置">' + PRESETS.map((p) => `<option value="${p.id}">${esc(p.name)}</option>`).join('') + '</optgroup>'
-            + (mine ? `<optgroup label="我的">${mine}</optgroup>` : '');
-        presetSel.value = cur.autoImagePresetId;
+        list.innerHTML = presetList(cur).map((p, i) => `
+<div class="tt-pe-item${p.id === cur.autoImagePresetId ? ' active' : ''}" data-id="${esc(p.id)}">
+  <span class="tt-pe-num">${i + 1}</span><span class="tt-pe-name">${esc(shortName(p.name))}</span><span class="tt-pe-grip fa-solid fa-grip-lines" title="按住上下拖"></span>
+</div>`).join('');
+        const hiddenCount = (cur.autoImageHiddenPresets || []).length;
+        restore.textContent = hiddenCount ? `删掉的内置套装 ${hiddenCount} 套，点这里恢复` : '';
+        restore.hidden = !hiddenCount;
         prompt.value = cur.autoImagePrompt;
     };
     const fillOthers = () => promptEditors.forEach((f) => f !== fill && f());
     const fillAll = () => promptEditors.forEach((f) => f());
+    const choose = (id) => {
+        const cur = settings();
+        if (!presetById(id, cur)) return;
+        cur.autoImagePresetId = id;
+        cur.autoImagePrompt = presetText(id, cur);
+        save();
+        fillAll();
+    };
     promptEditors.add(fill);
     fill();
 
-    presetSel.addEventListener('change', () => {
-        const cur = settings();
-        if (!presetById(presetSel.value, cur)) return;
-        cur.autoImagePresetId = presetSel.value;
-        cur.autoImagePrompt = presetText(presetSel.value, cur);
-        save();
-        fillAll();
+    list.addEventListener('click', (event) => {
+        if (event.target.closest('.tt-pe-grip')) return;
+        const row = event.target.closest('.tt-pe-item');
+        if (row) choose(row.dataset.id);
+    });
+    // 按住 ≡ 拖：只挪这个列表自己的行，松手时按新顺序存
+    list.addEventListener('pointerdown', (event) => {
+        const grip = event.target.closest('.tt-pe-grip');
+        if (!grip) return;
+        const row = grip.closest('.tt-pe-item');
+        event.preventDefault();
+        try { grip.setPointerCapture(event.pointerId); } catch { /* 有的设备抓不住，照样能拖 */ }
+        row.classList.add('dragging');
+        const move = (ev) => {
+            const others = [...list.querySelectorAll('.tt-pe-item')].filter((r) => r !== row);
+            const before = others.find((r) => { const b = r.getBoundingClientRect(); return ev.clientY < b.top + b.height / 2; }) || null;
+            if (before ? row.nextElementSibling !== before : list.lastElementChild !== row) list.insertBefore(row, before);
+        };
+        const up = () => {
+            grip.removeEventListener('pointermove', move);
+            grip.removeEventListener('pointerup', up);
+            grip.removeEventListener('pointercancel', up);
+            row.classList.remove('dragging');
+            settings().autoImagePresetOrder = [...list.querySelectorAll('.tt-pe-item')].map((r) => r.dataset.id);
+            save();
+            fillAll();
+        };
+        grip.addEventListener('pointermove', move);
+        grip.addEventListener('pointerup', up);
+        grip.addEventListener('pointercancel', up);
     });
     // 边打边存：手机上关弹窗时不一定先触发 change，等它会丢字
     prompt.addEventListener('input', () => {
@@ -764,43 +824,55 @@ function bindPromptEditor(root) {
         save();
     });
     prompt.addEventListener('change', fillOthers);
+    // ＋ 新建：从空白模板起一套，名字默认「我的套装 N」，新建完切过去直接写
+    root.querySelector('.tt-pe-add').addEventListener('click', async () => {
+        const cur = settings();
+        const name = await askName('给新套装起个名字', `我的套装 ${cur.autoImageCustomPresets.length + 1}`);
+        if (typeof name !== 'string' || !name.trim()) return;
+        const preset = { id: 'c' + Date.now(), name: name.trim(), text: BLANK_TEXT };
+        cur.autoImageCustomPresets.push(preset);
+        choose(preset.id);
+        prompt.focus();
+        toast('success', `新建好了：${preset.name}，在下面接着写画风`);
+    });
     root.querySelector('.tt-pe-latest').addEventListener('click', async () => {
         const cur = settings();
         const builtIn = PRESETS.find((p) => p.id === cur.autoImagePresetId);
-        if (!builtIn) { toast('info', '自己另存的套装没有扩展版，只能自己改'); return; }
+        if (!builtIn) { toast('info', '自己加的套装没有扩展版，只能自己改'); return; }
         if (cur.autoImageMyTexts[builtIn.id] === builtIn.text) { toast('info', '这套已经是扩展里的版本了'); return; }
-        if (!await confirmPopup(`用扩展里的新版换掉「${builtIn.name}」？你在这套上改的会被替换掉。`)) return;
+        if (!await confirmPopup(`用扩展里的新版换掉「${shortName(builtIn.name)}」？你在这套上改的会被替换掉。`)) return;
         cur.autoImageMyTexts[builtIn.id] = builtIn.text;
         cur.autoImagePrompt = builtIn.text;
         save();
         fillAll();
-        toast('success', `「${builtIn.name}」换成扩展里的版本了`);
+        toast('success', `「${shortName(builtIn.name)}」换成扩展里的版本了`);
     });
     root.querySelector('.tt-pe-saveas').addEventListener('click', async () => {
-        const context = ctx();
-        const name = context?.callGenericPopup && context?.POPUP_TYPE?.INPUT !== undefined
-            ? await context.callGenericPopup('给这套起个名字', context.POPUP_TYPE.INPUT, '我的套装')
-            : globalThis.prompt('给这套起个名字', '我的套装');
+        const name = await askName('给这套起个名字', '我的套装');
         if (typeof name !== 'string' || !name.trim()) return;
         const cur = settings();
         const preset = { id: 'c' + Date.now(), name: name.trim(), text: prompt.value.trim() || cur.autoImagePrompt };
         cur.autoImageCustomPresets.push(preset);
-        cur.autoImagePresetId = preset.id;
-        cur.autoImagePrompt = preset.text;
-        save();
-        fillAll();
+        choose(preset.id);
         toast('success', `存好了：${preset.name}`);
     });
-    root.querySelector('.tt-pe-del').addEventListener('click', () => {
+    // 删除：自己加的直接删；内置的只是藏起来（扩展里还带着它），下面能点「恢复」
+    root.querySelector('.tt-pe-del').addEventListener('click', async () => {
         const cur = settings();
-        const i = cur.autoImageCustomPresets.findIndex((p) => p.id === cur.autoImagePresetId);
-        if (i < 0) { toast('info', '内置套装删不了，只能删自己另存的'); return; }
-        const [gone] = cur.autoImageCustomPresets.splice(i, 1);
-        cur.autoImagePresetId = 'default';
-        cur.autoImagePrompt = presetText('default', cur);
+        const id = cur.autoImagePresetId;
+        if (presetList(cur).length <= 1) { toast('info', '至少留一套'); return; }
+        const preset = presetById(id, cur);
+        if (!await confirmPopup(`删掉「${shortName(preset?.name || id)}」？`)) return;
+        const i = cur.autoImageCustomPresets.findIndex((p) => p.id === id);
+        if (i >= 0) cur.autoImageCustomPresets.splice(i, 1);
+        else cur.autoImageHiddenPresets = [...new Set([...(cur.autoImageHiddenPresets || []), id])];
+        choose(presetList(cur)[0].id);
+        toast('success', `删掉了：${shortName(preset?.name || id)}`);
+    });
+    restore.addEventListener('click', () => {
+        settings().autoImageHiddenPresets = [];
         save();
         fillAll();
-        toast('success', `删掉了：${gone.name}`);
     });
     return fill;
 }

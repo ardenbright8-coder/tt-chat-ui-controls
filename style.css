@@ -2415,3 +2415,56 @@
         padding-bottom: calc(var(--swipeCounterHeight, 15px) + var(--swipeCounterMargin, 5px));
     }
 }
+
+/* v1.16.3: prompt sets as a list the user can tap, add to, delete from and drag to reorder. */
+.tt-pe-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 4px 0 6px;
+}
+
+.tt-pe-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 10px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.tt-pe-item.active {
+    border-color: var(--SmartThemeQuoteColor, #e0a050);
+    background: rgba(255, 255, 255, .08);
+    font-weight: 600;
+}
+
+.tt-pe-item.dragging {
+    opacity: .6;
+}
+
+.tt-pe-num {
+    min-width: 1.4em;
+    opacity: .6;
+}
+
+.tt-pe-name {
+    flex: 1;
+    min-width: 0;
+}
+
+.tt-pe-grip {
+    flex: none;
+    padding: 6px 8px;
+    opacity: .6;
+    cursor: grab;
+    touch-action: none;
+}
+
+.tt-pe-restore {
+    cursor: pointer;
+    text-decoration: underline;
+    opacity: .75;
+}
