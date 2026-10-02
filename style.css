@@ -2371,3 +2371,13 @@
     flex: none;
     white-space: nowrap;
 }
+
+/* v1.15.7: world book panel shows which book the current character uses. */
+#tt-char-world-banner {
+    margin: 4px 0 6px;
+    padding: 6px 8px;
+    border-radius: 8px;
+    border: 1px solid var(--SmartThemeBorderColor);
+    font-size: .9em;
+    opacity: .9;
+}
