@@ -9,7 +9,7 @@
 const EXTENSION_KEY = 'chat-text-color';
 const SETTINGS_ID = 'tt-autoimg-settings';
 const CAST_KEY = 'tt_autoimg_cast';
-const PROMPT_VERSION = 4;
+const PROMPT_VERSION = 5;
 const ctx = () => globalThis.SillyTavern?.getContext?.();
 
 // 画面要亮：模型和写词都容易往「夜里、烛光、昏暗」走，出来又灰又压抑
@@ -24,7 +24,9 @@ Reply with ONLY one JSON object, no markdown, no explanation:
 Rules:
 - skip: true if nothing visual is worth drawing, or if the passage depicts sexual activity that is forced, coerced or non-consensual. Then leave the other fields empty.
 - rating: safe / sensitive / nsfw / explicit. Use explicit whenever genitals or sex are visible; if the passage shows or clearly implies consensual intercourse, use explicit even when the wording is poetic.
-- people: everyone visible, left to right. name = the name as written in the story (keep Chinese names as they are), or a short role such as "the man". sex = female or male. The user's own character ("you" / 你 in the story) is a man: when he is in the picture (being kissed, touched, held, in bed with her), list him as {"name": "the man", "sex": "male"}; leave him out only for pov shots.
+- people: everyone visible, left to right. name = the name as written in the story (keep Chinese names as they are), or a short role such as "the man". sex = female or male.
+- The picture is about the women. Men stay out of frame whenever possible. The user's own character ("you" / 你 in the story) is a man; any man is listed as {"name": "the man", "sex": "male"} ONLY when his body is needed for sexual contact (penetration, fellatio, groping, being straddled), and then he is shown only in part: first-person pov, his face and head out of frame, only his hands, hips and penis visible. In every other moment (talking, kissing, hugging, sitting together) leave him out of the picture and show only her reaction. scene never describes his face, hair or full body.
+- Vary the pose and the camera from picture to picture (different position, angle and framing each time) instead of repeating the same one.
 - new_looks: ONLY for female characters that are NOT in the known cast list. For each, give a fixed appearance as tags: mature female, beautiful detailed face, face shape, eye shape and color, hair color, hair length and style, body (unless the story says otherwise: large breasts, narrow waist, wide hips, curvy), skin, one distinctive mark. No clothing, no expression. Never redescribe the known cast.
 - scene never contains hair, eye, face or body-shape tags; those come from the cast list.
 - Always name the shot (portrait, upper body, cowboy shot, full body, close-up) and the angle. Earlier tags weigh more, so put the most important visual first.
@@ -49,7 +51,7 @@ Style of this set: elegant and suggestive, like a game key visual.
     sentence: `
 Style of this set: natural-language description (the image model understands full English sentences, and sentences keep several people from mixing up).
 - scene: 2-4 English sentences that describe exactly what the camera sees: who stands or lies where, what each one wears now, their expressions, what their hands and bodies are doing, then the place and light. After the sentences add 8-15 Danbooru tags for shot, angle and key details.
-- Refer to people by position and sex ("the woman on the left", "the man behind her"), never by Chinese name inside the sentences. If a man is present, say clearly that he is a man.
+- Refer to people by position and sex ("the woman on the left", "the man's hands"), never by Chinese name inside the sentences. If a man is present, describe only the parts of him in frame (his hands, hips, penis) from a first-person view, never his face.
 - Describe the light as bright and warm in the sentences (soft lantern glow filling the room, warm sunlight), unless the passage is clearly dark.
 - Same sensual default as an adult romance: tempting clothing, seductive looks, attractive poses; explicit anatomy words when the passage is a consensual sex scene.`,
     camera: `
@@ -272,7 +274,7 @@ function buildPrompt(plan, cast) {
     if (boys.length) head.push(countTag(boys.length, 'boy'));
     if (girls.length && boys.length) head.push('hetero');
     if (!girls.length && !boys.length) head.push('no humans');
-    const tail = [boys.length ? 'mature male' : '', cleanTags(plan.scene), BRIGHT_TAGS];
+    const tail = [boys.length ? 'pov, faceless male, male head out of frame' : '', cleanTags(plan.scene), BRIGHT_TAGS];
     let looks = girls.map((g) => cleanTags(cast[g.name]?.look || plan.new_looks?.[g.name] || 'mature female'));
     if (looks.length >= 3) looks = looks.map(shortLook);
     const lookText = (list) => list.length === 1 ? list[0]
