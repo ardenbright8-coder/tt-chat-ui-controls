@@ -9,21 +9,21 @@
 const EXTENSION_KEY = 'chat-text-color';
 const SETTINGS_ID = 'tt-autoimg-settings';
 const CAST_KEY = 'tt_autoimg_cast';
-const PROMPT_VERSION = 7;
+const PROMPT_VERSION = 8;
 const ctx = () => globalThis.SillyTavern?.getContext?.();
 
 // 画面要亮：模型和写词都容易往「夜里、烛光、昏暗」走，出来又灰又压抑
 const BRIGHT_TAGS = 'bright lighting, well-lit, warm colors, vivid colors';
 
 // 写词说明 = 公共部分（回 JSON 的格式、跳过规则、长相档案规则）+ 各套装自己的「画面怎么写」。
-// 公共部分每套都一样，保证长相照档案画、强迫场面跳过；套装只换画面风格。
+// 公共部分每套都一样，保证长相照档案画；套装只换画面风格。画不画、画多露骨交给写词模型自己判断，这里不加内容限制。
 const BASE_RULES = `You plan ONE illustration of a story passage for a local anime-style image model that reads Danbooru tags.
 Reply with ONLY one JSON object, no markdown, no explanation:
 {"skip": false, "rating": "", "people": [{"name": "", "sex": "female"}], "new_looks": {}, "scene": ""}
 
 Rules:
-- skip: true if nothing visual is worth drawing, or if the passage depicts sexual activity that is forced, coerced or non-consensual. Then leave the other fields empty.
-- rating: safe / sensitive / nsfw / explicit. Use explicit whenever genitals or sex are visible; if the passage shows or clearly implies consensual intercourse, use explicit even when the wording is poetic.
+- skip: true if nothing visual is worth drawing. Then leave the other fields empty.
+- rating: safe / sensitive / nsfw / explicit. Use explicit whenever genitals or sex are visible; if the passage shows or clearly implies intercourse, use explicit even when the wording is poetic.
 - people: everyone visible, left to right. name = the name as written in the story (keep Chinese names as they are), or a short role such as "the man". sex = female or male.
 - The picture is about the women. Men stay out of frame whenever possible. The user's own character ("you" / 你 in the story) is a man; any man is listed as {"name": "the man", "sex": "male"} ONLY when his body is needed for sexual contact (penetration, fellatio, groping, being straddled), and then he is shown only in part: first-person pov, his face and head out of frame, only his hands, hips and penis visible. In every other moment (talking, kissing, hugging, sitting together) leave him out of the picture and show only her reaction. scene never describes his face, hair or full body. Never pick a framing where his back, chest or face is the main subject (for example her hugging him from behind seen from outside): reframe it so the camera is his eyes and the picture shows her face and body.
 - Draw ONE moment: the last and most important beat of the passage. One action only; never mix several positions or sex acts in one picture. Use only what the passage actually describes (acts, clothes, props); never add things that are not in the text, such as futanari, yuri, masturbation, watching or extra partners.
@@ -56,7 +56,7 @@ Style of this set: natural-language description (the image model understands ful
 - scene: 2-4 English sentences that describe exactly what the camera sees: who stands or lies where, what each one wears now, their expressions, what their hands and bodies are doing, then the place and light. After the sentences add 8-15 Danbooru tags for shot, angle and key details.
 - Refer to people by position and sex ("the woman on the left", "the man's hands"), never by Chinese name inside the sentences. If a man is present, describe only the parts of him in frame (his hands, hips, penis) from a first-person view, never his face.
 - Describe the light as bright and warm in the sentences (soft lantern glow filling the room, warm sunlight), unless the passage is clearly dark.
-- Same sensual default as an adult romance: tempting clothing, seductive looks, attractive poses; explicit anatomy words when the passage is a consensual sex scene.`,
+- Same sensual default as an adult romance: tempting clothing, seductive looks, attractive poses; explicit anatomy words when the passage is a sex scene.`,
     camera: `
 Style of this set: cinematic camera work.
 - scene: English Danbooru tags, lowercase, comma-separated, 20-35 tags, starting with a strong shot choice, then clothing, expression, pose and action, place, light.
@@ -103,6 +103,8 @@ function settings() {
     if (!Array.isArray(s.autoImageCustomPresets)) s.autoImageCustomPresets = [];
     if (typeof s.autoImagePresetId !== 'string' || !presetById(s.autoImagePresetId, s)) s.autoImagePresetId = 'default';
     if (s.autoImagePromptVersion !== PROMPT_VERSION || typeof s.autoImagePrompt !== 'string' || !s.autoImagePrompt.trim()) {
+        // v8 去掉了内容限制，自己另存的套装里那几句也一起删
+        for (const p of s.autoImageCustomPresets) if (typeof p?.text === 'string') p.text = stripOldLimits(p.text);
         s.autoImagePrompt = presetById(s.autoImagePresetId, s).text;
         s.autoImagePromptVersion = PROMPT_VERSION;
     }
@@ -110,6 +112,14 @@ function settings() {
     if (typeof s.autoImagePortrait !== 'boolean') s.autoImagePortrait = true;
     if (typeof s.autoImageCleanView !== 'boolean') s.autoImageCleanView = true;
     return s;
+}
+
+// v8 以前写词说明里的内容限制（强迫 / 非自愿就跳过、只有自愿才算露骨），旧套装里有就删掉
+function stripOldLimits(text) {
+    return text
+        .replace(', or if the passage depicts sexual activity that is forced, coerced or non-consensual', '')
+        .replace('clearly implies consensual intercourse', 'clearly implies intercourse')
+        .replace('when the passage is a consensual sex scene', 'when the passage is a sex scene');
 }
 
 // 内置套装 + 自己另存的套装
