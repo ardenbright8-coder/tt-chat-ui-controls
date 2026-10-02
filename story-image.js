@@ -9,7 +9,7 @@
 const EXTENSION_KEY = 'chat-text-color';
 const SETTINGS_ID = 'tt-autoimg-settings';
 const CAST_KEY = 'tt_autoimg_cast';
-const PROMPT_VERSION = 6;
+const PROMPT_VERSION = 7;
 const ctx = () => globalThis.SillyTavern?.getContext?.();
 
 // 画面要亮：模型和写词都容易往「夜里、烛光、昏暗」走，出来又灰又压抑
@@ -25,9 +25,9 @@ Rules:
 - skip: true if nothing visual is worth drawing, or if the passage depicts sexual activity that is forced, coerced or non-consensual. Then leave the other fields empty.
 - rating: safe / sensitive / nsfw / explicit. Use explicit whenever genitals or sex are visible; if the passage shows or clearly implies consensual intercourse, use explicit even when the wording is poetic.
 - people: everyone visible, left to right. name = the name as written in the story (keep Chinese names as they are), or a short role such as "the man". sex = female or male.
-- The picture is about the women. Men stay out of frame whenever possible. The user's own character ("you" / 你 in the story) is a man; any man is listed as {"name": "the man", "sex": "male"} ONLY when his body is needed for sexual contact (penetration, fellatio, groping, being straddled), and then he is shown only in part: first-person pov, his face and head out of frame, only his hands, hips and penis visible. In every other moment (talking, kissing, hugging, sitting together) leave him out of the picture and show only her reaction. scene never describes his face, hair or full body.
+- The picture is about the women. Men stay out of frame whenever possible. The user's own character ("you" / 你 in the story) is a man; any man is listed as {"name": "the man", "sex": "male"} ONLY when his body is needed for sexual contact (penetration, fellatio, groping, being straddled), and then he is shown only in part: first-person pov, his face and head out of frame, only his hands, hips and penis visible. In every other moment (talking, kissing, hugging, sitting together) leave him out of the picture and show only her reaction. scene never describes his face, hair or full body. Never pick a framing where his back, chest or face is the main subject (for example her hugging him from behind seen from outside): reframe it so the camera is his eyes and the picture shows her face and body.
 - Draw ONE moment: the last and most important beat of the passage. One action only; never mix several positions or sex acts in one picture. Use only what the passage actually describes (acts, clothes, props); never add things that are not in the text, such as futanari, yuri, masturbation, watching or extra partners.
-- At most 3 people in frame. If more are present, keep the ones at the center of this moment and leave the others out.
+- Include every woman who takes part in this moment (up to 5); do not drop women who are in the scene. If more than 5 are present, keep the 5 at the center of the action.
 - Place: always give concrete setting details that match the story's era. Unless the story is clearly modern, it is ancient / fantasy China: name the room and its period details (carved wooden lattice windows, paper lanterns, folding screen, canopy bed with silk curtains, low wooden table, incense burner, courtyard, pavilion). Never modern furniture, electric lamps or glass windows in such a story.
 - Vary the pose and the camera from picture to picture (different position, angle and framing each time) instead of repeating the same one.
 - new_looks: ONLY for female characters that are NOT in the known cast list. For each, give a fixed appearance as tags: mature female, beautiful detailed face, face shape, eye shape and color, hair color, hair length and style, body (unless the story says otherwise: large breasts, narrow waist, wide hips, curvy), skin, one distinctive mark. No clothing, no expression. Never redescribe the known cast.
@@ -270,8 +270,8 @@ const PROMPT_LIMIT = 1800;
 // 动作、地点、光线（scene）一个字都不许被截掉——以前人一多就把它们挤出上限，图只剩白底
 function buildPrompt(plan, cast) {
     const people = Array.isArray(plan.people) ? plan.people.filter((p) => p && p.name) : [];
-    // 同框最多 3 个女人：再多模型就糊成一团、人数也画错
-    const girls = people.filter((p) => String(p.sex).toLowerCase() !== 'male').slice(0, 3);
+    // 同框最多 5 个女人（用户要的；人越多越容易糊，3 个以上长相会缩短）
+    const girls = people.filter((p) => String(p.sex).toLowerCase() !== 'male').slice(0, 5);
     const boys = people.filter((p) => String(p.sex).toLowerCase() === 'male');
     const head = [cleanTags(plan.rating) || 'sensitive'];
     if (girls.length) head.push(countTag(girls.length, 'girl'));
