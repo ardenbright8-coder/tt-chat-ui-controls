@@ -2397,3 +2397,21 @@
     flex: 1;
     min-width: 0;
 }
+
+/* v1.16.0: on phones, text and chat images run to the bubble's right edge. The tavern kept a
+   30px right strip for the regenerate arrow + swipe counter in the bottom-right corner;
+   instead the last message gets room under its content so that corner sits below it. */
+@media (pointer: coarse) {
+    #chat .mes .mes_text,
+    #chat .mes .mes_media_wrapper {
+        padding-right: 0;
+    }
+
+    #chat .mes.last_mes .mes_block {
+        padding-bottom: calc(25px + var(--swipeCounterHeight, 15px) + var(--swipeCounterMargin, 5px));
+    }
+
+    body.swipeAllMessages #chat .mes:not(.last_mes) .mes_block {
+        padding-bottom: calc(var(--swipeCounterHeight, 15px) + var(--swipeCounterMargin, 5px));
+    }
+}

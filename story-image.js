@@ -160,8 +160,8 @@ function applyQuietToast() {
         + ' #tt-autoimg-cast .tt-cast-head { display: flex; gap: 8px; align-items: center; }'
         + ' #tt-autoimg-cast .tt-cast-head img { width: 64px; height: 88px; object-fit: cover; border-radius: 6px; }'
         + ' #tt-autoimg-cast textarea, #tt-autoimg-cast input { width: 100%; margin-top: 4px; }'
-        // 干净看图：图片铺满气泡宽度，点图不放大，图上酒馆自带的两排按钮（上面放大 / 说明 / 删除，下面「< 1/1 >」翻图）都藏起来，只留右上角「复制」。
-        // 右边那条空（--mes-right-spacing）是酒馆留给右下角「>」重新生成和「1/1」的，保持原样别占
+        // 干净看图：图片铺满气泡宽度，点图不放大，图上酒馆自带的两排按钮（上面放大 / 说明 / 删除，下面「< 1/1 >」翻图）都藏起来，只留右上角「存到手机」。
+        // 手机上图和字铺到右边、最后一条底下给「>」留位置，在 style.css 的 v1.16.0 那段
         + ' body.tt-autoimg-clean .mes .mes_img_container { width: 100%; }'
         + ' body.tt-autoimg-clean .mes .mes_img { width: 100%; max-height: 80vh; object-fit: contain; cursor: default; }'
         + ' body.tt-autoimg-clean .mes .mes_img_controls, body.tt-autoimg-clean .mes .mes_img_swipes { display: none !important; }'
@@ -497,15 +497,16 @@ async function reviseLook(name, request) {
     }
 }
 
-// ---------------------------------------------------------------- 聊天里的图：只留右上角「复制」一个小按钮
+// ---------------------------------------------------------------- 聊天里的图：只留右上角「存到手机」一个小按钮
 
 let chatObserver = null;
 
 function addImageTools(root) {
     root.querySelectorAll?.('.mes_img_container').forEach((box) => {
-        box.querySelector(':scope > .tt-img-tools .tt-img-redo')?.remove();
+        const old = box.querySelector(':scope > .tt-img-tools');
+        if (old && !old.querySelector('.tt-img-save')) old.remove();
         if (box.querySelector(':scope > .tt-img-tools')) return;
-        box.insertAdjacentHTML('beforeend', '<div class="tt-img-tools"><div class="tt-img-copy fa-solid fa-copy" title="复制图片"></div></div>');
+        box.insertAdjacentHTML('beforeend', '<div class="tt-img-tools"><div class="tt-img-save fa-solid fa-download" title="存到手机"></div></div>');
     });
 }
 
@@ -519,38 +520,33 @@ function mediaOf(el) {
     return { id, index, message, item, img: box?.querySelector('.mes_img') };
 }
 
-async function toPngBlob(src) {
+// 存到手机：走酒馆自己导出文件那一套（TauriTavern 在安卓上存进「下载」，存完自己弹提示说存哪了）；
+// 那一套加载不到时（比如电脑浏览器里的老版酒馆）退回浏览器下载。手机上复制图片到剪贴板没用，2026-10-02 换掉了复制
+async function saveImage(src) {
     const blob = await (await fetch(src)).blob();
-    if (blob.type === 'image/png') return blob;
-    const bitmap = await createImageBitmap(blob);
-    const canvas = document.createElement('canvas');
-    canvas.width = bitmap.width;
-    canvas.height = bitmap.height;
-    canvas.getContext('2d').drawImage(bitmap, 0, 0);
-    return await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
-}
-
-async function copyImage(src) {
-    const png = await toPngBlob(src);
+    const ext = (blob.type.split('/')[1] || 'png').replace('jpeg', 'jpg');
+    const name = `酒馆配图-${Date.now()}.${ext}`;
     try {
-        await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
-        toast('success', '图片已复制');
+        const { download } = await import('../../../utils.js');
+        await download(blob, name, blob.type || 'image/png', { throwOnFailure: true });
         return;
-    } catch { /* 手机上不一定能往剪贴板放图片，下面改成保存 */ }
+    } catch (error) {
+        console.warn('[酒馆拓展] 酒馆自带的导出用不了，改用浏览器下载', error);
+    }
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(png);
-    a.download = `酒馆配图-${Date.now()}.png`;
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
     document.body.append(a);
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 30000);
-    toast('info', '这台设备不支持复制图片，已改成保存图片');
+    toast('success', '图片已保存');
 }
 
-// 捕获阶段拦：点图片本身不再弹放大窗口；点「复制」复制这张
+// 捕获阶段拦：点图片本身不再弹放大窗口；点「存到手机」存这张
 function onChatClickCapture(event) {
     if (!settings().autoImageCleanView) return;
-    const tool = event.target.closest?.('.tt-img-copy');
+    const tool = event.target.closest?.('.tt-img-save');
     const onImage = event.target.closest?.('.mes_img');
     if (!tool && !onImage) return;
     event.stopPropagation();
@@ -558,7 +554,7 @@ function onChatClickCapture(event) {
     if (!tool) return;
     const { item, img } = mediaOf(tool);
     const src = item?.url || img?.getAttribute('src');
-    if (src) copyImage(src).catch((error) => toast('error', '复制失败：' + (error?.message || error)));
+    if (src) saveImage(src).catch((error) => toast('error', '保存失败：' + (error?.message || error)));
 }
 
 function watchChatImages() {
@@ -588,7 +584,7 @@ function settingsHtml() {
       <label class="checkbox_label"><input type="checkbox" id="tt-autoimg-on"> <span>每条正文自动配一张图</span></label>
       <label class="checkbox_label"><input type="checkbox" id="tt-autoimg-portrait"> <span>新角色出场后补一张定妆照（在魔法棒「看定妆照」里看，不进聊天）</span></label>
       <label class="checkbox_label"><input type="checkbox" id="tt-autoimg-quiet"> <span>画图时不弹「正在生成图像…」提示</span></label>
-      <label class="checkbox_label"><input type="checkbox" id="tt-autoimg-clean"> <span>聊天里的图铺满气泡，点图不放大，图上只留右上角「复制」</span></label>
+      <label class="checkbox_label"><input type="checkbox" id="tt-autoimg-clean"> <span>聊天里的图铺满气泡，点图不放大，图上只留右上角「存到手机」</span></label>
       <label for="tt-autoimg-profile">写画图词用哪个连接配置</label>
       <select id="tt-autoimg-profile" class="text_pole"></select>
       <small id="tt-autoimg-hint"></small>
