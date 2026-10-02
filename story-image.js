@@ -160,11 +160,11 @@ function applyQuietToast() {
         + ' #tt-autoimg-cast .tt-cast-head { display: flex; gap: 8px; align-items: center; }'
         + ' #tt-autoimg-cast .tt-cast-head img { width: 64px; height: 88px; object-fit: cover; border-radius: 6px; }'
         + ' #tt-autoimg-cast textarea, #tt-autoimg-cast input { width: 100%; margin-top: 4px; }'
-        // 干净看图：图片铺满气泡宽度，点图不放大，原来那排放大 / 说明 / 删除按钮藏起来，只留右上角两个小按钮
-        + ' body.tt-autoimg-clean .mes .mes_media_wrapper { padding-right: 0; }'
+        // 干净看图：图片铺满气泡宽度，点图不放大，图上酒馆自带的两排按钮（上面放大 / 说明 / 删除，下面「< 1/1 >」翻图）都藏起来，只留右上角「复制」。
+        // 右边那条空（--mes-right-spacing）是酒馆留给右下角「>」重新生成和「1/1」的，保持原样别占
         + ' body.tt-autoimg-clean .mes .mes_img_container { width: 100%; }'
         + ' body.tt-autoimg-clean .mes .mes_img { width: 100%; max-height: 80vh; object-fit: contain; cursor: default; }'
-        + ' body.tt-autoimg-clean .mes .mes_img_controls { display: none !important; }'
+        + ' body.tt-autoimg-clean .mes .mes_img_controls, body.tt-autoimg-clean .mes .mes_img_swipes { display: none !important; }'
         + ' .tt-img-tools { display: none; }'
         + ' body.tt-autoimg-clean .tt-img-tools { display: flex; position: absolute; top: 6px; right: 6px; gap: 6px; z-index: 3; }'
         + ' .tt-img-tools > div { width: 30px; height: 30px; border-radius: 50%; background: rgba(0,0,0,.35); color: #fff; opacity: .65;'
@@ -472,14 +472,15 @@ async function reviseLook(name, request) {
     }
 }
 
-// ---------------------------------------------------------------- 聊天里的图：只留「复制」「改词重画」两个小按钮
+// ---------------------------------------------------------------- 聊天里的图：只留右上角「复制」一个小按钮
 
 let chatObserver = null;
 
 function addImageTools(root) {
     root.querySelectorAll?.('.mes_img_container').forEach((box) => {
+        box.querySelector(':scope > .tt-img-tools .tt-img-redo')?.remove();
         if (box.querySelector(':scope > .tt-img-tools')) return;
-        box.insertAdjacentHTML('beforeend', '<div class="tt-img-tools"><div class="tt-img-copy fa-solid fa-copy" title="复制图片"></div><div class="tt-img-redo fa-solid fa-pen" title="改画图词，重画这张"></div></div>');
+        box.insertAdjacentHTML('beforeend', '<div class="tt-img-tools"><div class="tt-img-copy fa-solid fa-copy" title="复制图片"></div></div>');
     });
 }
 
@@ -521,42 +522,18 @@ async function copyImage(src) {
     toast('info', '这台设备不支持复制图片，已改成保存图片');
 }
 
-async function redrawImage(id, index, prompt) {
-    const context = ctx();
-    const message = context.chat[id];
-    const url = await draw(context, cleanTags(prompt));
-    if (!url || context.chat[id] !== message || !message.extra?.media?.[index]) return;
-    message.extra.media[index] = { ...message.extra.media[index], url, title: cleanTags(prompt) };
-    const el = globalThis.jQuery?.(`#chat .mes[mesid="${id}"]`);
-    if (el?.length) context.appendMediaToMessage(message, el);
-    await context.saveChat();
-    toast('success', '重画好了');
-}
-
-// 捕获阶段拦：点图片本身不再弹放大窗口；点两个小按钮各干各的
+// 捕获阶段拦：点图片本身不再弹放大窗口；点「复制」复制这张
 function onChatClickCapture(event) {
     if (!settings().autoImageCleanView) return;
-    const tool = event.target.closest?.('.tt-img-copy, .tt-img-redo');
+    const tool = event.target.closest?.('.tt-img-copy');
     const onImage = event.target.closest?.('.mes_img');
     if (!tool && !onImage) return;
     event.stopPropagation();
     event.preventDefault();
     if (!tool) return;
-    const { id, index, item, img } = mediaOf(tool);
-    if (tool.classList.contains('tt-img-copy')) {
-        const src = item?.url || img?.getAttribute('src');
-        if (src) copyImage(src).catch((error) => toast('error', '复制失败：' + (error?.message || error)));
-        return;
-    }
-    const context = ctx();
-    const ask = context?.callGenericPopup && context?.POPUP_TYPE?.INPUT !== undefined
-        ? context.callGenericPopup('改画图词（英文标签），点确定就按新的重画这张', context.POPUP_TYPE.INPUT, item?.title || '', { rows: 8, wide: true })
-        : Promise.resolve(globalThis.prompt('改画图词（英文标签），确定后重画这张', item?.title || ''));
-    ask.then((text) => {
-        if (typeof text !== 'string' || !text.trim()) return;
-        toast('info', '按新的画图词重画，大约一分钟');
-        enqueue(() => redrawImage(id, index, text), '重画');
-    });
+    const { item, img } = mediaOf(tool);
+    const src = item?.url || img?.getAttribute('src');
+    if (src) copyImage(src).catch((error) => toast('error', '复制失败：' + (error?.message || error)));
 }
 
 function watchChatImages() {
@@ -586,7 +563,7 @@ function settingsHtml() {
       <label class="checkbox_label"><input type="checkbox" id="tt-autoimg-on"> <span>每条正文自动配一张图</span></label>
       <label class="checkbox_label"><input type="checkbox" id="tt-autoimg-portrait"> <span>新角色出场后补一张定妆照（只在下面「角色长相」里看，不进聊天）</span></label>
       <label class="checkbox_label"><input type="checkbox" id="tt-autoimg-quiet"> <span>画图时不弹「正在生成图像…」提示</span></label>
-      <label class="checkbox_label"><input type="checkbox" id="tt-autoimg-clean"> <span>聊天里的图铺满气泡，点图不放大，右上角只留「复制」「改词重画」</span></label>
+      <label class="checkbox_label"><input type="checkbox" id="tt-autoimg-clean"> <span>聊天里的图铺满气泡，点图不放大，图上只留右上角「复制」</span></label>
       <label for="tt-autoimg-profile">写画图词用哪个连接配置</label>
       <select id="tt-autoimg-profile" class="text_pole"></select>
       <small id="tt-autoimg-hint"></small>
