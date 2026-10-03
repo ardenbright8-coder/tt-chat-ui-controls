@@ -1,5 +1,5 @@
 // 出图套餐（v1.17.0）：手机上看电脑「个人娱乐 → 酒馆 → 生图模型」那块的套餐和版本，点一下换上（电脑跟着换），看最近出的图。
-// 细调参数、换样图封面还在电脑上做，手机只看和选。界面照电脑那块：上面一排大卡，点开下面一排版本卡。
+// 细调参数、换样图封面还在电脑上做，手机只看和选。界面照电脑那块（套餐卡点开下面一排版本卡），手机上排紧凑：见 render 上面那段。
 // 叫法照 C:\A-AI-gongju\geren-yule\00_叫什么（咱俩说话的统一叫法）.md：套餐 / 大卡 / 版本 / 正在用 / 换上 / 样图 / 封面。
 //
 // 🚨 怎么连电脑：安卓正式版酒馆不让页面直接连 http 地址（usesCleartextTraffic=false），
@@ -68,53 +68,60 @@ function badge(img) {
     return [kind, img.version || ''].filter(Boolean).join(' · ');
 }
 
-function render() {
-    if (!panel || !state) return;
-    const sets = panel.querySelector('.tt-tc-sets');
-    const box = panel.querySelector('.tt-tc-vers');
-    if (state.error) {
-        sets.innerHTML = `<div class="tt-tc-empty">${esc(state.error)}</div>`;
-        box.innerHTML = '';
-    } else if (!state.sets) {
-        sets.innerHTML = '<div class="tt-tc-empty">正在问电脑……</div>';
-        box.innerHTML = '';
-    } else {
-        sets.innerHTML = state.sets.map((s) => {
-            const using = s.versions.find((v) => v.id === state.current);
-            const pic = s.cover ? `<img src="${esc(s.cover)}" alt="">` : '<div class="tt-tc-nopic">还没封面</div>';
-            return `
-<div class="tt-tc-set${using ? ' using' : ''}${state.open === s.id ? ' open' : ''}" data-set="${esc(s.id)}">
+// 一页排完（v1.17.2，用户 10-03 挑的方案 A）：上面一行小套餐卡（一行四个）、下面一排版本卡（左右划），再往下全是最近出的图。
+// 用户：「面板每次要划半天……整体稍微紧凑点」「还是这个吧，这个挺好的」
+function setsPage() {
+    if (state.error) return `<div class="tt-tc-empty">${esc(state.error)}</div>`;
+    if (!state.sets) return '<div class="tt-tc-empty">正在问电脑……</div>';
+    const chips = state.sets.map((s) => {
+        const using = s.versions.some((v) => v.id === state.current);
+        const pic = s.cover ? `<img src="${esc(s.cover)}" alt="">` : '<div class="tt-tc-nopic">还没封面</div>';
+        return `
+<div class="tt-tc-set${using ? ' using' : ''}${state.open === s.id ? ' open' : ''}" data-set="${esc(s.id)}" title="${esc(s.name || '')}">
   ${pic}
   <div class="tt-tc-set-title">${esc(setTitle(s.id))}</div>
-  <div class="tt-tc-set-name">${esc(s.name || '（还没起名）')}</div>
-  <div class="tt-tc-set-count">${s.versions.length} 个版本${using ? ` · <span class="tt-tc-on">正在用 ${esc(using.id)}</span>` : ''}</div>
+  <div class="tt-tc-set-count">${s.versions.length} 个版本</div>
 </div>`;
-        }).join('');
-        const open = state.sets.find((s) => s.id === state.open);
-        box.innerHTML = open ? `
-<div class="tt-tc-box-head"><b>${esc(setTitle(open.id))}</b>　${esc(open.name || '')}</div>
-<div class="tt-tc-row">${open.versions.map((v) => {
-            const using = v.id === state.current;
-            const pic = v.sample ? `<img src="${esc(v.sample)}" alt="">` : '<div class="tt-tc-nopic">还没样图</div>';
-            return `
-<div class="tt-tc-ver${using ? ' using' : ''}${state.busy === v.id ? ' busy' : ''}" data-ver="${esc(v.id)}">
-  ${pic}
-  <div class="tt-tc-ver-id">${esc(v.id)}${using ? ' · 正在用' : ''}${v.unsaved ? ' <span class="tt-tc-unsaved">● 没保存</span>' : ''}</div>
-  <div class="tt-tc-ver-name">${esc(v.name || '')}</div>
-</div>`;
-        }).join('')}</div>` : '';
-    }
-    const recent = panel.querySelector('.tt-tc-recent');
-    if (state.recentError) recent.innerHTML = `<div class="tt-tc-empty">${esc(state.recentError)}</div>`;
-    else if (!state.recent) recent.innerHTML = '<div class="tt-tc-empty">正在拿最近的图……</div>';
-    else if (!state.recent.length) recent.innerHTML = '<div class="tt-tc-empty">还没有出过图</div>';
-    else {
-        recent.innerHTML = state.recent.map((img) => `
+    }).join('');
+    const open = state.sets.find((s) => s.id === state.open);
+    const vers = open ? `
+<div class="tt-tc-vers">
+  <div class="tt-tc-box-head"><b>${esc(setTitle(open.id))}</b>　${esc(open.name || '')}</div>
+  <div class="tt-tc-row">${open.versions.map((v) => {
+        const using = v.id === state.current;
+        const pic = v.sample ? `<img src="${esc(v.sample)}" alt="">` : '<div class="tt-tc-nopic">还没样图</div>';
+        return `
+    <div class="tt-tc-ver${using ? ' using' : ''}${state.busy === v.id ? ' busy' : ''}" data-ver="${esc(v.id)}">
+      ${pic}
+      <div class="tt-tc-ver-id">${esc(v.id)}${using ? ' · 正在用' : ''}${v.unsaved ? ' <span class="tt-tc-unsaved">● 没保存</span>' : ''}</div>
+      <div class="tt-tc-ver-name">${esc(v.name || '')}</div>
+    </div>`;
+    }).join('')}</div>
+</div>` : '';
+    return `<div class="tt-tc-sets">${chips}</div>${vers}`;
+}
+
+function recentPage() {
+    if (state.recentError) return `<div class="tt-tc-empty">${esc(state.recentError)}</div>`;
+    if (!state.recent) return '<div class="tt-tc-empty">正在拿最近的图……</div>';
+    if (!state.recent.length) return '<div class="tt-tc-empty">还没有出过图</div>';
+    return `<div class="tt-tc-recent">${state.recent.map((img) => `
 <div class="tt-tc-pic" data-file="${esc(img.file)}"${img.note ? ` title="${esc(img.note)}"` : ''}>
   <img src="${esc(img.small)}" alt="" loading="lazy">
   ${badge(img) ? `<span class="tt-tc-badge">${esc(badge(img))}</span>` : ''}
-</div>`).join('');
-    }
+</div>`).join('')}</div>`;
+}
+
+function render() {
+    if (!panel || !state) return;
+    const row = panel.querySelector('.tt-tc-row');
+    const scrolled = row ? row.scrollLeft : null;
+    panel.querySelector('.tt-tc-page').innerHTML = `${setsPage()}<h4>最近出的图</h4>${recentPage()}`;
+    // 版本一排左右划：刷新后停在原处；头一次画就把正在用的那张挪进眼前
+    const newRow = panel.querySelector('.tt-tc-row');
+    if (!newRow) return;
+    if (scrolled !== null) newRow.scrollLeft = scrolled;
+    else panel.querySelector('.tt-tc-ver.using')?.scrollIntoView?.({ block: 'nearest', inline: 'center' });
 }
 
 async function loadSets() {
@@ -191,10 +198,7 @@ function getPanel() {
     panel.className = 'tt-taocan';
     panel.innerHTML = `
 <h3 class="tt-tip-row">出图套餐 ${tip('点大卡看这个套餐有哪些版本，点版本就换上，电脑那边跟着换，从下一张图起按它出。标「● 没保存」的版本是电脑上改了还没点保存的，手机换上用的是保存过的那份。细调参数、换封面和样图在电脑上做。')}</h3>
-<div class="tt-tc-sets"></div>
-<div class="tt-tc-vers"></div>
-<h4>最近出的图</h4>
-<div class="tt-tc-recent"></div>`;
+<div class="tt-tc-page"></div>`;
     panel.addEventListener('click', onPanelClick);
     return panel;
 }

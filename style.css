@@ -2630,13 +2630,23 @@
 
 .tt-tc-sets {
     display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
+    gap: 6px;
+}
+
+/* v1.17.2: one compact row of set cards (user picked layout A) */
+.tt-tc-set img,
+.tt-tc-set .tt-tc-nopic {
+    aspect-ratio: auto;
+    height: 40px;
+}
+
+.tt-tc-set-title {
+    font-size: .85em;
 }
 
 .tt-tc-set {
-    flex: 0 0 calc(50% - 5px);
-    max-width: 170px;
+    flex: 1 1 0;
+    min-width: 0;
     box-sizing: border-box;
     background: rgba(0, 0, 0, .22);
     border: 2px solid transparent;
@@ -2711,7 +2721,7 @@
 }
 
 .tt-tc-ver {
-    flex: 0 0 120px;
+    flex: 0 0 128px;
     background: rgba(0, 0, 0, .22);
     border: 2px solid transparent;
     border-radius: 10px;
