@@ -88,6 +88,45 @@ export function bindContentEditing(entry, actions) {
             || button.getAttribute('data-for') !== source.id) return;
         event.preventDefault();
         event.stopImmediatePropagation();
+        openDraft();
+    };
+    // v1.18.11：点内容框里的字直接开大窗口编辑，不在小框里改（用户 2026-10-04：「这个框没法用……整了无数轮……
+    // 默认就打开这个大窗」）。小框顶上的撤销 / 搜索 / 复制照常；手指在小框上滑动不算点。
+    let downAt = 0;
+    let downX = 0;
+    let downY = 0;
+    let travel = 0;
+    const inContent = (target) => {
+        if (!target?.closest || target.closest('.cm-panels, .cm-panel, button')) return false;
+        const box = target.closest('.cm-scroller, textarea[name="content"]');
+        return !!box && contentScope(source).contains(box);
+    };
+    const tapped = () => Date.now() - downAt < 900 && travel < 12;
+    const onDown = (event) => {
+        if (!inContent(event.target)) return;
+        const p = event.touches?.[0] ?? event;
+        downAt = Date.now(); downX = p.clientX ?? 0; downY = p.clientY ?? 0; travel = 0;
+    };
+    const onMove = (event) => {
+        if (!downAt) return;
+        const p = event.touches?.[0] ?? event;
+        travel = Math.max(travel, Math.hypot((p.clientX ?? 0) - downX, (p.clientY ?? 0) - downY));
+    };
+    const openFromTap = (event) => {
+        if (dialog || !inContent(event.target) || !tapped()) return;
+        if (event.type === 'click') { event.preventDefault(); event.stopImmediatePropagation(); }
+        downAt = 0;
+        // 先把小框的焦点拿掉，省得键盘弹出来
+        try { event.target.closest('.cm-content, textarea')?.blur?.(); document.activeElement?.blur?.(); } catch { /* ignore */ }
+        openDraft();
+    };
+    document.addEventListener('touchstart', onDown, { capture: true, passive: true });
+    document.addEventListener('pointerdown', onDown, true);
+    document.addEventListener('touchmove', onMove, { capture: true, passive: true });
+    document.addEventListener('focusin', openFromTap, true);
+    document.addEventListener('click', openFromTap, true);
+
+    function openDraft() {
         if (dialog) return;
         const modal = document.createElement('dialog');
         modal.className = 'tt-wi-draft-dialog';
@@ -142,7 +181,7 @@ export function bindContentEditing(entry, actions) {
         modal.showModal();
         // Avoid summoning the keyboard until the user taps the text.
         buttons[0].focus({ preventScroll: true });
-    };
+    }
     document.addEventListener('click', expand, true);
     refresh();
     return {
@@ -151,6 +190,11 @@ export function bindContentEditing(entry, actions) {
             stopSelectionLimit();
             dialog?.close(); dialog?.remove(); dialog = null;
             document.removeEventListener('click', expand, true);
+            document.removeEventListener('touchstart', onDown, true);
+            document.removeEventListener('pointerdown', onDown, true);
+            document.removeEventListener('touchmove', onMove, true);
+            document.removeEventListener('focusin', openFromTap, true);
+            document.removeEventListener('click', openFromTap, true);
             source.removeEventListener('beforeinput', beforeInput);
             source.removeEventListener('compositionstart', startComposition);
             source.removeEventListener('compositionend', endComposition);
