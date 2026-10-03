@@ -14,6 +14,7 @@ import { initImmersive, cleanupImmersive } from './immersive.js';
 import { initTaocan, cleanupTaocan } from './taocan.js';
 import { initMvuFix, cleanupMvuFix } from './mvu-fix.js';
 import { initVarLog, cleanupVarLog } from './var-log.js';
+import { initChatTools, cleanupChatTools } from './chat-tools.js';
 
 const EXTENSION_KEY = 'chat-text-color';
 
@@ -824,6 +825,7 @@ export async function init() {
     initTaocan();
     initVarLog();
     initMvuFix();
+    initChatTools();
     if (initialized) {
         mountUi();
         return;
@@ -853,6 +855,7 @@ export async function cleanup() {
     cleanupImmersive();
     cleanupTaocan();
     cleanupMvuFix();
+    cleanupChatTools();
     cleanupVarLog();
     cleanupContextLock();
     cleanupPromptDetachGuard();

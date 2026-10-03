@@ -15,7 +15,7 @@ const ctx = () => globalThis.SillyTavern?.getContext?.();
 const OWN_WAND = ['tt-autoimg-wand', 'tt-cast-wand', 'tt-autoimg-settings-wand', 'tt-taocan-wand', 'tt-autoimg-toggle-wand'];
 // story-image.js 切了自动配图开关就发这个信号，这边重画一下名字
 const REFRESH_EVENT = 'tt-wand-refresh';
-const OWN_OPTIONS = ['option_tt_blank_opening', 'option_tt_summary_library', 'option_tt_story_summary', 'option_tt_test_log'];
+const OWN_OPTIONS = ['option_tt_blank_opening', 'option_tt_summary_library', 'option_tt_story_summary', 'option_tt_test_log', 'option_tt_vars'];
 // 别家的项用户指定的位置（2026-10-02）：这几项排最上面（从上往下）；这几项紧贴在本扩展那些上面（从上往下）。其余保持原样
 const WAND_TOP = ['inspect', 'vars', 'logs'];
 const WAND_ABOVE_OWN = ['sd', 'attach'];

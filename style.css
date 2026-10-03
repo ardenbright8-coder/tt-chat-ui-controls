@@ -2910,3 +2910,37 @@
     border-color: var(--SmartThemeQuoteColor, #e18a24);
     background: color-mix(in srgb, var(--SmartThemeQuoteColor, #e18a24) 18%, transparent);
 }
+
+/* v1.18.3 聊天按钮（chat-tools.js）：变量那排藏掉；发送按钮上面的小圆钮「深入」「到底」 */
+#send_form .tt-varbtn-hidden,
+#send_form #qr--bar.tt-qrbar-empty {
+    display: none !important;
+}
+.tt-float-btn {
+    position: fixed;
+    z-index: 30;
+    width: 40px;
+    height: 40px;
+    margin: 0;
+    padding: 0;
+    border-radius: 50%;
+    border: 1px solid var(--SmartThemeBorderColor, #6e665f);
+    background: color-mix(in srgb, var(--SmartThemeBlurTintColor, #3a3530) 92%, transparent);
+    color: var(--SmartThemeBodyColor, #ece5dc);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+.tt-float-btn.tt-float-on { display: flex; }
+#tt-deepen-btn {
+    border-color: var(--SmartThemeQuoteColor, #d9a35a);
+    color: var(--SmartThemeQuoteColor, #d9a35a);
+}
+.tt-vars-pop { display: flex; flex-direction: column; gap: 8px; }
+.tt-vars-pop .menu_button { width: 100%; margin: 0; padding: 10px; }
+#tt-chat-tools-settings textarea { width: 100%; box-sizing: border-box; font-size: .9em; }
+#tt-chat-tools-settings .tt-ct-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+#tt-chat-tools-settings .tt-dirty { margin-left: auto; color: #e0a050; font-size: .85em; }
