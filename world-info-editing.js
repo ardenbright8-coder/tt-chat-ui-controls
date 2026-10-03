@@ -56,6 +56,7 @@ export function bindContentEditing(entry, actions) {
     const write = (value) => {
         source.value = value;
         pushEditorText(source);
+        queueMicrotask(() => entryBox?.isConnected && updatePreview());
         // The host listens with jQuery, which also lets enhanced editors resync.
         if (globalThis.jQuery) globalThis.jQuery(source).trigger('input').trigger('change');
         else {
@@ -90,41 +91,61 @@ export function bindContentEditing(entry, actions) {
         event.stopImmediatePropagation();
         openDraft();
     };
-    // v1.18.11：点内容框里的字直接开大窗口编辑，不在小框里改（用户 2026-10-04：「这个框没法用……整了无数轮……
-    // 默认就打开这个大窗」）。小框顶上的撤销 / 搜索 / 复制照常；手指在小框上滑动不算点。
-    let downAt = 0;
-    let downX = 0;
-    let downY = 0;
-    let travel = 0;
-    const inContent = (target) => {
-        if (!target?.closest || target.closest('.cm-panels, .cm-panel, button')) return false;
-        const box = target.closest('.cm-scroller, textarea[name="content"]');
-        return !!box && contentScope(source).contains(box);
-    };
-    const tapped = () => Date.now() - downAt < 900 && travel < 12;
-    const onDown = (event) => {
-        if (!inContent(event.target)) return;
+    // v1.18.12：外面的小框只当入口（用户：「外边这个滑块已经没有实际作用……只是给里边那个大框做个入口」）。
+    // 小框（官方代码编辑器 / 原文本框）藏起来，换成一个固定的小气泡「按住打开编辑」+ 一行内容开头；
+    // 按住 0.6 秒才开大窗口，手指一滑就取消（「有时候滑屏直接滑上去……又在翻这个」），气泡本身不滚。
+    const block = contentScope(source);
+    const entryBox = document.createElement('div');
+    entryBox.className = 'tt-wi-content-entry';
+    entryBox.setAttribute('role', 'button');
+    entryBox.setAttribute('aria-label', '按住打开编辑');
+    entryBox.innerHTML = '<div class="tt-wi-entry-fill"></div><i class="fa-solid fa-pen-to-square"></i><div class="tt-wi-entry-text"><b>按住打开编辑</b><small class="tt-wi-entry-preview"></small></div>';
+    block.append(entryBox);
+    block.classList.add('tt-wi-entry-on');
+    const preview = entryBox.querySelector('.tt-wi-entry-preview');
+    const updatePreview = () => { preview.textContent = source.value.replace(/\s+/g, ' ').trim().slice(0, 80) || '（还没写内容）'; };
+    updatePreview();
+    const HOLD_MS = 600;
+    let holdTimer = null;
+    let holdX = 0;
+    let holdY = 0;
+    const cancelHold = () => { clearTimeout(holdTimer); holdTimer = null; entryBox.classList.remove('tt-holding'); };
+    const startHold = (event) => {
+        if (dialog) return;
         const p = event.touches?.[0] ?? event;
-        downAt = Date.now(); downX = p.clientX ?? 0; downY = p.clientY ?? 0; travel = 0;
+        holdX = p.clientX ?? 0;
+        holdY = p.clientY ?? 0;
+        cancelHold();
+        // 先让填满动画从 0 开始
+        void entryBox.offsetWidth;
+        entryBox.classList.add('tt-holding');
+        holdTimer = setTimeout(() => {
+            holdTimer = null;
+            entryBox.classList.remove('tt-holding');
+            try { navigator.vibrate?.(15); } catch { /* 不支持就算了 */ }
+            openDraft();
+        }, HOLD_MS);
     };
-    const onMove = (event) => {
-        if (!downAt) return;
+    const moveHold = (event) => {
+        if (!holdTimer) return;
         const p = event.touches?.[0] ?? event;
-        travel = Math.max(travel, Math.hypot((p.clientX ?? 0) - downX, (p.clientY ?? 0) - downY));
+        if (Math.hypot((p.clientX ?? 0) - holdX, (p.clientY ?? 0) - holdY) > 10) cancelHold();
     };
-    const openFromTap = (event) => {
-        if (dialog || !inContent(event.target) || !tapped()) return;
-        if (event.type === 'click') { event.preventDefault(); event.stopImmediatePropagation(); }
-        downAt = 0;
-        // 先把小框的焦点拿掉，省得键盘弹出来
-        try { event.target.closest('.cm-content, textarea')?.blur?.(); document.activeElement?.blur?.(); } catch { /* ignore */ }
-        openDraft();
-    };
-    document.addEventListener('touchstart', onDown, { capture: true, passive: true });
-    document.addEventListener('pointerdown', onDown, true);
-    document.addEventListener('touchmove', onMove, { capture: true, passive: true });
-    document.addEventListener('focusin', openFromTap, true);
-    document.addEventListener('click', openFromTap, true);
+    const noMenu = (event) => event.preventDefault();
+    entryBox.addEventListener('touchstart', startHold, { passive: true });
+    entryBox.addEventListener('touchmove', moveHold, { passive: true });
+    entryBox.addEventListener('touchend', cancelHold);
+    entryBox.addEventListener('touchcancel', cancelHold);
+    entryBox.addEventListener('contextmenu', noMenu);
+    // 电脑上没有触摸：按住鼠标也一样
+    const mouseDown = (event) => { if (event.pointerType === 'mouse') startHold(event); };
+    const mouseUp = (event) => { if (event.pointerType === 'mouse') cancelHold(); };
+    entryBox.addEventListener('pointerdown', mouseDown);
+    entryBox.addEventListener('pointerup', mouseUp);
+    entryBox.addEventListener('pointerleave', mouseUp);
+    const onSourceChange = () => updatePreview();
+    source.addEventListener('input', onSourceChange);
+    source.addEventListener('change', onSourceChange);
 
     function openDraft() {
         if (dialog) return;
@@ -190,11 +211,11 @@ export function bindContentEditing(entry, actions) {
             stopSelectionLimit();
             dialog?.close(); dialog?.remove(); dialog = null;
             document.removeEventListener('click', expand, true);
-            document.removeEventListener('touchstart', onDown, true);
-            document.removeEventListener('pointerdown', onDown, true);
-            document.removeEventListener('touchmove', onMove, true);
-            document.removeEventListener('focusin', openFromTap, true);
-            document.removeEventListener('click', openFromTap, true);
+            cancelHold();
+            source.removeEventListener('input', onSourceChange);
+            source.removeEventListener('change', onSourceChange);
+            entryBox.remove();
+            block.classList.remove('tt-wi-entry-on');
             source.removeEventListener('beforeinput', beforeInput);
             source.removeEventListener('compositionstart', startComposition);
             source.removeEventListener('compositionend', endComposition);

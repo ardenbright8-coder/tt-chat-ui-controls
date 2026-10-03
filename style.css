@@ -2951,3 +2951,55 @@
 #tt-chat-tools-settings textarea { width: 100%; box-sizing: border-box; font-size: .9em; }
 #tt-chat-tools-settings .tt-ct-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 #tt-chat-tools-settings .tt-dirty { margin-left: auto; color: #e0a050; font-size: .85em; }
+
+/* v1.18.12 世界书内容：小框藏起来，只留一个「按住打开编辑」的固定气泡（world-info-editing.js） */
+#world_popup.tt-wi-mobile .tt-wi-content-block.tt-wi-entry-on > textarea[name="content"],
+#world_popup.tt-wi-mobile .tt-wi-content-block.tt-wi-entry-on .tt-codemirror-editor {
+    display: none !important;
+}
+.tt-wi-content-entry {
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 60px;
+    padding: 10px 14px;
+    box-sizing: border-box;
+    border-radius: 12px;
+    border: 1px solid var(--SmartThemeBorderColor, rgba(255,255,255,.15));
+    background: rgba(0,0,0,.18);
+    color: var(--SmartThemeBodyColor, #eee);
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: pan-y;
+}
+.tt-wi-content-entry > i { position: relative; opacity: .7; font-size: 18px; }
+.tt-wi-entry-fill {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 0;
+    background: color-mix(in srgb, var(--SmartThemeBodyColor, #eee) 14%, transparent);
+    pointer-events: none;
+}
+.tt-wi-content-entry.tt-holding .tt-wi-entry-fill {
+    width: 100%;
+    transition: width .6s linear;
+}
+.tt-wi-entry-text {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+.tt-wi-entry-text b { font-weight: 600; }
+.tt-wi-entry-preview {
+    opacity: .55;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
