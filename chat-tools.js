@@ -112,19 +112,51 @@ export const DEFAULT_DEEPEN = `【深入这场戏】
 // v1.18.18 接管发送（用户 2026-10-04 一起讨论定的）：深入 = 原地往深挖；空着发送 = 往前走、要有转折；
 // 写了字发送 = 照他写的走、写得好看（「同样是要去喝酒，李白写的就不一样」）。
 // 换不换场景看这场戏的事办完没有（McKee：每场戏要有转折；Swain：场景—续场）。
-export const DEFAULT_SEND = `【写好这一轮】
+const SEND_V1 = `【写好这一轮】
 {{user}}刚写的是这一轮要发生的事，照着写，写得好看。
 - 不改他的意思，他写的事发生到他写的程度为止。
 - 在场的人按各自内核和此刻处境真实地回应，有自己的算盘。
 - 让人物立起来：用最能表现他此刻的东西——一句话、一个神情、一个动作、一种状态；不写空话套话。
 - 停在留给{{user}}接的地方。`;
 
-export const DEFAULT_PUSH = `【往下走】
+const PUSH_V1 = `【往下走】
 {{user}}这轮没写，交给你往下走一步。
 - 先判断眼下这场戏的事办完没有。没办完：留在这场里，把它推到一个转折——有人做了决定、说破了话、关系或局面变了。办完了：写人物怎么消化刚才的事、各自打算怎么办，再自然过渡到下一场。
 - 新东西从已有的人物、矛盾、伏笔里来，合乎人设和局面；{{user}}的打算是前提，别替他改主意。
 - 让人物立起来：用最能表现他此刻的东西——一句话、一个神情、一个动作、一种状态。
 - 这一轮要有东西变，不原地打转，不重复上一条；停在留给{{user}}接的地方。`;
+
+// v1.18.25 发送两段换成通用范式（用户 2026-10-04 一起讨论定的）：教 AI 先想清楚再写——局势和后果、看点、人设最突出那面、
+// 喜怒哀乐分明会变、以说出口的为主、人看得见、亲密照人设、结尾开放。起因：写出来扁平、没情绪、人设不突出、不看局势乱来。
+// 用户：「写成个范式……任何故事可以用」「喜怒哀乐表现的不明确，就是一个木偶人」。手机上存的是 V1 原样才换。
+export const DEFAULT_SEND = `【写好这一轮】
+{{user}}刚写的是这一轮要发生的事，照他的意思写，到他写的程度为止。下笔前先想清楚（不写出来）：
+- 局势：这个世界和眼下处境的规矩——谁说了算、谁在乎什么、谁在盯着谁。人做事说话都掂量后果：有风险的会怕、会犹豫、会找更稳的法子；对手也有脑子，反常的事会起疑。不写一拍脑袋就办、办了没后果的事。
+- 看点：这件事对在场每个人意味着什么，会掀起什么波动。
+- 人：人设是什么样就演成什么样，这一轮也不走样；人设里最突出的那一面（痴、忍、傲、媚、狠……）要在这一轮看得出来。每个人有自己的判断和打算，会想到现实的麻烦，不只是附和、表忠心。
+- 情绪：喜怒哀乐要分明，是混的、会变的——又喜又酸、又信又疑、想要又不敢，被一句话推上去、又被一件事压下来；压着的情绪写出压抑和挣扎。心里和嘴上一不一样，看这个人的性子。对心上人、对仇人、对外人，是不同的样子。
+- 走向：合情合理，但不走最顺手的路；找一个意外、回头一想又说得通的变化，或者留一个让人放不下的钩子。
+写的时候：
+- 以说出口的为主：话、语气、笑、哭、叹气、喘息、叫声，带着这个人的味道；不爱说、说不出口的，用心理描写补。
+- 人要看得见：此刻的模样、衣着、神情、眼神、小动作，写得生动好看；情绪演出来，不贴「心头巨震」这种标签。
+- 亲密的时候，媚态和反应也照人设来：什么样的人，就是什么样的状态。
+- 环境背景点到为止，笔墨花在这件事怎么起伏上。
+- 结尾开放：把人物眼下的难处、心思和几种可能摆出来，停在留给{{user}}拿主意、接话的地方。`;
+
+export const DEFAULT_PUSH = `【往下走】
+{{user}}这轮没写，交给你往下走一步。下笔前先想清楚（不写出来）：
+- 这场戏办完没有：没办完，推到一个转折——有人做了决定、说破了话、露了底、关系或局面变了；办完了，写人物怎么消化刚才的事，再过渡到下一场。这一轮要有东西变，不原地打转，不重复上一条。{{user}}的打算是前提，别替他改主意。
+- 局势：这个世界和眼下处境的规矩——谁说了算、谁在乎什么、谁在盯着谁。人做事说话都掂量后果：有风险的会怕、会犹豫、会找更稳的法子；对手也有脑子，反常的事会起疑。不写一拍脑袋就办、办了没后果的事。
+- 看点：这件事对在场每个人意味着什么，会掀起什么波动。
+- 人：人设是什么样就演成什么样，这一轮也不走样；人设里最突出的那一面（痴、忍、傲、媚、狠……）要在这一轮看得出来。每个人有自己的判断和打算，会想到现实的麻烦，不只是附和、表忠心。
+- 情绪：喜怒哀乐要分明，是混的、会变的——又喜又酸、又信又疑、想要又不敢，被一句话推上去、又被一件事压下来；压着的情绪写出压抑和挣扎。心里和嘴上一不一样，看这个人的性子。对心上人、对仇人、对外人，是不同的样子。
+- 走向：合情合理，但不走最顺手的路；找一个意外、回头一想又说得通的变化，或者留一个让人放不下的钩子。
+写的时候：
+- 以说出口的为主：话、语气、笑、哭、叹气、喘息、叫声，带着这个人的味道；不爱说、说不出口的，用心理描写补。
+- 人要看得见：此刻的模样、衣着、神情、眼神、小动作，写得生动好看；情绪演出来，不贴「心头巨震」这种标签。
+- 亲密的时候，媚态和反应也照人设来：什么样的人，就是什么样的状态。
+- 环境背景点到为止，笔墨花在这件事怎么起伏上。
+- 结尾开放：把人物眼下的难处、心思和几种可能摆出来，停在留给{{user}}拿主意、接话的地方。`;
 
 // ≡「写法说明」里能改的三段
 // 存档里「自带的」（v1.18.23 加；v1.18.24 不编号，名字概括内容）：defName 原版的名字，olds 以前的版本
@@ -137,8 +169,12 @@ const PROMPTS = [
             { bid: 'v2', name: '能加配角小事，对话为主', text: DEEPEN_V2 },
             { bid: 'v1', name: '锁住场景，七条细写', text: DEEPEN_V1 },
         ] },
-    { key: 'sendPrompt', name: '写了字发送', desc: '输入框有字点发送时用：照你写的走，写得好看', def: () => DEFAULT_SEND, defName: '照你写的走，写得好看' },
-    { key: 'pushPrompt', name: '空着发送', desc: '输入框空着点发送时用：另起一条，往下走一步', def: () => DEFAULT_PUSH, defName: '往下走一步，要有转折' },
+    { key: 'sendPrompt', name: '写了字发送', desc: '输入框有字点发送时用：照你写的走，写出戏来', def: () => DEFAULT_SEND,
+        defBid: 'v2', defName: '范式：看局势、立人设、情绪分明、结尾开放',
+        olds: () => [{ bid: 'def', name: '照你写的走，写得好看（短）', text: SEND_V1 }] },
+    { key: 'pushPrompt', name: '空着发送', desc: '输入框空着点发送时用：另起一条，往下走一步', def: () => DEFAULT_PUSH,
+        defBid: 'v2', defName: '范式：推到转折，看局势、立人设、结尾开放',
+        olds: () => [{ bid: 'def', name: '往下走一步，要有转折（短）', text: PUSH_V1 }] },
 ];
 
 let mountTimer = null;
@@ -163,8 +199,9 @@ function settings() {
     // 旧默认原样才自动换；自己在「写法说明」里保存过（deepenPromptOwn，比如从存档换回第三版）就不动
     if (typeof s.deepenPrompt !== 'string' || !s.deepenPrompt.trim() || (!s.deepenPromptOwn && [DEEPEN_V1, DEEPEN_V2, DEEPEN_V3, DEEPEN_V4].includes(s.deepenPrompt))) s.deepenPrompt = DEFAULT_DEEPEN;
     if (typeof s.sendTakeover !== 'boolean') s.sendTakeover = true;
-    if (typeof s.sendPrompt !== 'string' || !s.sendPrompt.trim()) s.sendPrompt = DEFAULT_SEND;
-    if (typeof s.pushPrompt !== 'string' || !s.pushPrompt.trim()) s.pushPrompt = DEFAULT_PUSH;
+    // 旧默认原样才换新版；自己改过的不动
+    if (typeof s.sendPrompt !== 'string' || !s.sendPrompt.trim() || s.sendPrompt === SEND_V1) s.sendPrompt = DEFAULT_SEND;
+    if (typeof s.pushPrompt !== 'string' || !s.pushPrompt.trim() || s.pushPrompt === PUSH_V1) s.pushPrompt = DEFAULT_PUSH;
     if (!s.promptArchive || typeof s.promptArchive !== 'object') s.promptArchive = {};
     delete s.bottomButton;
     return s;
@@ -467,7 +504,7 @@ function archiveFor(p) {
     const seeded = st.promptArchiveSeeded = st.promptArchiveSeeded && typeof st.promptArchiveSeeded === 'object' ? st.promptArchiveSeeded : {};
     const items = () => (all[p.key] = Array.isArray(all[p.key]) ? all[p.key] : []);
     const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
-    const builtins = [{ bid: 'def', name: p.defName || '原版', text: p.def() }, ...(p.olds?.() || [])];
+    const builtins = [{ bid: p.defBid || 'def', name: p.defName || '原版', text: p.def() }, ...(p.olds?.() || [])];
     let dirty = false;
     // v1.18.23 存的条目名字是「存档 3」「换下来的 · 时间」这种，当成没起名，按内容概括
     for (const x of items()) if (typeof x.named !== 'boolean') { x.named = !/^(存档 \d+|存档 · .*|换下来的 · .*|新的一条)$/.test(x.name || ''); dirty = true; }
