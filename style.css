@@ -2557,14 +2557,15 @@
         max-height: calc(var(--tt-base-viewport-height, var(--doc-height, 100vh)) - var(--tt-imm-top)) !important;
     }
 
+    /* v1.16.10: the whole top edge is the hit area, not just the pill in the middle
+       (user: "范围扩大点"). The strip itself is invisible; only the pill shows. */
     html body.tt-immersive #tt-top-handle {
         display: flex;
         position: fixed;
         top: var(--tt-imm-top);
-        left: 50%;
-        transform: translateX(-50%);
-        width: 96px;
-        height: 20px;
+        left: 0;
+        right: 0;
+        height: 26px;
         align-items: center;
         justify-content: center;
         z-index: 3006;
