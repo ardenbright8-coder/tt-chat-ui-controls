@@ -9,7 +9,7 @@
 
 import { tip } from './tip.js';
 import { vlog } from './var-log.js';
-import { openTextEditor } from './text-editor.js';
+import { openTextEditor, stamp } from './text-editor.js';
 
 const EXTENSION_KEY = 'chat-text-color';
 const SETTINGS_ID = 'tt-chat-tools-settings';
@@ -127,11 +127,19 @@ export const DEFAULT_PUSH = `【往下走】
 - 这一轮要有东西变，不原地打转，不重复上一条；停在留给{{user}}接的地方。`;
 
 // ≡「写法说明」里能改的三段
+// olds：存档里「自带的」以前的版本（v1.18.23），点了换进框里
 const PROMPTS = [
-    { key: 'deepenPrompt', name: '深入', desc: '点「深入」时用：原地往深挖，另起一条', def: () => DEFAULT_DEEPEN },
+    { key: 'deepenPrompt', name: '深入', desc: '点「深入」时用：原地往深挖，另起一条', def: () => DEFAULT_DEEPEN,
+        olds: () => [
+            { name: '第四版（试过，退回了）', note: 'v1.18.18', text: DEEPEN_V4 },
+            { name: '第三版', note: 'v1.18.14', text: DEEPEN_V3 },
+            { name: '第二版', note: 'v1.18.4', text: DEEPEN_V2 },
+            { name: '第一版', note: 'v1.18.3', text: DEEPEN_V1 },
+        ] },
     { key: 'sendPrompt', name: '写了字发送', desc: '输入框有字点发送时用：照你写的走，写得好看', def: () => DEFAULT_SEND },
     { key: 'pushPrompt', name: '空着发送', desc: '输入框空着点发送时用：另起一条，往下走一步', def: () => DEFAULT_PUSH },
 ];
+const AUTO_KEEP = 10;
 
 let mountTimer = null;
 let observer = null;
@@ -152,10 +160,12 @@ function settings() {
     if (typeof s.varsInMenu !== 'boolean') s.varsInMenu = true;
     if (typeof s.deepenButton !== 'boolean') s.deepenButton = true;
     if (typeof s.hideAgentButton !== 'boolean') s.hideAgentButton = true;
-    if (typeof s.deepenPrompt !== 'string' || !s.deepenPrompt.trim() || [DEEPEN_V1, DEEPEN_V2, DEEPEN_V3, DEEPEN_V4].includes(s.deepenPrompt)) s.deepenPrompt = DEFAULT_DEEPEN;
+    // 旧默认原样才自动换；自己在「写法说明」里保存过（deepenPromptOwn，比如从存档换回第三版）就不动
+    if (typeof s.deepenPrompt !== 'string' || !s.deepenPrompt.trim() || (!s.deepenPromptOwn && [DEEPEN_V1, DEEPEN_V2, DEEPEN_V3, DEEPEN_V4].includes(s.deepenPrompt))) s.deepenPrompt = DEFAULT_DEEPEN;
     if (typeof s.sendTakeover !== 'boolean') s.sendTakeover = true;
     if (typeof s.sendPrompt !== 'string' || !s.sendPrompt.trim()) s.sendPrompt = DEFAULT_SEND;
     if (typeof s.pushPrompt !== 'string' || !s.pushPrompt.trim()) s.pushPrompt = DEFAULT_PUSH;
+    if (!s.promptArchive || typeof s.promptArchive !== 'object') s.promptArchive = {};
     delete s.bottomButton;
     return s;
 }
@@ -427,13 +437,56 @@ async function onDeepen(event) {
 
 // ---------------------------------------------------------------- ≡「写法说明」：选一段，进大窗口改
 
+// 写法说明的存档（v1.18.23）：settings().promptArchive[key] = [{ id, name, text, at, auto }]，旧的在前、新的在后
+function archiveFor(p) {
+    const all = settings().promptArchive;
+    const items = () => (all[p.key] = Array.isArray(all[p.key]) ? all[p.key] : []);
+    const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+    return {
+        builtins: [{ name: '原版', note: '现在的默认', text: p.def() }, ...(p.olds?.() || [])],
+        list: () => items(),
+        add({ name, text, auto = false }) {
+            const item = { id: newId(), name, text, at: Date.now(), ...(auto ? { auto: true } : {}) };
+            items().push(item);
+            if (auto) {
+                const autos = items().filter((x) => x.auto);
+                for (const old of autos.slice(0, Math.max(0, autos.length - AUTO_KEEP))) items().splice(items().indexOf(old), 1);
+            }
+            save();
+            return item;
+        },
+        update(id, patch) {
+            const item = items().find((x) => x.id === id);
+            if (!item) return;
+            Object.assign(item, patch, { at: Date.now() });
+            delete item.auto; // 自己改过就不算自动存的了，不会被挤掉
+            save();
+        },
+        remove(id) {
+            const list = items();
+            const i = list.findIndex((x) => x.id === id);
+            if (i >= 0) { list.splice(i, 1); save(); }
+        },
+    };
+}
+
 function openPromptEditor(p) {
+    const archive = archiveFor(p);
     openTextEditor({
         title: `写法说明 · ${p.name}`,
         value: settings()[p.key] || p.def(),
-        defaultValue: p.def(),
+        archive,
         onSave: (text) => {
-            settings()[p.key] = text.trim() ? text : p.def();
+            const s = settings();
+            const before = s[p.key];
+            const next = text.trim() ? text : p.def();
+            // 换下来的旧版自动存一份（跟自带的、已存的都不一样才存）
+            if (before && before.trim() && before !== next
+                && !archive.builtins.some((x) => x.text === before) && !archive.list().some((x) => x.text === before)) {
+                archive.add({ name: `换下来的 · ${stamp()}`, text: before, auto: true });
+            }
+            s[p.key] = next;
+            if (p.key === 'deepenPrompt') s.deepenPromptOwn = true;
             save();
             vlog('写法说明', `改了「${p.name}」`);
             globalThis.toastr?.success?.('存好了', `写法说明 · ${p.name}`);
@@ -446,7 +499,7 @@ async function openPromptPicker() {
     if (!context?.callGenericPopup) return;
     const box = document.createElement('div');
     box.className = 'tt-prompt-picker';
-    box.innerHTML = `<h3 class="tt-tip-row">写法说明 ${tip('这三段是点按钮时临时加给 AI 的说明，只管那一条回复，出完就撤掉。点一段进大窗口改，改完点「保存」。')}</h3>`
+    box.innerHTML = `<h3 class="tt-tip-row">写法说明 ${tip('这三段是点按钮时临时加给 AI 的说明，只管那一条回复，出完就撤掉。点一段进大窗口改，改完点「保存」；右上角「存档」里有以前的版本，也能自己存。')}</h3>`
         + PROMPTS.map((p, i) => `<button type="button" class="menu_button tt-prompt-pick" data-i="${i}"><b>${p.name}</b><small>${p.desc}</small></button>`).join('');
     let popup = null;
     box.addEventListener('click', (event) => {
@@ -621,4 +674,4 @@ export function cleanupChatTools() {
     document.body?.classList.remove('tt-hide-agent');
 }
 
-export const __test = { applyBar, position, onDeepen, onSendClick, openPromptPicker, settings, varButtons };
+export const __test = { applyBar, position, onDeepen, onSendClick, openPromptPicker, openPromptEditor, PROMPTS, settings, varButtons };

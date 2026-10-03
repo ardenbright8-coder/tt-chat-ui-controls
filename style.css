@@ -3101,3 +3101,129 @@ body:is([data-generating="true"], [data-swiping="true"]) #chat .mes.last_mes .me
     visibility: hidden;
     pointer-events: none;
 }
+
+/* v1.18.23 写法说明大窗口右上角「存档」：同一个窗口里翻到一列版本（自带的 / 我存的），干净一点，不加花 */
+.tt-text-editor .tt-text-editor-body {
+    flex: 1 1 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+.tt-text-editor-back {
+    min-height: 36px;
+    padding: 0 10px 0 4px;
+    border: none;
+    color: inherit;
+    background: none;
+    font: inherit;
+    opacity: .8;
+}
+.tt-text-editor-head.tt-tip-row b { margin-right: auto; }
+.tt-text-editor-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 36px;
+    margin: 0 !important;
+    font-weight: 600;
+}
+.tt-archive-list {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 2px 0;
+}
+.tt-archive-sec {
+    margin: 8px 4px 0;
+    font-size: .8em;
+    letter-spacing: .05em;
+    opacity: .5;
+}
+.tt-archive-sec:first-child { margin-top: 0; }
+.tt-archive-row {
+    display: flex;
+    align-items: stretch;
+    flex: none;
+    border: 1px solid rgba(255,255,255,.1);
+    border-radius: 12px;
+    background: rgba(255,255,255,.04);
+    overflow: hidden;
+}
+.tt-archive-row.is-now { border-color: rgba(143,211,168,.45); }
+.tt-archive-pick {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 3px;
+    margin: 0;
+    padding: 10px 12px;
+    border: none;
+    color: inherit;
+    background: none;
+    font: inherit;
+    text-align: left;
+}
+.tt-archive-pick:active { background: rgba(255,255,255,.06); }
+.tt-archive-top { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.tt-archive-no { flex: none; min-width: 1.3em; font-size: .85em; opacity: .45; }
+.tt-archive-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.tt-archive-tag {
+    flex: none;
+    padding: 0 7px;
+    border: 1px solid rgba(255,255,255,.18);
+    border-radius: 999px;
+    font-size: .72em;
+    line-height: 1.6;
+    opacity: .75;
+}
+.tt-archive-tag.now { color: #8fd3a8; border-color: rgba(143,211,168,.45); opacity: 1; }
+.tt-archive-meta { padding-left: calc(1.3em + 8px); font-size: .75em; opacity: .4; }
+.tt-archive-meta:empty { display: none; }
+.tt-archive-preview {
+    padding-left: calc(1.3em + 8px);
+    font-size: .82em;
+    line-height: 1.45;
+    opacity: .55;
+    white-space: pre-line;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+.tt-archive-ops {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    border-left: 1px solid rgba(255,255,255,.08);
+}
+.tt-archive-ops button {
+    flex: 1 1 0;
+    min-width: 52px;
+    margin: 0;
+    padding: 0 12px;
+    border: none;
+    color: inherit;
+    background: none;
+    font: inherit;
+    font-size: .85em;
+    opacity: .75;
+}
+.tt-archive-ops button + button { border-top: 1px solid rgba(255,255,255,.08); }
+.tt-archive-ops button.del { color: #e3927f; }
+.tt-archive-empty { padding: 18px 0; text-align: center; font-size: .9em; opacity: .45; }
+.tt-wi-draft-actions.tt-archive-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.tt-wi-draft-actions.tt-archive-actions button:last-child { background: rgba(255,255,255,.08); }
+.tt-text-editor .tt-text-editor-name {
+    padding: 0 10px;
+    border: 1px solid rgba(255,255,255,.2);
+    border-radius: 10px;
+    color: inherit;
+    background: rgba(0,0,0,.18);
+    font: inherit;
+    font-weight: 600;
+}
