@@ -2919,36 +2919,40 @@
 }
 .tt-float-btn { display: none !important; }
 /* v1.18.6 快捷工具一排：输入框上面，跟发送按钮一个颜色的小按钮 */
-/* v1.18.16 快捷工具放进输入框那一行右边那组按钮的最前面；「深入」做成带边框的胶囊，跟纸飞机差不多高 */
+/* v1.18.17 「深入」跟纸飞机一个样式：不要边框气泡，同样的灰和透明度，跟发送按钮之间留出间距（用户：「跟右边的飞机做成一个样式……别弄差异化太大……重叠了」） */
 #send_form #tt-quick-tools {
     display: flex;
     align-items: center;
-    gap: 6px;
-    margin-right: 6px;
+    gap: 4px;
+    margin-right: 10px;
+    flex: none;
 }
 #send_form #tt-quick-tools[hidden] { display: none; }
 #send_form .tt-quick-btn {
-    height: 36px;
+    height: var(--bottomFormBlockSize, 40px);
+    min-width: 40px;
     margin: 0;
-    padding: 0 16px;
-    border-radius: 18px;
-    border: 1px solid color-mix(in srgb, var(--SmartThemeBodyColor, #ccc) 35%, transparent);
-    background: color-mix(in srgb, var(--SmartThemeBodyColor, #ccc) 8%, transparent);
+    padding: 0 4px;
+    border: none;
+    background: none;
     color: var(--SmartThemeBodyColor, #ccc);
-    opacity: .85;
+    opacity: .7;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 5px;
-    font-size: 15px;
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: 1px;
     font-family: inherit;
     white-space: nowrap;
     cursor: pointer;
     -webkit-tap-highlight-color: transparent;
+    transition: opacity .15s;
 }
 #send_form .tt-quick-btn[hidden] { display: none; }
-#send_form .tt-quick-btn:active { opacity: 1; background: color-mix(in srgb, var(--SmartThemeBodyColor, #ccc) 18%, transparent); }
-#send_form #tt-quick-tools.tt-quick-busy .tt-quick-btn { opacity: .35; }
+#send_form .tt-quick-btn:hover,
+#send_form .tt-quick-btn:active { opacity: 1; }
+#send_form #tt-quick-tools.tt-quick-busy .tt-quick-btn { opacity: .3; }
 /* Agent 按钮：开着（active / running）时不藏 */
 body.tt-hide-agent #rightSendForm .ttas-agent-send-toggle:not(.active):not(.running) { display: none !important; }
 .tt-vars-pop { display: flex; flex-direction: column; gap: 8px; }
