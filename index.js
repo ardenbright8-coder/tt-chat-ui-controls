@@ -12,6 +12,7 @@ import { initTips, cleanupTips } from './tip.js';
 import { initUpdateWatch, cleanupUpdateWatch, reloadSoon } from './update-watch.js';
 import { initImmersive, cleanupImmersive } from './immersive.js';
 import { initTaocan, cleanupTaocan } from './taocan.js';
+import { initMvuFix, cleanupMvuFix } from './mvu-fix.js';
 
 const EXTENSION_KEY = 'chat-text-color';
 
@@ -820,6 +821,7 @@ export async function init() {
     initUpdateWatch();
     initImmersive();
     initTaocan();
+    initMvuFix();
     if (initialized) {
         mountUi();
         return;
@@ -848,6 +850,7 @@ export async function cleanup() {
     cleanupUpdateWatch();
     cleanupImmersive();
     cleanupTaocan();
+    cleanupMvuFix();
     cleanupContextLock();
     cleanupPromptDetachGuard();
     stopMessageBannerFix?.();

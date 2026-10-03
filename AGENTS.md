@@ -34,6 +34,8 @@
 
 **出图套餐**（`taocan.js`，魔法棒「出图套餐」）：一页排完（用户 10-03 在两种排法里挑的 A：「还是这个吧，这个挺好的」）：最上面一行小套餐卡（一行四个，图 + 「套餐一」+ 套餐名，不写几个版本）、点哪个下面一排版本卡左右划（版本卡他要「稍微再大一点点」，现在 128px），再往下全是「最近出的图」；正在用的蓝框，点版本直接换上（不弹确认），「最近出的图」角上标版本 / 测试 / 草稿。🚨 连电脑不能直连：安卓正式版酒馆 `usesCleartextTraffic=false`，页面里 fetch 或 `<img>` 连 http 地址都会被拦；所以借酒馆后台 `/api/backends/chat-completions/generate`（`chat_completion_source: custom`、`custom_url` = 「图像生成」的 ComfyUI 地址 + `/jiuguan/v1`、`stream:false`、`type:quiet`），命令 JSON 放 user 消息里，结果 JSON 在 `choices[0].message.content`，图片都是 data 网址。电脑那头是 ComfyUI 插件 `jiuguan_mianban\手机接口.py` + 个人娱乐 `工具\酒馆\套餐\手机接口.js`，命令 list / switch / recent / big，改格式两头一起改。叫法照 `C:\A-AI-gongju\geren-yule\00_叫什么（咱俩说话的统一叫法）.md`。
 
+**角色变量**（v1.18.0，`mvu-fix.js`，扩展页「角色变量」两个开关，默认都开）：起因是用户的预设盖掉了卡里的变量格式要求，AI 吐光秃秃的 ```json JSONPatch 代码块，MVU（只认 `<JSONPatch>` / `<json_patch>` 标签里的）不认，面板一直停在初始值。①收到回复时用 `eventSource.makeFirst` 排在 MVU 前面，同步给光秃秃的 JSONPatch 包上 `<UpdateVariable><JSONPatch>`（已在 `<UpdateVariable>` 里就只补 `<JSONPatch>`；`<think>` 里的不动；已有标签的消息不碰）；2 秒后看变量算没算上，没算上就点卡里的「重新处理变量」按钮（没按钮用 `window.Mvu.parseMessage` + `replaceMvuData`），每条只替他按一次。②每条 AI 回复的 `.mes_text` 后面插一个小框：旧值（往前找最近一条有 `stat_data` 的消息）→ 新值（这条 `message.variables[swipe_id].stat_data`），数字带 +/-，没算上的标红「没算上」，长的点一下展开；只有最后一条能「修好并重新算」（MVU 的重新处理只管最后一条）。开场白没改不显示；最后一条出字时不显示。变量只读，不写别家的。
+
 **魔法棒菜单**：每项口语名字＋一句说明；同步面板、打开数据库默认收进扩展页「魔法棒菜单」（`wand-menu.js`）。
 
 ## 🚨 面板统一规矩（2026-10-02 定，本扩展所有面板、弹窗都照这个）

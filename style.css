@@ -2799,3 +2799,64 @@
 #tt-autoimg-toggle-wand.tt-wand-on .extensionsMenuExtensionButton {
     color: var(--SmartThemeQuoteColor, #e18a24);
 }
+
+/* v1.18.0 角色变量：每条回复底下的变量变化小框（mvu-fix.js）。在 .mes_text 外面，卡的正则碰不到 */
+#chat .mes .tt-mvu-card {
+    margin: 6px 0 4px;
+    padding: 6px 10px;
+    border-radius: 10px;
+    border: 1px solid color-mix(in srgb, var(--SmartThemeBodyColor, #ccc) 18%, transparent);
+    background: color-mix(in srgb, var(--SmartThemeBodyColor, #ccc) 6%, transparent);
+    font-size: .85em;
+    line-height: 1.5;
+}
+#chat .mes .tt-mvu-card.tt-mvu-broken {
+    border-color: color-mix(in srgb, #c0503c 55%, transparent);
+    background: color-mix(in srgb, #c0503c 10%, transparent);
+}
+#chat .mes .tt-mvu-head {
+    opacity: .7;
+    font-size: .92em;
+}
+#chat .mes .tt-mvu-row {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    justify-content: space-between;
+    min-width: 0;
+}
+#chat .mes .tt-mvu-name {
+    flex: 0 0 auto;
+    opacity: .85;
+}
+#chat .mes .tt-mvu-val {
+    flex: 1 1 auto;
+    min-width: 0;
+    text-align: right;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+#chat .mes .tt-mvu-long { cursor: pointer; }
+#chat .mes .tt-mvu-long.tt-mvu-open { flex-direction: column; align-items: stretch; }
+#chat .mes .tt-mvu-long.tt-mvu-open .tt-mvu-val {
+    white-space: pre-wrap;
+    text-align: left;
+}
+#chat .mes .tt-mvu-old { opacity: .6; }
+#chat .mes .tt-mvu-up { color: #5aa86f; }
+#chat .mes .tt-mvu-down { color: #d0694f; }
+#chat .mes .tt-mvu-bad {
+    margin-left: 4px;
+    color: #e0705a;
+    font-size: .9em;
+}
+#chat .mes .tt-mvu-note {
+    margin-top: 4px;
+    opacity: .6;
+    font-size: .9em;
+}
+#chat .mes .tt-mvu-fix {
+    margin-top: 6px;
+    width: 100%;
+}
