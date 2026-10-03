@@ -3025,3 +3025,40 @@ body.tt-hide-agent #rightSendForm .ttas-agent-send-toggle:not(.active):not(.runn
     text-overflow: ellipsis;
 }
 #chat .mes .tt-mvu-arrow { flex: none; opacity: .6; font-size: .9em; }
+
+/* v1.18.18 ≡「写法说明」：选一段 → 大窗口改（text-editor.js 用 tt-wi-draft-dialog 那套） */
+.tt-text-editor-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 0 0 auto;
+    min-height: 36px;
+}
+.tt-text-editor-head b { font-size: 1.05em; }
+.tt-text-editor-dirty { color: #e0a96d; font-size: .9em; }
+.tt-text-editor-reset {
+    margin-left: auto;
+    min-height: 36px;
+    padding: 0 12px;
+    border: 1px solid rgba(255,255,255,.2);
+    border-radius: 10px;
+    color: inherit;
+    background: rgba(255,255,255,.08);
+    font: inherit;
+    font-size: .9em;
+}
+.tt-prompt-picker { display: flex; flex-direction: column; gap: 10px; text-align: left; }
+.tt-prompt-picker h3 { margin: 0 0 4px; justify-content: center; }
+.tt-prompt-picker .tt-prompt-pick {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    width: 100%;
+    margin: 0;
+    padding: 12px 14px;
+    box-sizing: border-box;
+    text-align: left;
+    white-space: normal;
+}
+.tt-prompt-picker .tt-prompt-pick small { opacity: .7; line-height: 1.4; }

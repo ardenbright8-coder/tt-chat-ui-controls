@@ -9,12 +9,14 @@
 
 import { tip } from './tip.js';
 import { vlog } from './var-log.js';
+import { openTextEditor } from './text-editor.js';
 
 const EXTENSION_KEY = 'chat-text-color';
 const SETTINGS_ID = 'tt-chat-tools-settings';
 const MENU_ID = 'option_tt_vars';
 const DEEPEN_ID = 'tt-deepen-btn';
 const BOTTOM_MENU_ID = 'option_tt_bottom';
+const PROMPTS_MENU_ID = 'option_tt_prompts';
 const PROMPT_KEY = 'tt_deepen';
 const VAR_BUTTONS = ['重新处理变量', '重新读取初始变量'];
 const HIDE_CLASS = 'tt-varbtn-hidden';
@@ -81,12 +83,46 @@ const DEEPEN_V2 = `【本轮写法：深入这场戏】
 
 // v1.18.14 第三版（用户 2026-10-04 一起讨论定的）：短、通用，不针对哪个故事；不刻意加新东西。
 // 起因：第二版让 AI「可以加新东西」，它加了一堆大动作，不顾上下文、把用户的人设带偏（用户：「太刻意了……跑别人上下文也不看了」）。
-export const DEFAULT_DEEPEN = `【深入这场戏】
+// v1.18.14 的第三版
+const DEEPEN_V3 = `【深入这场戏】
 不急着往前推，把眼下这一刻往深里写。
 - 先想清楚这一刻：在场每个人想要什么、顾忌什么、藏着什么。{{user}}正在做的事和他的打算是前提，顺着写，别替他改主意。
 - 让人物自己动起来：按各自的性格内核和此刻处境去反应，有自己的算盘，不为配合谁变笨变软。
 - 戏靠对话撑：你来我往、话里有话；动作、神态、环境给对话加分量。
 - 节奏放慢，情绪一点点推；停在留给{{user}}接的地方。`;
+
+// v1.18.18 第四版：「戏靠对话撑」写死了，改成「让人物立起来」——对话、神情、动作、状态都是手段
+// （用户：「核心是要表现他这个人物的神情……人设要立起来……说话的目的就是让人更鲜活、更饱满」）
+export const DEFAULT_DEEPEN = `【深入这场戏】
+不急着往前推，把眼下这一刻往深里写。
+- 先想清楚这一刻：在场每个人想要什么、顾忌什么、藏着什么。{{user}}正在做的事和他的打算是前提，顺着写，别替他改主意。
+- 让人物自己动起来：按各自的性格内核和此刻处境去反应，有自己的算盘，不为配合谁变笨变软。
+- 让人物立起来：用最能表现他此刻的东西——一句话、一个神情、一个动作、一种状态。
+- 节奏放慢，情绪一点点推；停在留给{{user}}接的地方。`;
+
+// v1.18.18 接管发送（用户 2026-10-04 一起讨论定的）：深入 = 原地往深挖；空着发送 = 往前走、要有转折；
+// 写了字发送 = 照他写的走、写得好看（「同样是要去喝酒，李白写的就不一样」）。
+// 换不换场景看这场戏的事办完没有（McKee：每场戏要有转折；Swain：场景—续场）。
+export const DEFAULT_SEND = `【写好这一轮】
+{{user}}刚写的是这一轮要发生的事，照着写，写得好看。
+- 不改他的意思，他写的事发生到他写的程度为止。
+- 在场的人按各自内核和此刻处境真实地回应，有自己的算盘。
+- 让人物立起来：用最能表现他此刻的东西——一句话、一个神情、一个动作、一种状态；不写空话套话。
+- 停在留给{{user}}接的地方。`;
+
+export const DEFAULT_PUSH = `【往下走】
+{{user}}这轮没写，交给你往下走一步。
+- 先判断眼下这场戏的事办完没有。没办完：留在这场里，把它推到一个转折——有人做了决定、说破了话、关系或局面变了。办完了：写人物怎么消化刚才的事、各自打算怎么办，再自然过渡到下一场。
+- 新东西从已有的人物、矛盾、伏笔里来，合乎人设和局面；{{user}}的打算是前提，别替他改主意。
+- 让人物立起来：用最能表现他此刻的东西——一句话、一个神情、一个动作、一种状态。
+- 这一轮要有东西变，不原地打转，不重复上一条；停在留给{{user}}接的地方。`;
+
+// ≡「写法说明」里能改的三段
+const PROMPTS = [
+    { key: 'deepenPrompt', name: '深入', desc: '点「深入」时用：原地往深挖，另起一条', def: () => DEFAULT_DEEPEN },
+    { key: 'sendPrompt', name: '写了字发送', desc: '输入框有字点发送时用：照你写的走，写得好看', def: () => DEFAULT_SEND },
+    { key: 'pushPrompt', name: '空着发送', desc: '输入框空着点发送时用：另起一条，往下走一步', def: () => DEFAULT_PUSH },
+];
 
 let mountTimer = null;
 let observer = null;
@@ -102,12 +138,15 @@ let bound = false;
 
 function settings() {
     const all = ctx()?.extensionSettings;
-    if (!all) return { varsInMenu: true, deepenButton: true, deepenPrompt: DEFAULT_DEEPEN };
+    if (!all) return { varsInMenu: true, deepenButton: true, sendTakeover: true, deepenPrompt: DEFAULT_DEEPEN, sendPrompt: DEFAULT_SEND, pushPrompt: DEFAULT_PUSH };
     const s = all[EXTENSION_KEY] = all[EXTENSION_KEY] || {};
     if (typeof s.varsInMenu !== 'boolean') s.varsInMenu = true;
     if (typeof s.deepenButton !== 'boolean') s.deepenButton = true;
     if (typeof s.hideAgentButton !== 'boolean') s.hideAgentButton = true;
-    if (typeof s.deepenPrompt !== 'string' || !s.deepenPrompt.trim() || s.deepenPrompt === DEEPEN_V1 || s.deepenPrompt === DEEPEN_V2) s.deepenPrompt = DEFAULT_DEEPEN;
+    if (typeof s.deepenPrompt !== 'string' || !s.deepenPrompt.trim() || [DEEPEN_V1, DEEPEN_V2, DEEPEN_V3].includes(s.deepenPrompt)) s.deepenPrompt = DEFAULT_DEEPEN;
+    if (typeof s.sendTakeover !== 'boolean') s.sendTakeover = true;
+    if (typeof s.sendPrompt !== 'string' || !s.sendPrompt.trim()) s.sendPrompt = DEFAULT_SEND;
+    if (typeof s.pushPrompt !== 'string' || !s.pushPrompt.trim()) s.pushPrompt = DEFAULT_PUSH;
     delete s.bottomButton;
     return s;
 }
@@ -201,6 +240,18 @@ function mountMenuItem() {
             jumpBottom();
         });
         list.append(down);
+    }
+    if (!document.getElementById(PROMPTS_MENU_ID)) {
+        const item = document.createElement('a');
+        item.id = PROMPTS_MENU_ID;
+        item.title = '改深入、写了字发送、空着发送时临时加给 AI 的说明';
+        item.innerHTML = '<i class="fa-lg fa-solid fa-feather-pointed"></i><span>写法说明</span>';
+        item.addEventListener('click', (event) => {
+            event.preventDefault();
+            closeOptionsMenu();
+            openPromptPicker();
+        });
+        list.append(item);
     }
     const existing = document.getElementById(MENU_ID);
     if (!settings().varsInMenu) { existing?.remove(); return true; }
@@ -361,6 +412,80 @@ async function onDeepen(event) {
     }
 }
 
+// ---------------------------------------------------------------- ≡「写法说明」：选一段，进大窗口改
+
+function openPromptEditor(p) {
+    openTextEditor({
+        title: `写法说明 · ${p.name}`,
+        value: settings()[p.key] || p.def(),
+        defaultValue: p.def(),
+        onSave: (text) => {
+            settings()[p.key] = text.trim() ? text : p.def();
+            save();
+            vlog('写法说明', `改了「${p.name}」`);
+            globalThis.toastr?.success?.('存好了', `写法说明 · ${p.name}`);
+        },
+    });
+}
+
+async function openPromptPicker() {
+    const context = ctx();
+    if (!context?.callGenericPopup) return;
+    const box = document.createElement('div');
+    box.className = 'tt-prompt-picker';
+    box.innerHTML = `<h3 class="tt-tip-row">写法说明 ${tip('这三段是点按钮时临时加给 AI 的说明，只管那一条回复，出完就撤掉。点一段进大窗口改，改完点「保存」。')}</h3>`
+        + PROMPTS.map((p, i) => `<button type="button" class="menu_button tt-prompt-pick" data-i="${i}"><b>${p.name}</b><small>${p.desc}</small></button>`).join('');
+    let popup = null;
+    box.addEventListener('click', (event) => {
+        const pick = event.target.closest('.tt-prompt-pick');
+        if (!pick) return;
+        const p = PROMPTS[Number(pick.dataset.i)];
+        popup?.completeAffirmative?.() ?? document.querySelector('.popup:last-of-type .popup-button-ok')?.click();
+        setTimeout(() => openPromptEditor(p), 150);
+    });
+    if (context.Popup && context.POPUP_TYPE) {
+        popup = new context.Popup(box, context.POPUP_TYPE.TEXT, '', { okButton: '关闭' });
+        await popup.show();
+    } else {
+        await context.callGenericPopup(box, context.POPUP_TYPE.TEXT, '', { okButton: '关闭' });
+    }
+}
+
+// ---------------------------------------------------------------- 接管发送（v1.18.18）
+// 写了字：加「写好这一轮」再让酒馆照常发；空着：加「往下走」，自己另起一条新回复（不走酒馆的「按发送键以继续」）。
+
+function armPrompt(text, label) {
+    if (!setDeepenPrompt(text)) return false;
+    deepenArmed = true;
+    clearTimeout(deepenTimer);
+    deepenTimer = setTimeout(() => disarmDeepen('5 分钟没出完'), 5 * 60 * 1000);
+    vlog('写法说明', `这一条带上「${label}」`);
+    return true;
+}
+
+async function onSendClick(event) {
+    if (!event.target?.closest?.('#send_but')) return;
+    if (!settings().sendTakeover || generating()) return;
+    const box = document.getElementById('send_textarea');
+    const typed = (box?.value ?? '').trim();
+    if (typed) {
+        armPrompt(settings().sendPrompt || DEFAULT_SEND, '写了字发送');
+        return; // 让酒馆照常发
+    }
+    const context = ctx();
+    if (typeof context?.generate !== 'function') { armPrompt(settings().pushPrompt || DEFAULT_PUSH, '空着发送'); return; }
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (!armPrompt(settings().pushPrompt || DEFAULT_PUSH, '空着发送')) return;
+    try {
+        await context.generate('normal');
+    } catch (error) {
+        disarmDeepen('出错了');
+        vlog('出错', `空着发送生成失败：${error?.message || error}`);
+        globalThis.toastr?.error?.(String(error?.message || error), '发送');
+    }
+}
+
 function bindGeneration() {
     const context = ctx();
     const types = context?.eventTypes ?? context?.event_types;
@@ -376,10 +501,6 @@ function bindGeneration() {
 
 // ---------------------------------------------------------------- 扩展页「聊天按钮」
 
-function promptStatus(dirty) {
-    const mark = document.getElementById('tt-deepen-dirty');
-    if (mark) mark.style.visibility = dirty ? 'visible' : 'hidden';
-}
 
 function mountPanel() {
     if (document.getElementById(SETTINGS_ID)) return true;
@@ -394,15 +515,10 @@ function mountPanel() {
     </div>
     <div class="inline-drawer-content">
       <div class="tt-tip-row"><label class="checkbox_label tt-hold-check"><input type="checkbox" id="tt-ct-vars"> <span>变量按钮收进 ≡ 菜单</span></label>${tip('输入框上面「重新处理变量」「重新读取初始变量」那排大按钮藏起来，改从 ≡ 菜单的「变量」点开用。')}</div>
-      <div class="tt-tip-row"><label class="checkbox_label tt-hold-check"><input type="checkbox" id="tt-ct-deepen"> <span>深入按钮</span></label>${tip('输入框上面快捷工具那一排的「深入」。点了另起一条新回复，AI 围着眼下这场戏写深一条，多用对话把人物演出来。输入框里先写几句（比如「我送了她一支玉簪」），点深入就当成这一轮的补充一起带上，不会作为你的消息发出去。')}</div>
+      <div class="tt-tip-row"><label class="checkbox_label tt-hold-check"><input type="checkbox" id="tt-ct-deepen"> <span>深入按钮</span></label>${tip('输入框上面快捷工具那一排的「深入」。点了另起一条新回复，AI 围着眼下这场戏写深一条，把人物立起来。输入框里先写几句（比如「我送了她一支玉簪」），点深入就当成这一轮的补充一起带上，不会作为你的消息发出去。')}</div>
       <div class="tt-tip-row"><label class="checkbox_label tt-hold-check"><input type="checkbox" id="tt-ct-agent"> <span>藏掉 Agent 按钮</span></label>${tip('发送按钮左边那个原子图标（TauriTavern 的 Agent 模式）。Agent 模式开着时按钮照常显示，方便关掉。')}</div>
-      <div class="tt-tip-row"><b>深入时给 AI 的说明</b>${tip('点「深入」时，这段话会临时加给 AI，只管这一条，出完就撤掉。改完点「保存」才算数。')}<span id="tt-deepen-dirty" class="tt-dirty">● 没保存</span></div>
-      <textarea id="tt-ct-prompt" class="text_pole" rows="10"></textarea>
-      <div class="tt-ct-actions">
-        <div class="menu_button" id="tt-ct-save">保存</div>
-        <div class="menu_button" id="tt-ct-cancel">取消</div>
-        <div class="menu_button" id="tt-ct-reset">恢复原版</div>
-      </div>
+      <div class="tt-tip-row"><label class="checkbox_label tt-hold-check"><input type="checkbox" id="tt-ct-send"> <span>接管发送</span></label>${tip('写了字点发送：带上「写好这一轮」，照你写的走、写得好看。空着点发送：另起一条新回复，带上「往下走」，不再接着上一条续写。关掉就是酒馆原来的发送。')}</div>
+      <div class="menu_button" id="tt-ct-prompts">改写法说明（深入 / 写了字发送 / 空着发送）</div>
     </div>
   </div>
 </div>`);
@@ -415,32 +531,8 @@ function mountPanel() {
     bind('tt-ct-vars', 'varsInMenu', () => { applyBar(); mountMenuItem(); });
     bind('tt-ct-deepen', 'deepenButton', schedulePosition);
     bind('tt-ct-agent', 'hideAgentButton', applyAgentHide);
-    const area = document.getElementById('tt-ct-prompt');
-    area.value = s.deepenPrompt;
-    promptStatus(false);
-    area.addEventListener('input', () => promptStatus(area.value !== settings().deepenPrompt));
-    document.getElementById('tt-ct-save').addEventListener('click', () => {
-        settings().deepenPrompt = area.value.trim() ? area.value : DEFAULT_DEEPEN;
-        area.value = settings().deepenPrompt;
-        save();
-        promptStatus(false);
-        globalThis.toastr?.success?.('存好了', '深入说明');
-    });
-    document.getElementById('tt-ct-cancel').addEventListener('click', () => {
-        area.value = settings().deepenPrompt;
-        promptStatus(false);
-    });
-    document.getElementById('tt-ct-reset').addEventListener('click', async () => {
-        const context = ctx();
-        const ok = context?.callGenericPopup
-            ? await context.callGenericPopup('把深入说明恢复成原版？你改过的会没了。', context.POPUP_TYPE.CONFIRM, '', { okButton: '恢复', cancelButton: '算了' })
-            : globalThis.confirm?.('把深入说明恢复成原版？');
-        if (!ok) return;
-        area.value = DEFAULT_DEEPEN;
-        settings().deepenPrompt = DEFAULT_DEEPEN;
-        save();
-        promptStatus(false);
-    });
+    bind('tt-ct-send', 'sendTakeover', () => {});
+    document.getElementById('tt-ct-prompts').addEventListener('click', () => openPromptPicker());
     return true;
 }
 
@@ -450,6 +542,7 @@ function bindDom() {
     if (bound) return;
     bound = true;
     window.addEventListener('resize', schedulePosition);
+    document.addEventListener('click', onSendClick, true);
     document.addEventListener('focusin', schedulePosition, true);
     document.addEventListener('focusout', schedulePosition, true);
     chat()?.addEventListener('scroll', schedulePosition, { passive: true });
@@ -502,6 +595,7 @@ export function cleanupChatTools() {
     genListeners = [];
     if (bound) {
         window.removeEventListener('resize', schedulePosition);
+        document.removeEventListener('click', onSendClick, true);
         document.removeEventListener('focusin', schedulePosition, true);
         document.removeEventListener('focusout', schedulePosition, true);
         chat()?.removeEventListener('scroll', schedulePosition);
@@ -509,8 +603,8 @@ export function cleanupChatTools() {
     }
     document.querySelectorAll(`.${HIDE_CLASS}`).forEach((el) => el.classList.remove(HIDE_CLASS));
     document.querySelectorAll(`.${EMPTY_BAR}`).forEach((el) => el.classList.remove(EMPTY_BAR));
-    for (const id of [MENU_ID, BOTTOM_MENU_ID, ROW_ID, SETTINGS_ID]) document.getElementById(id)?.remove();
+    for (const id of [MENU_ID, BOTTOM_MENU_ID, PROMPTS_MENU_ID, ROW_ID, SETTINGS_ID]) document.getElementById(id)?.remove();
     document.body?.classList.remove('tt-hide-agent');
 }
 
-export const __test = { applyBar, position, onDeepen, settings, varButtons };
+export const __test = { applyBar, position, onDeepen, onSendClick, openPromptPicker, settings, varButtons };
