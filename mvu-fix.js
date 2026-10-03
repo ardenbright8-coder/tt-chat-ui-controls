@@ -9,6 +9,7 @@
 // 只读消息上的变量，不改别家的东西；改的只有消息原文里那段光秃秃的 JSON（包上标签）。
 
 import { tip } from './tip.js';
+import { vlog, short, snapshot, setSnapshotProvider } from './var-log.js';
 
 const EXTENSION_KEY = 'chat-text-color';
 const SETTINGS_ID = 'tt-mvu-settings';
@@ -23,6 +24,7 @@ let runs = [];
 let pausedUntil = 0;
 let receivedListener = null;
 let refreshListener = null;
+let chatListener = null;
 const checked = new Set(); // 已经替它按过「重新处理变量」的消息（按原文记），免得来回按
 
 function settings() {
@@ -231,6 +233,87 @@ export function compare(changes, before, after) {
     });
 }
 
+// ---------------------------------------------------------------- 给测试日志用
+
+const VERSION = '1.18.1';
+
+function flags(text) {
+    const t = String(text ?? '');
+    const f = [];
+    if (/<UpdateVariable>/i.test(t)) f.push('有<UpdateVariable>');
+    if (HAS_TAG.test(t)) f.push('有<JSONPatch>');
+    if (/_\.(set|add|insert|remove|assign)\(/.test(t)) f.push('有_.set类命令');
+    if (/<StatusPlaceHolderImpl\s*\/>/.test(t)) f.push('有<StatusPlaceHolderImpl/>（MVU处理过的记号）');
+    const bare = HAS_TAG.test(t) ? 0 : findBarePatches(t).length;
+    if (bare) f.push(`光秃秃的JSONPatch ${bare} 段`);
+    if (/```/.test(t)) f.push('有```代码块');
+    return f.length ? f.join('、') : '什么变量标记都没有';
+}
+
+function varsInfo(message) {
+    const v = message?.variables;
+    if (!v) return '没有 variables';
+    const kind = Array.isArray(v) ? `数组长${v.length}` : '对象';
+    const vars = Array.isArray(v) ? v[message.swipe_id ?? 0] : v;
+    const keys = vars && typeof vars === 'object' ? Object.keys(vars).join(',') : '空';
+    return `variables ${kind}，swipe_id=${message.swipe_id ?? 0}，当前这份的键：${keys || '空'}`;
+}
+
+function ranges(ids) {
+    const out = [];
+    for (let i = 0; i < ids.length; i++) {
+        let j = i;
+        while (j + 1 < ids.length && ids[j + 1] === ids[j] + 1) j++;
+        out.push(i === j ? `${ids[i]}` : `${ids[i]}-${ids[j]}`);
+        i = j;
+    }
+    return out.join(',') || '无';
+}
+
+function listenerInfo() {
+    const context = ctx();
+    const type = (context?.eventTypes ?? context?.event_types)?.MESSAGE_RECEIVED;
+    const list = context?.eventSource?.events?.[type];
+    if (!Array.isArray(list)) return '看不到监听列表';
+    return `MESSAGE_RECEIVED 共 ${list.length} 个监听，本扩展排第 ${list.indexOf(receivedListener) + 1}`;
+}
+
+function takeSnapshot() {
+    const context = ctx();
+    const chat = context?.chat ?? [];
+    const mvu = globalThis.Mvu;
+    const lines = [];
+    lines.push(`扩展 ${VERSION}；设置 自动修=${settings().mvuAutoFix} 气泡=${settings().mvuBubble}`);
+    lines.push(`Mvu 全局：${mvu ? `有（${Object.keys(mvu).join(',')}）` : '没有（MVU 脚本没跑起来？）'}`);
+    lines.push(`酒馆助手：${globalThis.TavernHelper ? '有' : '没看到 TavernHelper'}；「重新处理变量」按钮：${findReprocessButton() ? '找到了' : '没找到'}`);
+    lines.push(listenerInfo());
+    lines.push(`角色：${context?.name2 ?? '?'}；聊天 ${context?.getCurrentChatId?.() ?? '?'}，共 ${chat.length} 条`);
+    const withStat = chat.map((_, i) => (statAt(chat, i) ? i : -1)).filter((i) => i >= 0);
+    lines.push(`有 stat_data 的楼层：${ranges(withStat)}`);
+    lines.push(`聊天级变量 stat_data：${context?.chatMetadata?.variables?.stat_data ? '有' : '没有'}`);
+    for (let i = Math.max(0, chat.length - 4); i < chat.length; i++) {
+        const m = chat[i];
+        const el = document.querySelector(`#chat .mes[mesid="${i}"]`);
+        lines.push(`  #${i} ${m.is_user ? '用户' : m.is_system ? '系统' : 'AI'} ${short(m.name, 20)}｜${varsInfo(m)}｜${flags(m.mes)}｜页面上${el ? '有' : '没有'}这条，气泡${el?.querySelector(`.${CARD}`) ? '有' : '没有'}`);
+    }
+    const last = withStat.at(-1);
+    if (last !== undefined) lines.push(`最新有变量的 #${last} stat_data：${short(statAt(chat, last), 1500)}`);
+    return lines.join('\n');
+}
+
+// 收到回复 5 秒后：这条消息最后成了啥样
+function laterReport(id) {
+    const chat = ctx()?.chat;
+    const message = chat?.[id];
+    if (!message) { vlog('5秒后', `#${id} 没了`); return; }
+    const changes = readChanges(message.mes);
+    const rows = compare(changes, statBefore(chat, id), statAt(chat, id));
+    const rowText = rows.length
+        ? rows.map((r) => `  ${r.path.join('/')}：之前 ${short(r.old, 60)}，该是 ${short(r.want ?? r.value, 60)}，现在 ${short(r.now, 60)}，${r.ok ? '对上了' : '没对上'}`).join('\n')
+        : '  （原文里读不出更新命令）';
+    vlog('5秒后', `#${id}｜${varsInfo(message)}｜${flags(message.mes)}\n${rowText}\n原文末尾 1500 字：\n${String(message.mes ?? '').slice(-1500)}`);
+}
+
 // ---------------------------------------------------------------- 重新算
 
 function findReprocessButton() {
@@ -243,20 +326,21 @@ function findReprocessButton() {
 
 async function reprocess(id) {
     const chat = ctx()?.chat;
-    if (!chat || id !== chat.length - 1) return false;
+    if (!chat || id !== chat.length - 1) { vlog('重新算', `#${id} 不是最后一条，不算`); return false; }
     // 优先按卡自己的按钮：跟用户手点一样
     const button = findReprocessButton();
-    if (button) { button.click(); return true; }
+    if (button) { vlog('重新算', `#${id} 点了卡里的「重新处理变量」`); button.click(); return true; }
     const mvu = globalThis.Mvu;
-    if (!mvu?.parseMessage || !mvu?.replaceMvuData || !mvu?.getMvuData) return false;
+    if (!mvu?.parseMessage || !mvu?.replaceMvuData || !mvu?.getMvuData) { vlog('重新算', `#${id} 没按钮也没 Mvu 全局，算不了`); return false; }
     let base = null;
     for (let k = id - 1; k >= 0 && !base; k--) {
         const data = mvu.getMvuData({ type: 'message', message_id: k });
         if (data?.stat_data) base = data;
     }
-    if (!base) return false;
+    if (!base) { vlog('重新算', `#${id} 往前找不到有变量的楼层，算不了`); return false; }
     const next = await mvu.parseMessage(chat[id].mes, base);
     if (next) await mvu.replaceMvuData(next, { type: 'message', message_id: id });
+    vlog('重新算', `#${id} 用 Mvu.parseMessage 算了，${next ? '写回了' : '没有结果'}`);
     return true;
 }
 
@@ -293,13 +377,16 @@ function onReceived(rawId) {
     const id = Number(rawId);
     const context = ctx();
     const message = context?.chat?.[id];
-    if (!message || message.is_user || message.is_system) return;
+    if (!message) { vlog('收到回复', `#${rawId} 找不到这条`); return; }
+    if (message.is_user || message.is_system) return;
+    vlog('收到回复', `#${id} ${short(message.name, 20)}，${String(message.mes ?? '').length} 字｜${flags(message.mes)}｜${listenerInfo()}`);
+    setTimeout(() => laterReport(id), 5000);
     if (!settings().mvuAutoFix) return;
     // 同步改原文：MVU 的监听排在本扩展后面（卡脚本加载得晚），它读到的就是修好的
     const fixed = wrapBarePatches(message.mes);
     if (!fixed) return;
     setMessageText(id, fixed);
-    console.info('[酒馆拓展] 给 AI 没包标签的变量更新包上了 <JSONPatch>，消息', id);
+    vlog('包标签', `#${id} 给光秃秃的 JSONPatch 包上了 <UpdateVariable><JSONPatch>`);
     setTimeout(() => verify(id), 2000);
 }
 
@@ -419,7 +506,7 @@ function decorateChat() {
     const chat = ctx()?.chat;
     if (!chat) return;
     document.querySelectorAll('#chat .mes[mesid]').forEach((el) => {
-        try { decorateMessage(el, chat); } catch (error) { console.warn('[酒馆拓展] 变量气泡出错', error); }
+        try { decorateMessage(el, chat); } catch (error) { vlog('出错', `变量气泡 #${el.getAttribute('mesid')}：${error?.message || error}`); }
     });
 }
 
@@ -491,6 +578,10 @@ function bindEvents() {
         if (typeof events.makeFirst === 'function') events.makeFirst(types.MESSAGE_RECEIVED, receivedListener);
         else events.on(types.MESSAGE_RECEIVED, receivedListener);
     }
+    if (!chatListener && types.CHAT_CHANGED) {
+        chatListener = () => setTimeout(() => snapshot('打开了聊天'), 1500);
+        events.on(types.CHAT_CHANGED, chatListener);
+    }
     if (!refreshListener) {
         refreshListener = () => setTimeout(schedule, 300);
         for (const t of ['MESSAGE_UPDATED', 'MESSAGE_SWIPED', 'MESSAGE_EDITED', 'CHAT_CHANGED', 'MESSAGE_DELETED']) {
@@ -511,13 +602,16 @@ function unbindEvents() {
                 if (types?.[t]) events?.removeListener?.(types[t], refreshListener);
             }
         }
+        if (chatListener) events?.removeListener?.(types?.CHAT_CHANGED, chatListener);
     } catch { /* host gone */ }
+    chatListener = null;
     receivedListener = null;
     refreshListener = null;
 }
 
 export function initMvuFix() {
     clearInterval(mountTimer);
+    setSnapshotProvider(takeSnapshot);
     const ready = () => {
         bindEvents();
         const a = watchChat();
@@ -542,4 +636,4 @@ export function cleanupMvuFix() {
 }
 
 // 给电脑上的自测脚本用
-export const __test = { findBarePatches, wrapBarePatches, readChanges, compare, decorateChat, onReceived, settings };
+export const __test = { takeSnapshot, findBarePatches, wrapBarePatches, readChanges, compare, decorateChat, onReceived, settings };

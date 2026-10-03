@@ -36,6 +36,8 @@
 
 **角色变量**（v1.18.0，`mvu-fix.js`，扩展页「角色变量」两个开关，默认都开）：起因是用户的预设盖掉了卡里的变量格式要求，AI 吐光秃秃的 ```json JSONPatch 代码块，MVU（只认 `<JSONPatch>` / `<json_patch>` 标签里的）不认，面板一直停在初始值。①收到回复时用 `eventSource.makeFirst` 排在 MVU 前面，同步给光秃秃的 JSONPatch 包上 `<UpdateVariable><JSONPatch>`（已在 `<UpdateVariable>` 里就只补 `<JSONPatch>`；`<think>` 里的不动；已有标签的消息不碰）；2 秒后看变量算没算上，没算上就点卡里的「重新处理变量」按钮（没按钮用 `window.Mvu.parseMessage` + `replaceMvuData`），每条只替他按一次。②每条 AI 回复的 `.mes_text` 后面插一个小框：旧值（往前找最近一条有 `stat_data` 的消息）→ 新值（这条 `message.variables[swipe_id].stat_data`），数字带 +/-，没算上的标红「没算上」，长的点一下展开；只有最后一条能「修好并重新算」（MVU 的重新处理只管最后一条）。开场白没改不显示；最后一条出字时不显示。变量只读，不写别家的。
 
+**测试日志**（v1.18.1，`var-log.js`，≡ 菜单「测试日志」，用户指定放 ≡ 里不放魔法棒）：用户以后常发日志给 AI 查问题。记收到回复（原文有哪些变量标记、MVU 监听排第几）、包标签、MVU 自己的事件（`mag_command_parsed` 解析出几条命令、`mag_variable_update_ended` 算完的 stat_data）、所有 toastr 弹窗、控制台里跟变量有关的报错、页面报错、5 秒后这条消息的 variables / 对没对上 / 原文末尾 1500 字；打开聊天时拍一次全局状态（Mvu 全局、按钮、哪些楼层有 stat_data、最后 4 条）。存 localStorage `tt-varlog`，最多 400 条。弹窗：存到手机（酒馆自带 `download`）、复制、记一下现在、清空（先问）。以后加功能要查问题，往这里加 `vlog(类别, 内容)`。
+
 **魔法棒菜单**：每项口语名字＋一句说明；同步面板、打开数据库默认收进扩展页「魔法棒菜单」（`wand-menu.js`）。
 
 ## 🚨 面板统一规矩（2026-10-02 定，本扩展所有面板、弹窗都照这个）

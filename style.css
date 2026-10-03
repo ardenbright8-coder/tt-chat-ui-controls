@@ -2860,3 +2860,32 @@
     margin-top: 6px;
     width: 100%;
 }
+
+/* v1.18.1 ≡ 菜单「测试日志」弹窗（var-log.js） */
+.tt-varlog-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 6px 0;
+}
+.tt-varlog-bar .menu_button { flex: 1 1 auto; margin: 0; }
+.tt-varlog-count {
+    opacity: .6;
+    font-size: .85em;
+    text-align: left;
+}
+.tt-varlog-text {
+    max-height: 60vh;
+    overflow: auto;
+    margin: 6px 0 0;
+    padding: 8px;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--SmartThemeBodyColor, #ccc) 6%, transparent);
+    white-space: pre-wrap;
+    word-break: break-all;
+    text-align: left;
+    font-size: .78em;
+    line-height: 1.45;
+    user-select: text;
+    -webkit-user-select: text;
+}
