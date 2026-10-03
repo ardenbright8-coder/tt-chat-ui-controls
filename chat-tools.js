@@ -5,7 +5,7 @@
 // 2. 「深入」：发送按钮正上方一个小圆图标。点了不用打字，给 AI 一次性加一段写法说明再出一条：
 //    留在当前场景写深、按人物内核来、聪明人别降智、不写套路。说明在扩展页「聊天按钮」里能改。
 //    以后要加别的小图标也往发送按钮上面叠。
-// 3. 「到底」：往上翻了才浮出来的小圆按钮，在「深入」上面，点一下回到最底下。
+// 3. 「到最底下」：≡ 菜单里一项（v1.18.4 起，用户：「也不是常用的，只是更新了以后它才会用」，原来是浮着的小圆钮）。
 
 import { tip } from './tip.js';
 import { vlog } from './var-log.js';
@@ -14,14 +14,15 @@ const EXTENSION_KEY = 'chat-text-color';
 const SETTINGS_ID = 'tt-chat-tools-settings';
 const MENU_ID = 'option_tt_vars';
 const DEEPEN_ID = 'tt-deepen-btn';
-const BOTTOM_ID = 'tt-jump-bottom';
+const BOTTOM_MENU_ID = 'option_tt_bottom';
 const PROMPT_KEY = 'tt_deepen';
 const VAR_BUTTONS = ['重新处理变量', '重新读取初始变量'];
 const HIDE_CLASS = 'tt-varbtn-hidden';
 const EMPTY_BAR = 'tt-qrbar-empty';
 const ctx = () => globalThis.SillyTavern?.getContext?.();
 
-export const DEFAULT_DEEPEN = `【本轮写法：原地深入】
+// v1.18.3 的第一版，用户手机上存的要是这版原样，就换成新版
+const DEEPEN_V1 = `【本轮写法：原地深入】
 接着上一条往下写，这一条只做一件事：把眼下这场戏写深、写活。
 
 一、锁住场景
@@ -50,6 +51,33 @@ export const DEFAULT_DEEPEN = `【本轮写法：原地深入】
 - 停在一个留给{{user}}接话或行动的地方，不替{{user}}说话、做决定。
 - 本来要写的格式（状态、变量更新这些）照常写。`;
 
+// v1.18.4：用户 2026-10-04 改的方向——不禁新人物新事件，只要服务眼下这场戏；对话是表现人物的主力
+export const DEFAULT_DEEPEN = `【本轮写法：深入这场戏】
+接着上一条写，把眼下这段剧情写深、写活。
+
+一、围着眼下这件事写
+- 剧情还没聊完，就别急着收尾、跳时间或换到别处。
+- 可以加新东西：路过的配角、突发的小事、一个有意思的物件或意外。但加的东西要服务这场戏——让此刻更有意思、更有张力，或者逼出人物更多的一面，不能把剧情带去另一条线。
+
+二、对话是主角（重点）
+- 人物性格主要靠说话演出来。多写台词，让对话一来一回地交锋。
+- 每个人说话要有自己的味道：用词、句子长短、说话直不直接、口头禅、刻意回避的话题，盖住名字也能认出是谁在说。
+- 话里有话：每个人这次开口都带着自己的目的；有些心思不会直说，要从措辞、试探、岔开话题、欲言又止里露出来。
+- 动作、神态、语气、环境给对话加力：一个眼神、一个停顿、一个和嘴上说的不一样的小动作，让台词更有分量。
+
+三、按人设的内核来
+- 下笔前（心里想，不写出来）回看角色设定和世界书：这个人的身份、过往、性格内核、说话方式；此刻最想要什么、最怕什么、对在场的人真实怎么看。
+- 行为从这些出发，不要只贴标签。精明的人要真精明：会察言观色、试探、留后手，不会为了配合{{user}}突然变笨或变软。
+- 把性格的复杂写出来：嘴上和心里不一样，同时有矛盾的念头。不要用旁白下结论（不写「她很精明」，写出她精明的那句话）。
+
+四、不写套路
+- 不写客套的礼尚往来和谁都能说的场面话。每个在场角色至少有一句只有他才会说的话。
+- 给一个出人意料、但完全合乎人设的反应或细节。
+
+五、收尾
+- 停在留给{{user}}接话或行动的地方，不替{{user}}说话、做决定。
+- 本来要写的格式（状态栏、变量更新这些）照常写。`;
+
 let mountTimer = null;
 let observer = null;
 let resizeObs = null;
@@ -64,12 +92,12 @@ let bound = false;
 
 function settings() {
     const all = ctx()?.extensionSettings;
-    if (!all) return { varsInMenu: true, deepenButton: true, bottomButton: true, deepenPrompt: DEFAULT_DEEPEN };
+    if (!all) return { varsInMenu: true, deepenButton: true, deepenPrompt: DEFAULT_DEEPEN };
     const s = all[EXTENSION_KEY] = all[EXTENSION_KEY] || {};
     if (typeof s.varsInMenu !== 'boolean') s.varsInMenu = true;
     if (typeof s.deepenButton !== 'boolean') s.deepenButton = true;
-    if (typeof s.bottomButton !== 'boolean') s.bottomButton = true;
-    if (typeof s.deepenPrompt !== 'string' || !s.deepenPrompt.trim()) s.deepenPrompt = DEFAULT_DEEPEN;
+    if (typeof s.deepenPrompt !== 'string' || !s.deepenPrompt.trim() || s.deepenPrompt === DEEPEN_V1) s.deepenPrompt = DEFAULT_DEEPEN;
+    delete s.bottomButton;
     return s;
 }
 const save = () => ctx()?.saveSettingsDebounced?.();
@@ -151,6 +179,18 @@ async function openVarsPopup() {
 function mountMenuItem() {
     const list = document.querySelector('#options .options-content');
     if (!list) return false;
+    if (!document.getElementById(BOTTOM_MENU_ID)) {
+        const down = document.createElement('a');
+        down.id = BOTTOM_MENU_ID;
+        down.title = '跳到聊天最底下';
+        down.innerHTML = '<i class="fa-lg fa-solid fa-angles-down"></i><span>到最底下</span>';
+        down.addEventListener('click', (event) => {
+            event.preventDefault();
+            closeOptionsMenu();
+            jumpBottom();
+        });
+        list.append(down);
+    }
     const existing = document.getElementById(MENU_ID);
     if (!settings().varsInMenu) { existing?.remove(); return true; }
     if (existing) return true;
@@ -170,10 +210,6 @@ function mountMenuItem() {
 // ---------------------------------------------------------------- 发送按钮上面的小圆图标：深入、到底
 
 function chat() { return document.getElementById('chat'); }
-function farFromBottom() {
-    const c = chat();
-    return !!c && c.scrollHeight - c.clientHeight - c.scrollTop > 400;
-}
 function generating() {
     const stop = document.getElementById('mes_stop');
     return !!stop && getComputedStyle(stop).display !== 'none';
@@ -185,21 +221,10 @@ function ensureButtons() {
         b.type = 'button';
         b.id = DEEPEN_ID;
         b.className = 'tt-float-btn';
-        b.setAttribute('aria-label', '原地深入');
-        b.title = '原地深入：留在这场戏里写深';
+        b.setAttribute('aria-label', '深入');
+        b.title = '深入：围着这场戏写深';
         b.innerHTML = '<i class="fa-solid fa-magnifying-glass-plus"></i>';
         b.addEventListener('click', onDeepen);
-        document.body.append(b);
-    }
-    if (!document.getElementById(BOTTOM_ID)) {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.id = BOTTOM_ID;
-        b.className = 'tt-float-btn';
-        b.setAttribute('aria-label', '到最底下');
-        b.title = '到最底下';
-        b.innerHTML = '<i class="fa-solid fa-angles-down"></i>';
-        b.addEventListener('click', onJumpBottom);
         document.body.append(b);
     }
 }
@@ -210,8 +235,7 @@ function position() {
     const form = document.getElementById('send_form');
     const send = document.getElementById('send_but');
     const deepen = document.getElementById(DEEPEN_ID);
-    const bottom = document.getElementById(BOTTOM_ID);
-    if (!form || !deepen || !bottom) return;
+    if (!form || !deepen) return;
     const s = settings();
     const formRect = form.getBoundingClientRect();
     const visibleForm = formRect.height > 0 && getComputedStyle(form).display !== 'none';
@@ -225,11 +249,6 @@ function position() {
     deepen.classList.toggle('tt-float-on', showDeepen);
     deepen.style.left = `${left}px`;
     deepen.style.bottom = `${baseBottom}px`;
-
-    const showBottom = s.bottomButton && visibleForm && farFromBottom();
-    bottom.classList.toggle('tt-float-on', showBottom);
-    bottom.style.left = `${left}px`;
-    bottom.style.bottom = `${baseBottom + (showDeepen ? size + 10 : 0)}px`;
 }
 
 function schedulePosition() {
@@ -237,8 +256,7 @@ function schedulePosition() {
     posFrame = setTimeout(position, 60);
 }
 
-function onJumpBottom(event) {
-    event.preventDefault();
+function jumpBottom() {
     const c = chat();
     if (!c) return;
     c.scrollTo({ top: c.scrollHeight, behavior: 'smooth' });
@@ -270,14 +288,14 @@ function onDeepen(event) {
     if (generating()) return;
     const text = settings().deepenPrompt || DEFAULT_DEEPEN;
     if (!setDeepenPrompt(text)) {
-        globalThis.toastr?.warning?.('这个版本的酒馆不支持临时加说明', '原地深入');
+        globalThis.toastr?.warning?.('这个版本的酒馆不支持临时加说明', '深入');
         return;
     }
     deepenArmed = true;
     clearTimeout(deepenTimer);
     deepenTimer = setTimeout(() => disarmDeepen('5 分钟没出完'), 5 * 60 * 1000);
     const box = document.getElementById('send_textarea');
-    vlog('深入', `点了原地深入${box?.value.trim() ? '（输入框里有字，一起发）' : ''}`);
+    vlog('深入', `点了深入${box?.value.trim() ? '（输入框里有字，一起发）' : ''}`);
     const send = document.getElementById('send_but');
     if (send) send.click();
     else disarmDeepen('找不到发送按钮');
@@ -316,8 +334,7 @@ function mountPanel() {
     </div>
     <div class="inline-drawer-content">
       <div class="tt-tip-row"><label class="checkbox_label tt-hold-check"><input type="checkbox" id="tt-ct-vars"> <span>变量按钮收进 ≡ 菜单</span></label>${tip('输入框上面「重新处理变量」「重新读取初始变量」那排大按钮藏起来，改从 ≡ 菜单的「变量」点开用。')}</div>
-      <div class="tt-tip-row"><label class="checkbox_label tt-hold-check"><input type="checkbox" id="tt-ct-deepen"> <span>深入按钮</span></label>${tip('发送按钮上面一个放大镜小圆钮。点了不用打字，AI 留在这场戏里接着写深一条。')}</div>
-      <div class="tt-tip-row"><label class="checkbox_label tt-hold-check"><input type="checkbox" id="tt-ct-bottom"> <span>到底按钮</span></label>${tip('往上翻远了，发送按钮上面会浮出一个小圆钮，点一下回到最底下。')}</div>
+      <div class="tt-tip-row"><label class="checkbox_label tt-hold-check"><input type="checkbox" id="tt-ct-deepen"> <span>深入按钮</span></label>${tip('发送按钮上面一个放大镜小圆钮。点了不用打字，AI 围着眼下这场戏接着写深一条，多用对话把人物演出来。')}</div>
       <div class="tt-tip-row"><b>深入时给 AI 的说明</b>${tip('点「深入」时，这段话会临时加给 AI，只管这一条，出完就撤掉。改完点「保存」才算数。')}<span id="tt-deepen-dirty" class="tt-dirty">● 没保存</span></div>
       <textarea id="tt-ct-prompt" class="text_pole" rows="10"></textarea>
       <div class="tt-ct-actions">
@@ -336,7 +353,6 @@ function mountPanel() {
     };
     bind('tt-ct-vars', 'varsInMenu', () => { applyBar(); mountMenuItem(); });
     bind('tt-ct-deepen', 'deepenButton', schedulePosition);
-    bind('tt-ct-bottom', 'bottomButton', schedulePosition);
     const area = document.getElementById('tt-ct-prompt');
     area.value = s.deepenPrompt;
     promptStatus(false);
@@ -431,7 +447,7 @@ export function cleanupChatTools() {
     }
     document.querySelectorAll(`.${HIDE_CLASS}`).forEach((el) => el.classList.remove(HIDE_CLASS));
     document.querySelectorAll(`.${EMPTY_BAR}`).forEach((el) => el.classList.remove(EMPTY_BAR));
-    for (const id of [MENU_ID, DEEPEN_ID, BOTTOM_ID, SETTINGS_ID]) document.getElementById(id)?.remove();
+    for (const id of [MENU_ID, BOTTOM_MENU_ID, DEEPEN_ID, SETTINGS_ID]) document.getElementById(id)?.remove();
 }
 
 export const __test = { applyBar, position, onDeepen, settings, varButtons };
