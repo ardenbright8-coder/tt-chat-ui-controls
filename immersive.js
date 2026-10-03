@@ -14,6 +14,7 @@ const ON = 'tt-immersive';
 const TOP_OPEN = 'tt-top-open';
 const INPUT_OPEN = 'tt-input-open';
 const SYS_FULL = 'tt-sys-fullscreen';
+const HIDE_TOP = 'tt-hide-top';
 const ctx = () => globalThis.SillyTavern?.getContext?.();
 
 let mountTimer = null;
@@ -26,6 +27,11 @@ function settings() {
     const s = all[EXTENSION_KEY] = all[EXTENSION_KEY] || {};
     if (typeof s.immersiveChat !== 'boolean') s.immersiveChat = true;
     return s;
+}
+
+// 藏工具栏 v1.17.1 起先不启用（用户：「上面不要隐藏了……先不启用，没必要删」），代码留着，设置里 immersiveHideTop 为 true 才开
+function hideTopOn() {
+    return settings().immersiveHideTop === true;
 }
 
 const body = () => document.body;
@@ -60,7 +66,7 @@ function onPointerDown(event) {
     if (!body()?.classList.contains(ON)) return;
     if (event.target.closest?.(`#${HANDLE_ID}`)) return;
     // 点聊天里任何地方：工具栏收回去（开着面板时不收）
-    if (body().classList.contains(TOP_OPEN) && event.target.closest?.('#chat') && !drawerOpen()) setTop(false);
+    if (body().classList.contains(HIDE_TOP) && body().classList.contains(TOP_OPEN) && event.target.closest?.('#chat') && !drawerOpen()) setTop(false);
 }
 
 function onHandleClick(event) {
@@ -77,6 +83,7 @@ function onClick(event) {
 function apply() {
     const on = settings().immersiveChat;
     body()?.classList.toggle(ON, on);
+    body()?.classList.toggle(HIDE_TOP, on && hideTopOn());
     if (!on) {
         body()?.classList.remove(TOP_OPEN, INPUT_OPEN);
         return;
@@ -107,7 +114,7 @@ function mountPanel() {
       <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
     </div>
     <div class="inline-drawer-content">
-      <div class="tt-tip-row"><label class="checkbox_label tt-hold-check"><input type="checkbox" id="tt-immersive-on"> <span>沉浸式聊天（手机）</span></label>${tip('顶上工具栏平时藏起来，点顶上正中那条小横杠拉出来，点聊天收回去；底下输入框平时一行，点进去才展开。酒馆的全屏模式下，顶上不再空一条。关掉就是原来的样子。')}</div>
+      <div class="tt-tip-row"><label class="checkbox_label tt-hold-check"><input type="checkbox" id="tt-immersive-on"> <span>沉浸式聊天（手机）</span></label>${tip('底下输入框平时一行，点进去才展开。酒馆的全屏模式下，顶上不再空一条。关掉就是原来的样子。')}</div>
     </div>
   </div>
 </div>`);
@@ -162,7 +169,7 @@ export function cleanupImmersive() {
     const types = context?.eventTypes ?? context?.event_types;
     if (types?.MESSAGE_SENT) { try { context.eventSource?.removeListener?.(types.MESSAGE_SENT, refreshInputLater); } catch { /* ignore */ } }
     bound = false;
-    body()?.classList.remove(ON, TOP_OPEN, INPUT_OPEN, SYS_FULL);
+    body()?.classList.remove(ON, HIDE_TOP, TOP_OPEN, INPUT_OPEN, SYS_FULL);
     document.getElementById(HANDLE_ID)?.remove();
     document.getElementById(SETTINGS_ID)?.remove();
 }
