@@ -6,7 +6,10 @@
 //   上面「自带的」（原版 + 以前的版本），下面「我存的」；点一条 = 换进框里（还要点「保存」才算数，换错了点「撤销」）；
 //   我存的每条右边「改」「删」；底下「＋ 存一份现在的」「＋ 空白一条」（空白的直接进去自己填）。
 //   用户：「右上角那个恢复以前……弄成一个小目录……我自己有个加号，我可以再加一条……额外加一条空的，我自己填」。
-// archive = { builtins: [{ name, text, note }], list(), add({ name, text }) → 新条目, update(id, { name, text }), remove(id) }
+// v1.18.24 一列到底、按位置编号（1、2、3），名字单独一行、概括内容（用户：「名字……概括准确一点……用编号编起来」）：
+//   自带的和自己存的在同一列，每条都能「改」「删」，什么都不自动删（用户：「不要删我那些东西……我自己会手动删」）。
+//   没起名的按内容自动概括（`archive.summarize`），自己起了名（named）就用自己的。
+// archive = { list(), add({ text, auto }) → 新条目, update(id, { name, named, text }), remove(id), summarize(text) }
 
 import { createHistory } from './world-info-editing.js';
 import { tip } from './tip.js';
@@ -18,7 +21,13 @@ const ask = (text) => globalThis.confirm ? globalThis.confirm(text) : true;
 const pad = (n) => String(n).padStart(2, '0');
 export const stamp = (at = Date.now()) => { const d = new Date(at); return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`; };
 // 预览跳过开头「【深入这场戏】」这种标题行，几版都一样，看不出区别
-const preview = (text) => String(text || '').split('\n').map((l) => l.trim()).filter((l) => l && !/^【[^】]*】$/.test(l)).slice(0, 3).join('\n') || '（空的）';
+// 名字是从哪句概括来的，预览里就不再重复那句
+const preview = (text, name = '') => {
+    const key = String(name).replace(/…$/, '').replace(/^[^·：]*[·：]\s*/, '');
+    const lines = String(text || '').split('\n').map((l) => l.trim()).filter((l) => l && !/^【[^】]*】$/.test(l));
+    const rest = key ? lines.filter((l) => !l.replace(/^[-·•\d.、\s]+/, '').startsWith(key)) : lines;
+    return rest.slice(0, 2).join('\n') || lines.slice(0, 2).join('\n') || '（空的）';
+};
 
 function el(tag, cls, text) {
     const node = document.createElement(tag);
@@ -106,41 +115,44 @@ export function openTextEditor({ title = '', value = '', defaultValue = null, ar
     };
 
     // ------------------------------------------------ 存档目录
-    function row(no, item, own) {
+    const titleOf = (item) => (item.named ? item.name : archive.summarize?.(item.text)) || '（空的）';
+
+    function row(no, item) {
+        const name = titleOf(item);
+        const isNow = item.text.trim() === main.area.value.trim();
         const wrap = el('div', 'tt-archive-row');
-        if (item.text === main.area.value) wrap.classList.add('is-now');
+        if (isNow) wrap.classList.add('is-now');
         const pick = el('button', 'tt-archive-pick');
-        pick.innerHTML = `<span class="tt-archive-top"><span class="tt-archive-no">${no}</span>`
-            + `<span class="tt-archive-name">${esc(item.name)}</span>`
-            + (item.text === main.area.value ? '<span class="tt-archive-tag now">框里就是这个</span>' : '')
-            + (item.auto ? '<span class="tt-archive-tag">自动存的</span>' : '')
-            + `</span>`
-            + `<span class="tt-archive-meta">${esc(item.note || (item.at ? stamp(item.at) : ''))}</span>`
-            + `<span class="tt-archive-preview">${esc(preview(item.text))}</span>`;
+        const tags = [
+            item.builtin ? '<span class="tt-archive-tag">自带</span>' : '',
+            item.auto ? '<span class="tt-archive-tag">自动存的</span>' : '',
+            isNow ? '<span class="tt-archive-tag now">框里的</span>' : '',
+        ].join('');
+        pick.innerHTML = `<span class="tt-archive-name"><span class="tt-archive-no">${no}.</span>${esc(name)}</span>`
+            + `<span class="tt-archive-meta">${tags}${item.builtin || !item.at ? '' : `<span class="tt-archive-time">${esc(stamp(item.at))}</span>`}</span>`
+            + `<span class="tt-archive-preview">${esc(archive.changed?.(item.text)?.slice(0, 2).join('\n') || preview(item.text, name))}</span>`;
         pick.addEventListener('click', () => {
             if (!item.text.trim()) { globalThis.toastr?.info?.('这条还是空的，点「改」先填上'); return; }
             main.set(item.text);
             renderMain();
-            globalThis.toastr?.info?.('换进框里了，点「保存」才算数；不对就点「撤销」', item.name);
+            globalThis.toastr?.info?.('换进框里了，点「保存」才算数；不对就点「撤销」', name);
         });
-        wrap.append(pick);
-        if (own) {
-            const ops = el('div', 'tt-archive-ops');
-            const edit = el('button', '', '改');
-            const del = el('button', 'del', '删');
-            edit.addEventListener('click', () => renderEntry(item, false));
-            del.addEventListener('click', () => {
-                if (!ask(`删掉「${item.name}」？`)) return;
-                archive.remove(item.id);
-                renderList();
-            });
-            ops.append(edit, del);
-            wrap.append(ops);
-        }
+        const ops = el('div', 'tt-archive-ops');
+        const edit = el('button', '', '改');
+        const del = el('button', 'del', '删');
+        edit.addEventListener('click', () => renderEntry(item, false));
+        del.addEventListener('click', () => {
+            if (!ask(`删掉「${no}. ${name}」？删了就没了。`)) return;
+            const top = body.querySelector('.tt-archive-list')?.scrollTop || 0;
+            archive.remove(item.id);
+            renderList(top);
+        });
+        ops.append(edit, del);
+        wrap.append(pick, ops);
         return wrap;
     }
 
-    function renderList() {
+    function renderList(keepTop = null) {
         mode = 'list';
         refreshBar = () => {};
         head.replaceChildren();
@@ -149,19 +161,12 @@ export function openTextEditor({ title = '', value = '', defaultValue = null, ar
         back.addEventListener('click', renderMain);
         const name = el('b', '', '存档');
         head.append(back, name);
-        head.insertAdjacentHTML('beforeend', tip('点一条换进框里，还要点「保存」才算数，换错了点「撤销」。「我存的」能改能删；每次保存，换下来的旧版会自动存一份（最多留 10 份自动的）。'));
+        head.insertAdjacentHTML('beforeend', tip('点一条换进框里，还要点「保存」才算数，换错了点「撤销」。名字按内容自动概括，想自己起就点「改」。每次保存，换下来的旧版自动存一份；什么都不会自动删，多了自己点「删」。'));
 
         const list = el('div', 'tt-archive-list');
-        const builtins = archive.builtins || [];
-        const mine = archive.list() || [];
-        let no = 1;
-        if (builtins.length) {
-            list.append(el('div', 'tt-archive-sec', '自带的'));
-            for (const item of builtins) list.append(row(no++, item, false));
-        }
-        list.append(el('div', 'tt-archive-sec', '我存的'));
-        if (!mine.length) list.append(el('div', 'tt-archive-empty', '还没有。点下面「＋」存一份。'));
-        for (const item of mine) list.append(row(no++, item, true));
+        const all = archive.list() || [];
+        if (!all.length) list.append(el('div', 'tt-archive-empty', '还没有，点下面「＋」存一份'));
+        all.forEach((item, i) => list.append(row(i + 1, item)));
         body.replaceChildren(list);
 
         bar.className = 'tt-wi-draft-actions tt-archive-actions';
@@ -169,15 +174,15 @@ export function openTextEditor({ title = '', value = '', defaultValue = null, ar
         const addBlank = el('button', '', '＋ 空白一条');
         addNow.addEventListener('click', () => {
             if (!main.area.value.trim()) { globalThis.toastr?.info?.('框里是空的，没东西可存'); return; }
-            archive.add({ name: `存档 ${(archive.list() || []).filter((x) => !x.auto).length + 1}`, text: main.area.value });
+            archive.add({ text: main.area.value });
             renderList();
         });
         addBlank.addEventListener('click', () => {
-            const item = archive.add({ name: '新的一条', text: '' });
+            const item = archive.add({ text: '' });
             renderEntry(item, true);
         });
         bar.replaceChildren(addNow, addBlank);
-        globalThis.requestAnimationFrame?.(() => { list.scrollTop = list.scrollHeight; });
+        globalThis.requestAnimationFrame?.(() => { list.scrollTop = keepTop ?? list.scrollHeight; });
     }
 
     // ------------------------------------------------ 改一条存档
@@ -186,8 +191,9 @@ export function openTextEditor({ title = '', value = '', defaultValue = null, ar
         head.replaceChildren();
         head.className = 'tt-text-editor-head';
         const nameInput = el('input', 'tt-text-editor-name text_pole');
-        nameInput.value = item.name;
-        nameInput.placeholder = '起个名字';
+        nameInput.value = item.named ? item.name : '';
+        const autoName = () => archive.summarize?.(draft.area.value) || '';
+        nameInput.placeholder = '不起名就按内容自动起';
         const dirty = el('span', 'tt-text-editor-dirty', '● 没保存');
         head.append(nameInput, dirty);
         const draft = makeDraft(item.text, () => refreshBar());
@@ -195,14 +201,21 @@ export function openTextEditor({ title = '', value = '', defaultValue = null, ar
         nameInput.addEventListener('input', () => refreshBar());
         body.replaceChildren(draft.area);
         const [cancel, undo, saveBtn] = threeButtons();
-        const changed = () => draft.area.value !== item.text || nameInput.value.trim() !== item.name;
-        refreshBar = () => { undo.disabled = !draft.history.canUndo; dirty.hidden = !changed(); };
+        const oldName = item.named ? item.name : '';
+        const changed = () => draft.area.value !== item.text || nameInput.value.trim() !== oldName;
+        refreshBar = () => {
+            undo.disabled = !draft.history.canUndo;
+            dirty.hidden = !changed();
+            const a = autoName();
+            nameInput.placeholder = a && a !== '（空的）' ? `自动：${a}` : '不起名就按内容自动起';
+        };
         refreshBar();
         entry.changed = changed;
         cancel.addEventListener('click', tryLeaveEntry);
         undo.addEventListener('click', () => draft.undo());
         saveBtn.addEventListener('click', () => {
-            archive.update(item.id, { name: nameInput.value.trim() || item.name, text: draft.area.value });
+            const typed = nameInput.value.trim();
+            archive.update(item.id, { name: typed, named: !!typed, text: draft.area.value });
             entry = null;
             renderList();
         });

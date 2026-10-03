@@ -9,7 +9,7 @@
 
 import { tip } from './tip.js';
 import { vlog } from './var-log.js';
-import { openTextEditor, stamp } from './text-editor.js';
+import { openTextEditor } from './text-editor.js';
 
 const EXTENSION_KEY = 'chat-text-color';
 const SETTINGS_ID = 'tt-chat-tools-settings';
@@ -127,19 +127,19 @@ export const DEFAULT_PUSH = `【往下走】
 - 这一轮要有东西变，不原地打转，不重复上一条；停在留给{{user}}接的地方。`;
 
 // ≡「写法说明」里能改的三段
-// olds：存档里「自带的」以前的版本（v1.18.23），点了换进框里
+// 存档里「自带的」（v1.18.23 加；v1.18.24 不编号，名字概括内容）：defName 原版的名字，olds 以前的版本
 const PROMPTS = [
     { key: 'deepenPrompt', name: '深入', desc: '点「深入」时用：原地往深挖，另起一条', def: () => DEFAULT_DEEPEN,
+        defName: '戏靠对话撑，加个小变化',
         olds: () => [
-            { name: '第四版（试过，退回了）', note: 'v1.18.18', text: DEEPEN_V4 },
-            { name: '第三版', note: 'v1.18.14', text: DEEPEN_V3 },
-            { name: '第二版', note: 'v1.18.4', text: DEEPEN_V2 },
-            { name: '第一版', note: 'v1.18.3', text: DEEPEN_V1 },
+            { bid: 'v4', name: '让人物立起来', text: DEEPEN_V4 },
+            { bid: 'v3', name: '戏靠对话撑（短）', text: DEEPEN_V3 },
+            { bid: 'v2', name: '能加配角小事，对话为主', text: DEEPEN_V2 },
+            { bid: 'v1', name: '锁住场景，七条细写', text: DEEPEN_V1 },
         ] },
-    { key: 'sendPrompt', name: '写了字发送', desc: '输入框有字点发送时用：照你写的走，写得好看', def: () => DEFAULT_SEND },
-    { key: 'pushPrompt', name: '空着发送', desc: '输入框空着点发送时用：另起一条，往下走一步', def: () => DEFAULT_PUSH },
+    { key: 'sendPrompt', name: '写了字发送', desc: '输入框有字点发送时用：照你写的走，写得好看', def: () => DEFAULT_SEND, defName: '照你写的走，写得好看' },
+    { key: 'pushPrompt', name: '空着发送', desc: '输入框空着点发送时用：另起一条，往下走一步', def: () => DEFAULT_PUSH, defName: '往下走一步，要有转折' },
 ];
-const AUTO_KEEP = 10;
 
 let mountTimer = null;
 let observer = null;
@@ -437,21 +437,67 @@ async function onDeepen(event) {
 
 // ---------------------------------------------------------------- ≡「写法说明」：选一段，进大窗口改
 
+// 按内容给存档起个名字（v1.18.24）：跟哪套自带的一样就叫那个名；在原版上改的叫「改：新加的那句开头」；
+// 只删了几条叫「原版少 N 条」；全新写的取第一句开头。一句话截到第一个标点、最多 16 个字。
+const cleanLine = (l) => l.trim().replace(/^[-·•*\d.、\s]+/, '').trim();
+const isHeading = (l) => /^【[^】]*】$/.test(l);
+function shortLine(line) {
+    const m = line.match(/^(.{4,}?)[，。；：,;:！？!?（(]/);
+    let t = m ? m[1] : line;
+    if (t.length > 16) t = `${t.slice(0, 15)}…`;
+    return t;
+}
+export function summarize(text, base, builtins = []) {
+    const lines = String(text || '').split('\n').map(cleanLine).filter((l) => l && !isHeading(l));
+    if (!lines.length) return '（空的）';
+    const same = builtins.find((b) => b.text.trim() === String(text).trim());
+    if (same) return same.name;
+    const baseLines = String(base || '').split('\n').map(cleanLine).filter((l) => l && !isHeading(l));
+    const baseSet = new Set(baseLines);
+    const added = lines.filter((l) => !baseSet.has(l));
+    if (!added.length) return `原版少 ${Math.max(1, baseLines.length - lines.length)} 条`;
+    if (added.length < lines.length) return `改：${shortLine(added[0])}`;
+    return shortLine(lines[0]);
+}
+
 // 写法说明的存档（v1.18.23）：settings().promptArchive[key] = [{ id, name, text, at, auto }]，旧的在前、新的在后
 function archiveFor(p) {
-    const all = settings().promptArchive;
+    const st = settings();
+    const all = st.promptArchive;
+    const seeded = st.promptArchiveSeeded = st.promptArchiveSeeded && typeof st.promptArchiveSeeded === 'object' ? st.promptArchiveSeeded : {};
     const items = () => (all[p.key] = Array.isArray(all[p.key]) ? all[p.key] : []);
     const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+    const builtins = [{ bid: 'def', name: p.defName || '原版', text: p.def() }, ...(p.olds?.() || [])];
+    let dirty = false;
+    // v1.18.23 存的条目名字是「存档 3」「换下来的 · 时间」这种，当成没起名，按内容概括
+    for (const x of items()) if (typeof x.named !== 'boolean') { x.named = !/^(存档 \d+|存档 · .*|换下来的 · .*|新的一条)$/.test(x.name || ''); dirty = true; }
+    // v1.18.24 自带的也放进同一列、能删：每套自带的只放进来一次（记在 promptArchiveSeeded），删了就不再回来；
+    // 以后扩展新加的自带版本，下次打开排到最底下。
+    const done = seeded[p.key] = Array.isArray(seeded[p.key]) ? seeded[p.key] : [];
+    const fresh = builtins.filter((b) => !done.includes(b.bid));
+    if (fresh.length) {
+        const list = items();
+        const firstTime = !done.length;
+        const add = fresh.filter((b) => !list.some((x) => x.text.trim() === b.text.trim()))
+            .map((b) => ({ id: newId(), name: b.name, named: true, builtin: true, text: b.text, at: Date.now() }));
+        if (firstTime) list.unshift(...add); else list.push(...add);
+        done.push(...fresh.map((b) => b.bid));
+        dirty = true;
+    }
+    if (dirty) save();
     return {
-        builtins: [{ name: '原版', note: '现在的默认', text: p.def() }, ...(p.olds?.() || [])],
+        summarize: (text) => summarize(text, p.def(), builtins),
+        // 在原版上改的：预览只给改动的那几句，一眼看出跟原版差在哪
+        changed(text) {
+            const base = new Set(String(p.def()).split('\n').map(cleanLine).filter(Boolean));
+            const lines = String(text || '').split('\n').map(cleanLine).filter((l) => l && !isHeading(l));
+            const added = lines.filter((l) => !base.has(l));
+            return added.length && added.length < lines.length ? added : null;
+        },
         list: () => items(),
-        add({ name, text, auto = false }) {
-            const item = { id: newId(), name, text, at: Date.now(), ...(auto ? { auto: true } : {}) };
+        add({ text, auto = false }) {
+            const item = { id: newId(), name: '', named: false, text, at: Date.now(), ...(auto ? { auto: true } : {}) };
             items().push(item);
-            if (auto) {
-                const autos = items().filter((x) => x.auto);
-                for (const old of autos.slice(0, Math.max(0, autos.length - AUTO_KEEP))) items().splice(items().indexOf(old), 1);
-            }
             save();
             return item;
         },
@@ -459,7 +505,7 @@ function archiveFor(p) {
             const item = items().find((x) => x.id === id);
             if (!item) return;
             Object.assign(item, patch, { at: Date.now() });
-            delete item.auto; // 自己改过就不算自动存的了，不会被挤掉
+            delete item.auto;
             save();
         },
         remove(id) {
@@ -480,10 +526,9 @@ function openPromptEditor(p) {
             const s = settings();
             const before = s[p.key];
             const next = text.trim() ? text : p.def();
-            // 换下来的旧版自动存一份（跟自带的、已存的都不一样才存）
-            if (before && before.trim() && before !== next
-                && !archive.builtins.some((x) => x.text === before) && !archive.list().some((x) => x.text === before)) {
-                archive.add({ name: `换下来的 · ${stamp()}`, text: before, auto: true });
+            // 换下来的旧版自动存一份（列表里没有一样的才存）；不自动删，多了自己删
+            if (before && before.trim() && before !== next && !archive.list().some((x) => x.text.trim() === before.trim())) {
+                archive.add({ text: before, auto: true });
             }
             s[p.key] = next;
             if (p.key === 'deepenPrompt') s.deepenPromptOwn = true;
