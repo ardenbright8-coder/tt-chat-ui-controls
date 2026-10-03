@@ -2889,3 +2889,24 @@
     user-select: text;
     -webkit-user-select: text;
 }
+
+/* v1.18.2 不常用工具：≡ 菜单里收起来的项也藏掉；顶上两个气泡切「魔法棒」「≡ 菜单」 */
+#options .tt-wand-hidden {
+    display: none !important;
+}
+#tt-wand-settings .tt-tool-tabs {
+    display: flex;
+    gap: 8px;
+}
+#tt-wand-settings .tt-tool-tab {
+    padding: 4px 14px;
+    border-radius: 999px;
+    border: 1px solid var(--SmartThemeBorderColor);
+    cursor: pointer;
+    opacity: .7;
+}
+#tt-wand-settings .tt-tool-tab.tt-tool-tab-on {
+    opacity: 1;
+    border-color: var(--SmartThemeQuoteColor, #e18a24);
+    background: color-mix(in srgb, var(--SmartThemeQuoteColor, #e18a24) 18%, transparent);
+}

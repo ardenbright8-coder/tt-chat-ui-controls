@@ -1,6 +1,6 @@
 // 魔法棒菜单（v1.15.5）：
 // 1. 每项换成口语名字，下面带一句说明（以前名字看不出干啥用，用户一直没敢点）
-// 2. 不常用的收进扩展页「魔法棒菜单」那块，那里还能「用一下」，功能本身不删
+// 2. 不常用的收进扩展页「不常用工具」那块（v1.18.2 起分「魔法棒」「≡ 菜单」两个气泡，原名「魔法棒菜单」），那里还能「用一下」，功能本身不删
 // 3. 本扩展加的菜单项固定贴在最底下（离手指最近），别的扩展晚加载也挪回来
 // 菜单项是别的扩展建的，这里只改名字、加说明、藏起来、调顺序，不碰它们的点击功能。
 
@@ -49,15 +49,36 @@ const ITEMS = [
 ];
 const DEFAULT_HIDDEN = ['sync', 'databank'];
 
+// ≡ 菜单（左下角三条杠）里酒馆自带的项（v1.18.2）。认 id，认不到再认名字（去掉空格比）
+const OPTION_ITEMS = [
+    { key: 'fullscreen', ids: ['option_toggle_fullscreen'], match: ['切换全屏', 'Toggle Fullscreen'], name: '切换全屏', desc: '手机顶上的状态栏藏起来或露出来' },
+    { key: 'an', ids: ['option_toggle_AN'], match: ['作者注释', "Author's Note"], name: '作者注释', desc: '给模型的一段固定提醒；总结库的总结也是塞到这里' },
+    { key: 'cfg', ids: ['option_toggle_CFG'], match: ['CFG缩放', 'CFG Scale'], name: 'CFG缩放', desc: '只对本地模型有用，用 API 用不上' },
+    { key: 'logprobs', ids: ['option_toggle_logprobs'], match: ['词符概率', 'Token Probabilities'], name: '词符概率', desc: '看模型每个字还考虑过哪些字，只有部分模型支持' },
+    { key: 'checkpoint', ids: ['option_new_bookmark'], match: ['保存检查点', 'Save Checkpoint'], name: '保存检查点', desc: '从这条起分出一个存档，以后能回到这里' },
+    { key: 'group', ids: ['option_convert_to_group'], match: ['转换为群聊', 'Convert to group'], name: '转换为群聊', desc: '把这个聊天变成群聊，能拉别的角色卡进来一起聊' },
+    { key: 'newchat', ids: ['option_start_new_chat'], match: ['开始新聊天', 'Start new chat'], name: '开始新聊天', desc: '跟这个角色重新开一个聊天，旧的还在' },
+    { key: 'close', ids: ['option_close_chat'], match: ['关闭聊天', 'Close chat'], name: '关闭聊天', desc: '退出这个聊天，回到没选角色的样子' },
+    { key: 'files', ids: ['option_select_chat'], match: ['管理聊天文件', 'Manage chat files'], name: '管理聊天文件', desc: '看这个角色的所有聊天存档，切换、改名、删除' },
+    { key: 'delete', ids: ['option_delete_mes'], match: ['删除消息', 'Delete messages'], name: '删除消息', desc: '勾几条消息删掉' },
+    { key: 'regen', ids: ['option_regenerate'], match: ['重新生成', 'Regenerate'], name: '重新生成', desc: '最后一条重写。聊天右下角的「>」也能重写' },
+    { key: 'impersonate', ids: ['option_impersonate'], match: ['AI帮答', 'Impersonate'], name: 'AI 帮答', desc: '让 AI 替你写一条你要说的话' },
+    { key: 'continue', ids: ['option_continue'], match: ['继续', 'Continue'], name: '继续', desc: '让 AI 接着上一条往下写。底下已经有继续按钮' },
+];
+// 用户 2026-10-04 定的：这几项默认收起来
+const DEFAULT_OPTIONS_HIDDEN = ['cfg', 'logprobs', 'checkpoint', 'close', 'regen', 'impersonate', 'continue'];
+let panelTab = 'wand';
+
 let observer = null;
 let mountTimer = null;
 
 function settings() {
     const all = ctx()?.extensionSettings;
-    if (!all) return { wandHidden: [...DEFAULT_HIDDEN] };
+    if (!all) return { wandHidden: [...DEFAULT_HIDDEN], optionsHidden: [...DEFAULT_OPTIONS_HIDDEN] };
     all[EXTENSION_KEY] = all[EXTENSION_KEY] || {};
     const s = all[EXTENSION_KEY];
     if (!Array.isArray(s.wandHidden)) s.wandHidden = [...DEFAULT_HIDDEN];
+    if (!Array.isArray(s.optionsHidden)) s.optionsHidden = [...DEFAULT_OPTIONS_HIDDEN];
     return s;
 }
 
@@ -81,6 +102,24 @@ function itemKey(item) {
     const key = known ? known.key : 'text:' + text;
     item.dataset.ttWandKey = key;
     item.dataset.ttWandOriginal = text;
+    return key;
+}
+
+// ≡ 菜单里酒馆自带的项（本扩展自己加的不算）
+const optionsBox = () => document.querySelector('#options .options-content');
+function optionItems() {
+    const box = optionsBox();
+    if (!box) return [];
+    return [...box.children].filter((el) => el.tagName === 'A' && !OWN_OPTIONS.includes(el.id) && el.textContent.trim());
+}
+
+function optionKey(item) {
+    if (item.dataset.ttOptKey) return item.dataset.ttOptKey;
+    const text = item.textContent.replace(/\s+/g, '');
+    const known = OPTION_ITEMS.find((i) => i.ids.includes(item.id) || i.match.some((m) => m.replace(/\s+/g, '') === text));
+    const key = known ? known.key : (item.id ? `id:${item.id}` : `text:${text}`);
+    item.dataset.ttOptKey = key;
+    item.dataset.ttOptOriginal = item.textContent.replace(/\s+/g, ' ').trim();
     return key;
 }
 
@@ -156,6 +195,11 @@ function apply() {
         if (item.classList.contains(HIDDEN_CLASS) !== hide) item.classList.toggle(HIDDEN_CLASS, hide);
     }
     arrangeWand(box);
+    const optHidden = new Set(settings().optionsHidden);
+    for (const item of optionItems()) {
+        const hide = optHidden.has(optionKey(item));
+        if (item.classList.contains(HIDDEN_CLASS) !== hide) item.classList.toggle(HIDDEN_CLASS, hide);
+    }
     pinToBottom(document.querySelector('#options .options-content'), OWN_OPTIONS);
     observe();
     return true;
@@ -196,47 +240,73 @@ function observe() {
     if (options) observer.observe(options, { childList: true });
 }
 
-// 扩展页里的「魔法棒菜单」：每项一行，勾上就从魔法棒里收起来，收起来的点「用一下」照样能用
-function renderPanel() {
-    const list = document.querySelector(`#${SETTINGS_ID} .tt-wand-list`);
-    if (!list) return;
-    const hidden = new Set(settings().wandHidden);
-    const rows = menuItems().map((item) => {
-        const key = itemKey(item);
-        if (!key || OWN_WAND.includes(item.id)) return '';
-        const info = ITEMS.find((i) => i.key === key);
-        const name = info?.name || item.dataset.ttWandOriginal || key;
-        return `
-<div class="tt-wand-row" data-key="${esc(key)}">
-  <label class="checkbox_label tt-hold-check"><input type="checkbox" class="tt-wand-hide" ${hidden.has(key) ? 'checked' : ''}> <span>收起来</span></label>
-  <div class="tt-wand-row-text"><b>${esc(name)}</b>${info ? `<small>${esc(info.desc)}</small>` : ''}</div>
+// 扩展页里的「不常用工具」：顶上两个气泡切「魔法棒」「≡ 菜单」，每项一行，勾上就从那个菜单里收起来，收起来的点「用一下」照样能用
+function rowHtml(menuKey, key, name, desc, hidden) {
+    return `
+<div class="tt-wand-row" data-menu="${menuKey}" data-key="${esc(key)}">
+  <label class="checkbox_label tt-hold-check"><input type="checkbox" class="tt-wand-hide" ${hidden ? 'checked' : ''}> <span>收起来</span></label>
+  <div class="tt-wand-row-text"><b>${esc(name)}</b>${desc ? `<small>${esc(desc)}</small>` : ''}</div>
   <div class="menu_button tt-wand-use">用一下</div>
 </div>`;
-    }).join('');
-    const sig = rows;
+}
+
+function renderPanel() {
+    const root = document.getElementById(SETTINGS_ID);
+    const list = root?.querySelector('.tt-wand-list');
+    if (!list) return;
+    root.querySelectorAll('.tt-tool-tab').forEach((tab) => tab.classList.toggle('tt-tool-tab-on', tab.dataset.tab === panelTab));
+    let rows;
+    if (panelTab === 'options') {
+        const hidden = new Set(settings().optionsHidden);
+        rows = optionItems().map((item) => {
+            const key = optionKey(item);
+            const info = OPTION_ITEMS.find((i) => i.key === key);
+            return rowHtml('options', key, info?.name || item.dataset.ttOptOriginal || key, info?.desc, hidden.has(key));
+        }).join('');
+    } else {
+        const hidden = new Set(settings().wandHidden);
+        rows = menuItems().map((item) => {
+            const key = itemKey(item);
+            if (!key || OWN_WAND.includes(item.id)) return '';
+            const info = ITEMS.find((i) => i.key === key);
+            return rowHtml('wand', key, info?.name || item.dataset.ttWandOriginal || key, info?.desc, hidden.has(key));
+        }).join('');
+    }
+    const sig = panelTab + rows;
     if (list.dataset.sig === sig) return;
     list.dataset.sig = sig;
-    list.innerHTML = rows || '<small>魔法棒菜单还没加载出来，过一会儿再打开这里。</small>';
+    list.innerHTML = rows || '<small>这个菜单还没加载出来，过一会儿再打开这里。</small>';
 }
 
 function onPanelChange(event) {
     const box = event.target.closest('.tt-wand-hide');
     if (!box) return;
-    const key = box.closest('.tt-wand-row')?.dataset.key;
+    const row = box.closest('.tt-wand-row');
+    const key = row?.dataset.key;
+    const field = row?.dataset.menu === 'options' ? 'optionsHidden' : 'wandHidden';
     const s = settings();
-    s.wandHidden = s.wandHidden.filter((k) => k !== key);
-    if (box.checked) s.wandHidden.push(key);
+    s[field] = s[field].filter((k) => k !== key);
+    if (box.checked) s[field].push(key);
     save();
     apply();
 }
 
 function onPanelClick(event) {
+    const tab = event.target.closest('.tt-tool-tab');
+    if (tab) {
+        panelTab = tab.dataset.tab;
+        renderPanel();
+        return;
+    }
     const use = event.target.closest('.tt-wand-use');
     if (!use) return;
-    const key = use.closest('.tt-wand-row')?.dataset.key;
-    const item = menuItems().find((el) => itemKey(el) === key);
+    const row = use.closest('.tt-wand-row');
+    const key = row?.dataset.key;
+    const item = row?.dataset.menu === 'options'
+        ? optionItems().find((el) => optionKey(el) === key)
+        : menuItems().find((el) => itemKey(el) === key);
     if (item) item.click();
-    else globalThis.toastr?.info?.('这一项现在不在菜单里（它的扩展可能关了）', '魔法棒菜单');
+    else globalThis.toastr?.info?.('这一项现在不在菜单里（它的扩展可能关了）', '不常用工具');
 }
 
 function mountPanel() {
@@ -247,11 +317,11 @@ function mountPanel() {
 <div id="${SETTINGS_ID}" class="tt-wand-settings">
   <div class="inline-drawer">
     <div class="inline-drawer-toggle inline-drawer-header">
-      <b>魔法棒菜单</b>
+      <b>不常用工具</b>
       <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
     </div>
     <div class="inline-drawer-content">
-      <div class="tt-tip-row"><span>左下角魔法棒里的每一项</span>${tip('勾「收起来」就从魔法棒里藏掉，功能还在，要用时在这里点「用一下」。手机上勾选框要按住半秒才会变，防手滑。')}</div>
+      <div class="tt-tip-row"><div class="tt-tool-tabs"><div class="tt-tool-tab" data-tab="wand">魔法棒</div><div class="tt-tool-tab" data-tab="options">≡ 菜单</div></div>${tip('点上面的气泡切换：左下角魔法棒、左下角三条杠菜单。勾「收起来」就从那个菜单里藏掉，功能还在，要用时在这里点「用一下」。手机上勾选框要按住半秒才会变，防手滑。')}</div>
       <div class="tt-wand-list"></div>
     </div>
   </div>

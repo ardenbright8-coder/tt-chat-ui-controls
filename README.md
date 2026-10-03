@@ -1,4 +1,4 @@
-# 酒馆拓展 v1.18.1（SillyTavern / TauriTavern）
+# 酒馆拓展 v1.18.2（SillyTavern / TauriTavern）
 
 目前包含三类显示控制、一套手机版防误触，以及移动端世界书界面优化：
 
