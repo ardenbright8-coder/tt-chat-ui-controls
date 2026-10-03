@@ -3088,3 +3088,6 @@ body.tt-hide-agent #rightSendForm .ttas-agent-send-toggle:not(.active):not(.runn
     outline: none;
     flex: none;
 }
+
+/* v1.18.20 变量小框那一行太长时，变量名省略成「…」，右边「展开」整个留着（之前被挤成「展·」） */
+#chat .mes .tt-mvu-headtext { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

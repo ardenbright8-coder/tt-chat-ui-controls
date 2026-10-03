@@ -482,7 +482,7 @@ function decorateMessage(el, chat) {
     else if (!after) head = `变量 · ${changes.length} 项，还没算`;
     else if (broken) head = `变量 · ${changes.length} 项，有没算上的`;
     else head = `变量 · ${numeric.length ? numeric.slice(0, 3).join('　') + (numeric.length > 3 ? ' …' : '') : `改了 ${changes.length} 项`}`;
-    let html = `<div class="tt-mvu-head">${esc(head)}${broken ? '' : `<span class="tt-mvu-arrow">${open ? '收起' : '展开'}</span>`}</div>`;
+    let html = `<div class="tt-mvu-head"><span class="tt-mvu-headtext">${esc(head)}</span>${broken ? '' : `<span class="tt-mvu-arrow">${open ? '收起' : '展开'}</span>`}</div>`;
     html += rows.map(rowHtml).join('');
     if (bare.length && !changes.length) {
         html += compare(readChanges(wrapBarePatches(message.mes) || ''), statBefore(chat, id), null).map(rowHtml).join('');

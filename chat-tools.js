@@ -377,28 +377,33 @@ function disarmDeepen(reason) {
 //    他的酒馆空着发送 = 接着上一条续写，所以不点发送按钮，直接叫酒馆生成一条新的（generate('normal')）。
 // 2. 输入框里有字：当成这一轮深入的「临时补充」加在说明后面一起给 AI，不作为他的消息发出去，输入框清空
 //    （「我给婉茹送了一个玉簪……把我这段话也给带上……做个临时补充」）。出错就把字放回去。
+// v1.18.20：输入框有字时，字照常作为你的消息发出去（留在聊天里，写得不好能改了重发），
+// 再带上深入说明另起一条回复。用户：「正文别被吃掉呀，我可以修改正文，然后再重新发一遍」。
+// （v1.18.15～19 是把字当临时补充塞进说明、清空输入框不发，聊天里看不到）
+let deepenSending = false;
+
 async function onDeepen(event) {
     event.preventDefault();
     if (generating()) return;
     const context = ctx();
     const box = document.getElementById('send_textarea');
-    const extra = (box?.value ?? '').trim();
-    let text = settings().deepenPrompt || DEFAULT_DEEPEN;
-    if (extra) text += `\n\n【这一轮的补充（{{user}}刚写的，照着它往下深入）】\n${extra}`;
-    if (!setDeepenPrompt(text)) {
+    const typed = (box?.value ?? '').trim();
+    if (!setDeepenPrompt(settings().deepenPrompt || DEFAULT_DEEPEN)) {
         globalThis.toastr?.warning?.('这个版本的酒馆不支持临时加说明', '深入');
         return;
     }
     deepenArmed = true;
     clearTimeout(deepenTimer);
     deepenTimer = setTimeout(() => disarmDeepen('5 分钟没出完'), 5 * 60 * 1000);
-    const restore = () => {
-        if (extra && box && !box.value.trim()) { box.value = extra; box.dispatchEvent(new Event('input', { bubbles: true })); }
-    };
-    if (extra && box) { box.value = ''; box.dispatchEvent(new Event('input', { bubbles: true })); }
-    vlog('深入', `点了深入，另起一条新回复${extra ? `；临时补充：${extra.slice(0, 200)}` : ''}`);
+    vlog('深入', typed ? `点了深入，你写的字照常发出去：${typed.slice(0, 200)}` : '点了深入，另起一条新回复');
     try {
-        if (typeof context?.generate === 'function') {
+        if (typed) {
+            // 点酒馆自己的发送：有字时它发你的消息 + 出新回复；接管发送这次让开，不换成「写好这一轮」
+            const send = document.getElementById('send_but');
+            if (!send) throw new Error('找不到发送按钮');
+            deepenSending = true;
+            try { send.click(); } finally { deepenSending = false; }
+        } else if (typeof context?.generate === 'function') {
             await context.generate('normal');
         } else {
             // 老版本没有 generate：退回点发送（这时可能接着上一条续写）
@@ -407,7 +412,6 @@ async function onDeepen(event) {
             send.click();
         }
     } catch (error) {
-        restore();
         disarmDeepen('出错了');
         vlog('出错', `深入生成失败：${error?.message || error}`);
         globalThis.toastr?.error?.(String(error?.message || error), '深入');
@@ -467,6 +471,7 @@ function armPrompt(text, label) {
 
 async function onSendClick(event) {
     if (!event.target?.closest?.('#send_but')) return;
+    if (deepenSending) return; // 深入替你点的发送：说明已经是深入的了
     if (!settings().sendTakeover || generating()) return;
     const box = document.getElementById('send_textarea');
     const typed = (box?.value ?? '').trim();
