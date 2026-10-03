@@ -91,58 +91,30 @@ export function bindContentEditing(entry, actions) {
         event.stopImmediatePropagation();
         openDraft();
     };
-    // v1.18.12：外面的小框只当入口（用户：「外边这个滑块已经没有实际作用……只是给里边那个大框做个入口」）。
+    // v1.18.12 起：外面的小框只当入口（用户：「外边这个滑块已经没有实际作用……只是给里边那个大框做个入口」）。
     // 小框（官方代码编辑器 / 原文本框）藏起来，换成一个固定的小气泡「按住打开编辑」+ 一行内容开头；
-    // 按住 0.6 秒才开大窗口，手指一滑就取消（「有时候滑屏直接滑上去……又在翻这个」），气泡本身不滚。
+    // v1.18.14 改成一行的小块，点一下就开大窗口；气泡本身不滚。
     const block = contentScope(source);
     const entryBox = document.createElement('div');
     entryBox.className = 'tt-wi-content-entry';
     entryBox.setAttribute('role', 'button');
-    entryBox.setAttribute('aria-label', '按住打开编辑');
-    entryBox.innerHTML = '<div class="tt-wi-entry-fill"></div><i class="fa-solid fa-pen-to-square"></i><div class="tt-wi-entry-text"><b>按住打开编辑</b><small class="tt-wi-entry-preview"></small></div>';
+    entryBox.setAttribute('aria-label', '按住编辑内容');
+    entryBox.innerHTML = '<div class="tt-wi-entry-fill"></div><i class="fa-solid fa-pen-to-square"></i><div class="tt-wi-entry-text"><b>编辑</b><small class="tt-wi-entry-preview"></small></div>';
     block.append(entryBox);
     block.classList.add('tt-wi-entry-on');
     const preview = entryBox.querySelector('.tt-wi-entry-preview');
     const updatePreview = () => { preview.textContent = source.value.replace(/\s+/g, ' ').trim().slice(0, 80) || '（还没写内容）'; };
     updatePreview();
-    const HOLD_MS = 600;
-    let holdTimer = null;
-    let holdX = 0;
-    let holdY = 0;
-    const cancelHold = () => { clearTimeout(holdTimer); holdTimer = null; entryBox.classList.remove('tt-holding'); };
-    const startHold = (event) => {
+    // v1.18.14 用户：小块了就不用保护，「直接开就好了」——点一下就开。手指滑动翻页时浏览器不会发 click，不会误开
+    const cancelHold = () => {};
+    const openNow = (event) => {
         if (dialog) return;
-        const p = event.touches?.[0] ?? event;
-        holdX = p.clientX ?? 0;
-        holdY = p.clientY ?? 0;
-        cancelHold();
-        // 先让填满动画从 0 开始
-        void entryBox.offsetWidth;
-        entryBox.classList.add('tt-holding');
-        holdTimer = setTimeout(() => {
-            holdTimer = null;
-            entryBox.classList.remove('tt-holding');
-            try { navigator.vibrate?.(15); } catch { /* 不支持就算了 */ }
-            openDraft();
-        }, HOLD_MS);
-    };
-    const moveHold = (event) => {
-        if (!holdTimer) return;
-        const p = event.touches?.[0] ?? event;
-        if (Math.hypot((p.clientX ?? 0) - holdX, (p.clientY ?? 0) - holdY) > 10) cancelHold();
+        event.preventDefault();
+        openDraft();
     };
     const noMenu = (event) => event.preventDefault();
-    entryBox.addEventListener('touchstart', startHold, { passive: true });
-    entryBox.addEventListener('touchmove', moveHold, { passive: true });
-    entryBox.addEventListener('touchend', cancelHold);
-    entryBox.addEventListener('touchcancel', cancelHold);
+    entryBox.addEventListener('click', openNow);
     entryBox.addEventListener('contextmenu', noMenu);
-    // 电脑上没有触摸：按住鼠标也一样
-    const mouseDown = (event) => { if (event.pointerType === 'mouse') startHold(event); };
-    const mouseUp = (event) => { if (event.pointerType === 'mouse') cancelHold(); };
-    entryBox.addEventListener('pointerdown', mouseDown);
-    entryBox.addEventListener('pointerup', mouseUp);
-    entryBox.addEventListener('pointerleave', mouseUp);
     const onSourceChange = () => updatePreview();
     source.addEventListener('input', onSourceChange);
     source.addEventListener('change', onSourceChange);

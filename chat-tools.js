@@ -52,7 +52,8 @@ const DEEPEN_V1 = `【本轮写法：原地深入】
 - 本来要写的格式（状态、变量更新这些）照常写。`;
 
 // v1.18.4：用户 2026-10-04 改的方向——不禁新人物新事件，只要服务眼下这场戏；对话是表现人物的主力
-export const DEFAULT_DEEPEN = `【本轮写法：深入这场戏】
+// v1.18.4 的第二版
+const DEEPEN_V2 = `【本轮写法：深入这场戏】
 接着上一条写，把眼下这段剧情写深、写活。
 
 一、围着眼下这件事写
@@ -78,6 +79,15 @@ export const DEFAULT_DEEPEN = `【本轮写法：深入这场戏】
 - 停在留给{{user}}接话或行动的地方，不替{{user}}说话、做决定。
 - 本来要写的格式（状态栏、变量更新这些）照常写。`;
 
+// v1.18.14 第三版（用户 2026-10-04 一起讨论定的）：短、通用，不针对哪个故事；不刻意加新东西。
+// 起因：第二版让 AI「可以加新东西」，它加了一堆大动作，不顾上下文、把用户的人设带偏（用户：「太刻意了……跑别人上下文也不看了」）。
+export const DEFAULT_DEEPEN = `【深入这场戏】
+不急着往前推，把眼下这一刻往深里写。
+- 先想清楚这一刻：在场每个人想要什么、顾忌什么、藏着什么。{{user}}正在做的事和他的打算是前提，顺着写，别替他改主意。
+- 让人物自己动起来：按各自的性格内核和此刻处境去反应，有自己的算盘，不为配合谁变笨变软。
+- 戏靠对话撑：你来我往、话里有话；动作、神态、环境给对话加分量。
+- 节奏放慢，情绪一点点推；停在留给{{user}}接的地方。`;
+
 let mountTimer = null;
 let observer = null;
 let resizeObs = null;
@@ -96,7 +106,7 @@ function settings() {
     const s = all[EXTENSION_KEY] = all[EXTENSION_KEY] || {};
     if (typeof s.varsInMenu !== 'boolean') s.varsInMenu = true;
     if (typeof s.deepenButton !== 'boolean') s.deepenButton = true;
-    if (typeof s.deepenPrompt !== 'string' || !s.deepenPrompt.trim() || s.deepenPrompt === DEEPEN_V1) s.deepenPrompt = DEFAULT_DEEPEN;
+    if (typeof s.deepenPrompt !== 'string' || !s.deepenPrompt.trim() || s.deepenPrompt === DEEPEN_V1 || s.deepenPrompt === DEEPEN_V2) s.deepenPrompt = DEFAULT_DEEPEN;
     delete s.bottomButton;
     return s;
 }
@@ -220,7 +230,7 @@ function generating() {
 // 这排是本扩展自己的元素，放在输入框那块（#nonQRFormItems）前面；不带 qr 的 class，酒馆助手不会管它。
 const ROW_ID = 'tt-quick-tools';
 const QUICK_TOOLS = [
-    { id: DEEPEN_ID, label: '深入', icon: 'fa-magnifying-glass-plus', title: '深入：围着这场戏写深一条', on: () => settings().deepenButton, click: (e) => onDeepen(e) },
+    { id: DEEPEN_ID, label: '深入', icon: '', title: '深入：围着这场戏写深一条', on: () => settings().deepenButton, click: (e) => onDeepen(e) },
 ];
 
 function ensureButtons() {
@@ -236,7 +246,7 @@ function ensureButtons() {
             b.id = tool.id;
             b.className = 'tt-quick-btn';
             b.title = tool.title;
-            b.innerHTML = `<i class="fa-solid ${tool.icon}"></i><span>${tool.label}</span>`;
+            b.innerHTML = `${tool.icon ? `<i class="fa-solid ${tool.icon}"></i>` : ''}<span>${tool.label}</span>`;
             b.addEventListener('click', tool.click);
             row.append(b);
         }
