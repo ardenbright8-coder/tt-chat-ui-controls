@@ -249,6 +249,115 @@ function pointRect(node, offset) {
     }
 }
 
+// ---------------------------------------------------------------- 纯文本框：选字时我来滚（v1.18.8）
+// 以前的做法是手机先自己滚、扩展再拽回来慢慢放：选区先跑到底，框再一顿一顿往下挪（用户 2026-10-04：
+// 「一下一秒就到底，然后右边的滑块再慢慢往下滑……不够丝滑」）。现在拖选字手柄时先把框和外层的
+// 原生滚动冻住（overflow:hidden，只在选区正在变的时候），手柄在中间时内容不动、选区紧跟手指；
+// 手柄（光标）进了框的上下边缘区，才由这里按帧平滑地慢慢滚。
+
+// 文本框里第 pos 个字的光标顶部离内容顶部多远（镜像 div 量）
+function caretTop(textarea, pos, cache) {
+    const value = textarea.value;
+    if (cache.value === value && cache.pos === pos && cache.width === textarea.clientWidth) return cache.top;
+    let mirror = cache.mirror;
+    if (!mirror) {
+        mirror = cache.mirror = document.createElement('div');
+        mirror.setAttribute('aria-hidden', 'true');
+        document.body.append(mirror);
+    }
+    const style = getComputedStyle(textarea);
+    const copy = ['boxSizing', 'width', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
+        'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth', 'fontFamily', 'fontSize',
+        'fontWeight', 'fontStyle', 'letterSpacing', 'lineHeight', 'textTransform', 'wordSpacing', 'textIndent', 'tabSize'];
+    for (const key of copy) mirror.style[key] = style[key];
+    Object.assign(mirror.style, {
+        position: 'absolute', visibility: 'hidden', top: '0', left: '-9999px', overflow: 'hidden',
+        whiteSpace: 'pre-wrap', wordWrap: 'break-word', overflowWrap: 'break-word', borderStyle: 'solid',
+        width: `${textarea.clientWidth + (Number.parseFloat(style.borderLeftWidth) || 0) + (Number.parseFloat(style.borderRightWidth) || 0)}px`,
+    });
+    mirror.textContent = value.slice(0, pos);
+    const mark = document.createElement('span');
+    mark.textContent = value.slice(pos, pos + 1) || '.';
+    mirror.append(mark);
+    const top = mark.offsetTop - (Number.parseFloat(style.borderTopWidth) || 0);
+    Object.assign(cache, { value, pos, width: textarea.clientWidth, top });
+    return top;
+}
+
+export function createTextareaDrive(source, lineHeight, onDone) {
+    let lockedUntil = 0;
+    let fingerDown = false;
+    let frozen = [];          // [node, 原来的 inline overflowY]
+    let frame = null;
+    let exact = null;
+    let last = 0;
+    let moved = 0;
+    const cache = {};
+    const now = () => performance.now();
+
+    const freeze = () => {
+        if (frozen.length) return;
+        for (const node of scrollContainers(source)) {
+            if (node === document.scrollingElement || node === document.documentElement || node === document.body) continue;
+            frozen.push([node, node.style.overflowY]);
+            node.style.overflowY = 'hidden';
+        }
+        exact = source.scrollTop;
+        moved = 0;
+    };
+    const unfreeze = () => {
+        if (frame !== null) cancelAnimationFrame(frame);
+        frame = null;
+        if (!frozen.length) return;
+        for (const [node, value] of frozen) node.style.overflowY = value;
+        frozen = [];
+        onDone?.(moved);
+    };
+    const tick = () => {
+        frame = null;
+        const time = now();
+        // 手指还按着、或者选区刚变过（0.6 秒内）就一直接管；都没了就还给原生
+        if (!fingerDown && time > lockedUntil) { unfreeze(); return; }
+        if (source.selectionStart === source.selectionEnd) { unfreeze(); return; }
+        const line = Math.max(12, lineHeight(source));
+        const pos = source.selectionDirection === 'backward' ? source.selectionStart : source.selectionEnd;
+        const top = caretTop(source, pos, cache);
+        const viewTop = source.scrollTop;
+        const viewBottom = viewTop + source.clientHeight;
+        const zone = Math.max(line * 1.5, 36);
+        let dir = 0;
+        let depth = 0;
+        if (top + line > viewBottom - zone) { dir = 1; depth = (top + line - (viewBottom - zone)) / zone; }
+        else if (top < viewTop + zone && viewTop > 0) { dir = -1; depth = (viewTop + zone - top) / zone; }
+        const elapsed = Math.min(64, time - (last || time));
+        last = time;
+        if (dir) {
+            const d = Math.min(Math.max(depth, 0), 1.5);
+            const rate = line * (1 + 3 * d);                 // 每秒约 1～5.5 行
+            const max = source.scrollHeight - source.clientHeight;
+            exact = Math.min(max, Math.max(0, (exact ?? viewTop) + dir * rate * elapsed / 1000));
+            const target = Math.round(exact);
+            if (target !== source.scrollTop) { moved += Math.abs(target - source.scrollTop); source.scrollTop = target; }
+        } else {
+            exact = source.scrollTop;
+        }
+        frame = requestAnimationFrame(tick);
+    };
+    return {
+        get active() { return frozen.length > 0; },
+        onSelection() {
+            if (source.selectionStart === source.selectionEnd) return;
+            lockedUntil = now() + 600;
+            freeze();
+            if (frame === null) { last = 0; frame = requestAnimationFrame(tick); }
+        },
+        fingerDown() { fingerDown = true; },
+        fingerUp() { fingerDown = false; lockedUntil = Math.min(lockedUntil, now() + 120); },
+        stop() { fingerDown = false; lockedUntil = 0; unfreeze(); },
+        destroy() { this.stop(); cache.mirror?.remove(); },
+    };
+}
+
 export function bindSelectionScrollLimit(source) {
     if (!globalThis.matchMedia?.('(pointer: coarse)').matches) return () => {};
     const state = new Map();
@@ -263,6 +372,9 @@ export function bindSelectionScrollLimit(source) {
         const style = getComputedStyle(editable ?? source);
         return Number.parseFloat(style.lineHeight) || (Number.parseFloat(style.fontSize) || 16) * 1.5;
     };
+    const drive = createTextareaDrive(source, lineHeight, (moved) => {
+        import('./var-log.js').then(({ vlog }) => vlog('选字滚动', `世界书文本框拖选字结束，自己滚了 ${Math.round(moved)} 像素`)).catch(() => {});
+    });
     const snapshot = (editable) => {
         state.clear();
         if (!editable) return;
@@ -316,6 +428,8 @@ export function bindSelectionScrollLimit(source) {
             ends = null;
             return;
         }
+        // 纯文本框：交给 drive，原生滚动冻住，自己平滑滚
+        if (editable === source) drive.onSelection();
         // A selection just appeared: take fresh baselines for every container.
         if (!selecting) snapshot(editable);
         selecting = true;
@@ -353,6 +467,8 @@ export function bindSelectionScrollLimit(source) {
         }
         expected.delete(node);
         const editable = activeEditable(source);
+        // drive 接管时滚动是它自己做的，不再拽回
+        if (drive.active) { state.set(node, { top: requested, time, credit: 0 }); return; }
         // Only scrolls that follow a moving selection are touched;
         // ordinary finger panning (selection unchanged) passes through.
         if (!hasContentSelection(source, editable) || time < bypassUntil || time - selectionAt > 120) {
@@ -392,8 +508,9 @@ export function bindSelectionScrollLimit(source) {
         bypassUntil = now() + 250;
         selectionAt = -Infinity;
     };
-    const release = () => { selectionAt = -Infinity; bypassUntil = now() + 80; };
-    const focusChange = () => { selecting = false; selectionAt = -Infinity; ends = null; state.clear(); };
+    const release = () => { selectionAt = -Infinity; bypassUntil = now() + 80; drive.fingerUp(); };
+    const press = () => drive.fingerDown();
+    const focusChange = () => { selecting = false; selectionAt = -Infinity; ends = null; state.clear(); drive.stop(); };
     document.addEventListener('beforeinput', bypass, true);
     document.addEventListener('keydown', bypass, true);
     document.addEventListener('wheel', bypass, { capture: true, passive: true });
@@ -402,8 +519,13 @@ export function bindSelectionScrollLimit(source) {
     document.addEventListener('selectionchange', observeSelection);
     document.addEventListener('scroll', scroll, true);
     document.addEventListener('touchend', release, { passive: true });
+    document.addEventListener('touchcancel', release, { passive: true });
     document.addEventListener('pointerup', release, true);
+    document.addEventListener('touchstart', press, { passive: true });
     return () => {
+        drive.destroy();
+        document.removeEventListener('touchcancel', release);
+        document.removeEventListener('touchstart', press);
         document.removeEventListener('beforeinput', bypass, true);
         document.removeEventListener('keydown', bypass, true);
         document.removeEventListener('wheel', bypass, { capture: true });
