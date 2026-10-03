@@ -30,7 +30,7 @@
 
 **看旧消息时保住位置**（`chat-scroll-guard.js`）：发送、快速继续、≡「继续」都会把正在看的那段钉住；手指一碰聊天（包括角色卡状态栏那种装在 iframe 小网页框里的地方）就松手。出文字的过程中上下滑屏幕绝对不能被挡，用户：「能不能在出文字的过程中，不要影响到上下滑屏幕」。测试页要把 requestAnimationFrame 换成定时器，无头浏览器里它不按时跑。
 
-**出图套餐**（`taocan.js`，魔法棒「出图套餐」）：一页排完（用户 10-03 在两种排法里挑的 A：「还是这个吧，这个挺好的」）：最上面一行小套餐卡（一行四个）、点哪个下面一排版本卡左右划（版本卡他要「稍微再大一点点」，现在 128px），再往下全是「最近出的图」；正在用的蓝框，点版本直接换上（不弹确认），「最近出的图」角上标版本 / 测试 / 草稿。🚨 连电脑不能直连：安卓正式版酒馆 `usesCleartextTraffic=false`，页面里 fetch 或 `<img>` 连 http 地址都会被拦；所以借酒馆后台 `/api/backends/chat-completions/generate`（`chat_completion_source: custom`、`custom_url` = 「图像生成」的 ComfyUI 地址 + `/jiuguan/v1`、`stream:false`、`type:quiet`），命令 JSON 放 user 消息里，结果 JSON 在 `choices[0].message.content`，图片都是 data 网址。电脑那头是 ComfyUI 插件 `jiuguan_mianban\手机接口.py` + 个人娱乐 `工具\酒馆\套餐\手机接口.js`，命令 list / switch / recent / big，改格式两头一起改。叫法照 `C:\A-AI-gongju\geren-yule\00_叫什么（咱俩说话的统一叫法）.md`。
+**出图套餐**（`taocan.js`，魔法棒「出图套餐」）：一页排完（用户 10-03 在两种排法里挑的 A：「还是这个吧，这个挺好的」）：最上面一行小套餐卡（一行四个，图 + 「套餐一」+ 套餐名，不写几个版本）、点哪个下面一排版本卡左右划（版本卡他要「稍微再大一点点」，现在 128px），再往下全是「最近出的图」；正在用的蓝框，点版本直接换上（不弹确认），「最近出的图」角上标版本 / 测试 / 草稿。🚨 连电脑不能直连：安卓正式版酒馆 `usesCleartextTraffic=false`，页面里 fetch 或 `<img>` 连 http 地址都会被拦；所以借酒馆后台 `/api/backends/chat-completions/generate`（`chat_completion_source: custom`、`custom_url` = 「图像生成」的 ComfyUI 地址 + `/jiuguan/v1`、`stream:false`、`type:quiet`），命令 JSON 放 user 消息里，结果 JSON 在 `choices[0].message.content`，图片都是 data 网址。电脑那头是 ComfyUI 插件 `jiuguan_mianban\手机接口.py` + 个人娱乐 `工具\酒馆\套餐\手机接口.js`，命令 list / switch / recent / big，改格式两头一起改。叫法照 `C:\A-AI-gongju\geren-yule\00_叫什么（咱俩说话的统一叫法）.md`。
 
 **魔法棒菜单**：每项口语名字＋一句说明；同步面板、打开数据库默认收进扩展页「魔法棒菜单」（`wand-menu.js`）。
 

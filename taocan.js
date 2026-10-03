@@ -69,7 +69,8 @@ function badge(img) {
 }
 
 // 一页排完（v1.17.2，用户 10-03 挑的方案 A）：上面一行小套餐卡（一行四个）、下面一排版本卡（左右划），再往下全是最近出的图。
-// 用户：「面板每次要划半天……整体稍微紧凑点」「还是这个吧，这个挺好的」
+// 用户：「面板每次要划半天……整体稍微紧凑点」「还是这个吧，这个挺好的」。
+// 小套餐卡第二行写套餐名（是什么底子），不写几个版本：「几个版本真没必要，一点下边就弹出来」
 function setsPage() {
     if (state.error) return `<div class="tt-tc-empty">${esc(state.error)}</div>`;
     if (!state.sets) return '<div class="tt-tc-empty">正在问电脑……</div>';
@@ -80,7 +81,7 @@ function setsPage() {
 <div class="tt-tc-set${using ? ' using' : ''}${state.open === s.id ? ' open' : ''}" data-set="${esc(s.id)}" title="${esc(s.name || '')}">
   ${pic}
   <div class="tt-tc-set-title">${esc(setTitle(s.id))}</div>
-  <div class="tt-tc-set-count">${s.versions.length} 个版本</div>
+  ${s.name ? `<div class="tt-tc-set-name">${esc(s.name)}</div>` : ''}
 </div>`;
     }).join('');
     const open = state.sets.find((s) => s.id === state.open);
