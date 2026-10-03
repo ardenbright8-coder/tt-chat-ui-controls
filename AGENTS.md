@@ -2,6 +2,39 @@
 
 用户在手机上的 TauriTavern 里用这个扩展，从 GitHub 更新。改完推到 `main`，告诉用户在手机上「管理扩展 → 酒馆拓展 → 更新」。
 
+## 项目地图（2026-10-04 加，用户：「更好管理……知道东西在哪放着，做了哪些、哪些能改哪些不能改」）
+
+**每个文件管什么**（都在仓库根目录，`index.js` 统一 `init*` / `cleanup*`）：
+- `index.js`：入口；正文颜色 / 字体 / 背景模糊、手机防误触（`installMobileTouchGuards`，勾选框按住半秒）
+- `style.css`：所有样子，按版本号分段往后加（`/* v1.x.x … */`）
+- `manifest.json`：版本号，**每次推送必改**，手机靠它发现新版并自动刷新
+- 聊天：`chat-scroll-guard.js` 看旧消息时保住位置｜`immersive.js` 沉浸式聊天｜`chat-input-hint.js` 输入框灰字｜`chat-tools.js` 聊天按钮（变量收进 ≡、快捷工具「深入」、到最底下、藏 Agent）
+- 变量：`mvu-fix.js` 自动修 MVU 格式 + 变量小框｜`var-log.js` ≡「测试日志」（查问题全靠它）
+- 剧情：`story-summary.js` 总结全文 / 总结库 / 空白开局 / 总结带数值
+- 配图：`story-image.js` 自动配图、定妆照、提示词风格｜`taocan.js` 出图套餐（连电脑 ComfyUI）
+- 世界书：`world-info-mobile.js` 手机版世界书界面｜`world-info-editing.js` 内容大窗口编辑、撤销、选字滚动｜`char-world.js` 切角色挂世界书
+- 菜单：`wand-menu.js` 魔法棒 / ≡ 菜单排序、改名、「不常用工具」
+- 其他：`tip.js` ⓘ 说明气泡｜`update-watch.js` 更新完自动刷新｜`extension-names-zh.js` 自带扩展汉化｜`context-lock.js` 上下文固定｜`prompt-detach-guard.js` 预设条目移除防误触
+- `README.md`：给用户看的更新说明；`AGENTS.md`：本文件
+
+**新东西往哪放**：
+- 新功能：新建一个 `xxx.js`（`initXxx` / `cleanupXxx` / `__test`），在 `index.js` 挂上；开关放扩展页自己的抽屉（照 `chat-tools.js` 的 `mountPanel`），说明收进 ⓘ
+- 设置都存 `extensionSettings['chat-text-color']`（历史原因叫这个名），新字段给默认值
+- 菜单项：≡ 写进 `wand-menu.js` 的 `OWN_OPTIONS` 末尾，魔法棒写进 `OWN_WAND` 末尾
+- 输入框旁的快捷按钮：`chat-tools.js` 的 `QUICK_TOOLS`
+- 要查问题的地方：`vlog(类别, 内容)` 记进测试日志
+- 给 AI 临时加说明：`setExtensionPrompt`（看「深入」的写法），用完撤掉
+
+**改完的固定流程**：改代码 → 在 scratchpad 用 node + jsdom 写个小测试跑一遍 → `manifest.json` 版本号 +1 → README 记一句 → 用户拍板的做法记进本文件 → 推 `main` → 告诉用户「管理扩展 → 酒馆拓展 → 更新」。手机上的真实手感看不到：拿不准就让用户点 ≡「测试日志」→「存到手机」发过来。
+
+**能改 / 先问**：
+- 下面「已经定好的设计」里每一条都是用户拍过板的：要改先问
+- 用户写的提示词（自动配图写词说明、深入说明）归用户：修 bug、加功能时原样保留，只在用户点名时改；改默认版本时，手机上存的是旧默认原样才自动换，改过的不动
+- 别家扩展的按钮只加 class / CSS 藏或排序，不搬、不删
+- 界面改动先出参考图（简单的图就行，别搞复杂）再写代码；提示词先给草案讨论再换
+
+**跟用户打交道**：中文、结论先行、口语化；他在手机上用，回复别太长。
+
 ## 已经定好的设计：改之前先对照，保持原样
 
 用户拍过板的界面做法列在这里。改到相关代码时照这里做；要改这里的任何一条，先问用户。
