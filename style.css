@@ -3062,3 +3062,29 @@ body.tt-hide-agent #rightSendForm .ttas-agent-send-toggle:not(.active):not(.runn
     white-space: normal;
 }
 .tt-prompt-picker .tt-prompt-pick small { opacity: .7; line-height: 1.4; }
+
+/* v1.18.19 「深入」压住纸飞机的真正原因：酒馆自带 `#rightSendForm>div { width: var(--bottomFormBlockSize) }`
+   把发送那组里每个 div 都定成 40px 宽，「深入」两个字装不下就溢出去盖住纸飞机。这里放开宽度，按字撑开；
+   边框、底色一律去掉（主题可能给 button 加框），跟纸飞机一个样。 */
+#send_form #rightSendForm > #tt-quick-tools {
+    width: auto !important;
+    min-width: max-content;
+    height: var(--bottomFormBlockSize, 40px);
+    margin: 0 8px 0 0;
+    opacity: 1;
+    filter: none;
+    flex: none;
+    order: 0;
+    overflow: visible;
+}
+#send_form #rightSendForm > #tt-quick-tools .tt-quick-btn {
+    width: auto !important;
+    min-width: 0;
+    padding: 0 6px;
+    border: none !important;
+    border-radius: 0;
+    background: none !important;
+    box-shadow: none !important;
+    outline: none;
+    flex: none;
+}
