@@ -1,3 +1,5 @@
+import { vlog } from './var-log.js';
+
 // Story summary + summary library.
 //
 // 总结全文 (options menu, under 继续): asks the current model OUTSIDE the
@@ -390,11 +392,33 @@ function persist() {
     try { ctx()?.saveSettingsDebounced?.(); } catch { /* next save will catch up */ }
 }
 
-function saveToLibrary({ text, character, chatId }) {
+// 带着变量（v1.18.5）：用 MVU 变量的卡，总结时把当时的数值一起存下，「替换开场白」开新聊天时带过去，
+// 不然新聊天的状态栏回到卡里的初始值。用户 2026-10-04：「总结的时候……能不能把变量抄上去……我想换个聊天窗口」。
+// 存的是最新一条有 stat_data 的消息上那份变量（酒馆助手存在 message.variables[swipe_id]），去掉显示用的临时数据。
+function latestVars() {
+    const chat = ctx()?.chat ?? [];
+    for (let i = chat.length - 1; i >= 0; i--) {
+        const message = chat[i];
+        const v = message?.variables;
+        const vars = Array.isArray(v) ? v[message.swipe_id ?? 0] : (v && typeof v === 'object' ? v : null);
+        if (!vars?.stat_data) continue;
+        try {
+            const copy = JSON.parse(JSON.stringify(vars));
+            delete copy.display_data;
+            delete copy.delta_data;
+            if (copy.stat_data && typeof copy.stat_data === 'object') delete copy.stat_data.$internal;
+            return copy;
+        } catch { return null; }
+    }
+    return null;
+}
+
+function saveToLibrary({ text, character, chatId, vars = latestVars() }) {
     const items = library();
     const existing = items.findIndex((item) => item.text === text);
     if (existing >= 0) items.splice(existing, 1);
     const item = { id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, text, character, chatId, createdAt: Date.now() };
+    if (vars) item.vars = vars;
     items.unshift(item);
     if (items.length > LIBRARY_LIMIT) items.length = LIBRARY_LIMIT;
     persist();
@@ -418,11 +442,12 @@ function openingState() {
     return 'busy';
 }
 
-async function useAsOpening(text) {
+async function useAsOpening(text, vars = null) {
     const context = ctx();
     const chat = context?.chat;
     if (!chat) throw new Error('没有打开的聊天');
     const body = `${RECAP_TITLE}\n${text}`;
+    const carried = vars ? JSON.parse(JSON.stringify(vars)) : null;
     const state = openingState();
     if (state === 'busy') throw new Error('只能在刚开的新聊天里替换开场白');
     if (state === 'empty') {
@@ -437,6 +462,7 @@ async function useAsOpening(text) {
             swipe_id: 0,
             swipe_info: [{ send_date: now, extra: {} }],
             extra: {},
+            ...(carried ? { variables: [carried] } : {}),
         });
     } else {
         // Add the recap as one more greeting swipe and show it. The card's own
@@ -456,9 +482,41 @@ async function useAsOpening(text) {
         }
         message.swipe_id = index;
         message.mes = body;
+        if (carried) {
+            if (!Array.isArray(message.variables)) message.variables = message.swipes.map((_, i) => (i === 0 && message.variables && typeof message.variables === 'object' ? message.variables : {}));
+            while (message.variables.length < message.swipes.length) message.variables.push({});
+            message.variables[index] = carried;
+        }
     }
     await context.saveChat?.();
     await context.reloadCurrentChat?.();
+    if (carried) setTimeout(() => keepCarried(carried), 1500);
+}
+
+// 变量框架打开新聊天时可能又写一遍初始值，盖掉带过来的：盖掉了就再写回去
+async function keepCarried(carried) {
+    const chat = ctx()?.chat;
+    const message = chat?.[0];
+    if (!message) return;
+    const v = message.variables;
+    const now = Array.isArray(v) ? v[message.swipe_id ?? 0] : v;
+    const same = JSON.stringify(now?.stat_data ?? null) === JSON.stringify(carried.stat_data ?? null);
+    if (same) { vlog('总结', '替换开场白：数值带过去了'); return; }
+    const mvu = globalThis.Mvu;
+    try {
+        if (mvu?.replaceMvuData) {
+            await mvu.replaceMvuData(JSON.parse(JSON.stringify(carried)), { type: 'message', message_id: 0 });
+            vlog('总结', '替换开场白：数值被初始值盖掉了，用 Mvu.replaceMvuData 写回去了');
+        } else {
+            if (Array.isArray(message.variables)) message.variables[message.swipe_id ?? 0] = JSON.parse(JSON.stringify(carried));
+            else message.variables = [JSON.parse(JSON.stringify(carried))];
+            await ctx()?.saveChat?.();
+            vlog('总结', '替换开场白：数值被盖掉了，直接写回消息上了（没有 Mvu 全局）');
+        }
+        await ctx()?.reloadCurrentChat?.();
+    } catch (error) {
+        vlog('出错', `替换开场白写回数值失败：${error?.message || error}`);
+    }
 }
 
 // Remove the card's opening from this fresh chat only, so the user can write
@@ -897,9 +955,11 @@ function showLibraryItem(item, query = '') {
     let deleteArmed = false;
     showBubble({
         title: item.character ? `${item.character} 的总结` : '总结',
-        meta: `${formatTime(item.createdAt)} · ${charCount(item.text)} 字`,
+        meta: `${formatTime(item.createdAt)} · ${charCount(item.text)} 字${item.vars ? ' · 带着数值' : ''}`,
         text: item.text,
-        note: openingNote,
+        note: item.vars
+            ? openingNote.replace('带状态栏的卡建议用“作者注释”：开场白不动，总结写进本聊天的作者注释。', '这条带着总结时的数值，替换开场白时一起带过去，状态栏接着原来的数走。')
+            : openingNote,
         actions: [
             {
                 label: '替换开场白',
@@ -908,7 +968,7 @@ function showLibraryItem(item, query = '') {
                 onClick: async (b) => {
                     try {
                         b.disabled = true;
-                        await useAsOpening(item.text);
+                        await useAsOpening(item.text, item.vars);
                         closeBubble();
                         globalThis.toastr?.success?.('已用总结作为开场白，右滑可翻回原开场白');
                     } catch (error) {
@@ -931,6 +991,18 @@ function showLibraryItem(item, query = '') {
                     }
                 },
             },
+            ...(latestVars() ? [{
+                label: item.vars ? '换成现在的数值' : '带上现在的数值',
+                onClick: (b) => {
+                    const vars = latestVars();
+                    if (!vars) { flash(b, '这里没有数值'); return; }
+                    item.vars = vars;
+                    persist();
+                    vlog('总结', `给总结「${item.character || ''} ${formatTime(item.createdAt)}」存了现在的数值`);
+                    globalThis.toastr?.success?.('存好了，替换开场白时会一起带过去');
+                    showLibraryItem(item, query);
+                },
+            }] : []),
             { label: '复制', onClick: (b) => copyText(item.text, b) },
             {
                 label: '删除',
@@ -1514,3 +1586,6 @@ export function cleanupStorySummary() {
     }
     pendingBlankUntil = 0;
 }
+
+// 给电脑上的自测脚本用
+export const __test = { latestVars, saveToLibrary, useAsOpening, library };
