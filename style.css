@@ -3091,3 +3091,13 @@ body.tt-hide-agent #rightSendForm .ttas-agent-send-toggle:not(.active):not(.runn
 
 /* v1.18.20 变量小框那一行太长时，变量名省略成「…」，右边「展开」整个留着（之前被挤成「展·」） */
 #chat .mes .tt-mvu-headtext { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* v1.18.21 发送 / 深入时正文不跳：酒馆出字时把最后一条消息头上那排按钮（画笔、复制、编辑……）display:none，
+   出完再显示。手机上那排按钮一出来就把名字和时间挤成好几行，消息头一下高出好几行，正文整段往下跳；
+   开始出字时反过来往上跳。改成出字时按钮只是看不见、位置照占，消息头高度从头到尾不变。
+   用户：「发送按钮……不要影响正文的那个位置……我看到哪算到哪」。 */
+body:is([data-generating="true"], [data-swiping="true"]) #chat .mes.last_mes .mes_buttons {
+    display: flex !important;
+    visibility: hidden;
+    pointer-events: none;
+}
