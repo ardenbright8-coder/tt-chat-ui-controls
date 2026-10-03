@@ -100,7 +100,14 @@ const DEEPEN_V4 = `【深入这场戏】
 - 让人物立起来：用最能表现他此刻的东西——一句话、一个神情、一个动作、一种状态。
 - 节奏放慢，情绪一点点推；停在留给{{user}}接的地方。`;
 
-export const DEFAULT_DEEPEN = DEEPEN_V3;
+// v1.18.22 用户自己的版本（2026-10-04 他发来原文：「就按我给你发这个来吧」）。🚨 深入说明归用户，别再改。
+export const DEFAULT_DEEPEN = `【深入这场戏】
+不急着往前推，把眼下这一刻往深里写。
+- 先想清楚这一刻：在场每个人想要什么、顾忌什么、藏着什么。{{user}}正在做的事和他的打算是前提，顺着写，别替他改主意。
+- 让人物自己动起来：按各自的性格内核和此刻处境去反应，有自己的算盘，不为配合谁变笨变软。
+- 戏靠对话撑：你来我往、话里有话；动作、神态、环境给对话加分量。
+- 想加点意思，就加一个合情合理的小变化，让这一刻多一层张力或趣味；不另起一条线，不把局面翻过来。
+- 节奏放慢，情绪一点点推；停在留给{{user}}接的地方。`;
 
 // v1.18.18 接管发送（用户 2026-10-04 一起讨论定的）：深入 = 原地往深挖；空着发送 = 往前走、要有转折；
 // 写了字发送 = 照他写的走、写得好看（「同样是要去喝酒，李白写的就不一样」）。
@@ -145,7 +152,7 @@ function settings() {
     if (typeof s.varsInMenu !== 'boolean') s.varsInMenu = true;
     if (typeof s.deepenButton !== 'boolean') s.deepenButton = true;
     if (typeof s.hideAgentButton !== 'boolean') s.hideAgentButton = true;
-    if (typeof s.deepenPrompt !== 'string' || !s.deepenPrompt.trim() || [DEEPEN_V1, DEEPEN_V2, DEEPEN_V4].includes(s.deepenPrompt)) s.deepenPrompt = DEFAULT_DEEPEN;
+    if (typeof s.deepenPrompt !== 'string' || !s.deepenPrompt.trim() || [DEEPEN_V1, DEEPEN_V2, DEEPEN_V3, DEEPEN_V4].includes(s.deepenPrompt)) s.deepenPrompt = DEFAULT_DEEPEN;
     if (typeof s.sendTakeover !== 'boolean') s.sendTakeover = true;
     if (typeof s.sendPrompt !== 'string' || !s.sendPrompt.trim()) s.sendPrompt = DEFAULT_SEND;
     if (typeof s.pushPrompt !== 'string' || !s.pushPrompt.trim()) s.pushPrompt = DEFAULT_PUSH;
