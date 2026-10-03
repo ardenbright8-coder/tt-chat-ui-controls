@@ -2794,3 +2794,8 @@
     margin-top: 6px;
     opacity: .8;
 }
+
+/* v1.17.5 魔法棒自动配图开关：开着时图标亮一点，一眼看出开没开 */
+#tt-autoimg-toggle-wand.tt-wand-on .extensionsMenuExtensionButton {
+    color: var(--SmartThemeQuoteColor, #e18a24);
+}

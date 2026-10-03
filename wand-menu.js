@@ -12,7 +12,9 @@ const HIDDEN_CLASS = 'tt-wand-hidden';
 const ctx = () => globalThis.SillyTavern?.getContext?.();
 
 // 本扩展自己加进菜单的项。排最前的在菜单最底下；以后新加的写在后面，就排在前面那些的上面。
-const OWN_WAND = ['tt-autoimg-wand', 'tt-cast-wand', 'tt-autoimg-settings-wand', 'tt-taocan-wand'];
+const OWN_WAND = ['tt-autoimg-wand', 'tt-cast-wand', 'tt-autoimg-settings-wand', 'tt-taocan-wand', 'tt-autoimg-toggle-wand'];
+// story-image.js 切了自动配图开关就发这个信号，这边重画一下名字
+const REFRESH_EVENT = 'tt-wand-refresh';
 const OWN_OPTIONS = ['option_tt_blank_opening', 'option_tt_summary_library', 'option_tt_story_summary'];
 // 别家的项用户指定的位置（2026-10-02）：这几项排最上面（从上往下）；这几项紧贴在本扩展那些上面（从上往下）。其余保持原样
 const WAND_TOP = ['inspect', 'vars', 'logs'];
@@ -28,6 +30,13 @@ const ITEMS = [
     { key: 'cast', match: ['看定妆照'], name: '看定妆照', desc: '这张角色卡里每个角色长什么样，能改长相、重出定妆照；新开聊天也是这一套' },
     { key: 'autoimgset', match: ['自动配图设置'], name: '自动配图设置', desc: '开关自动配图、选哪个模型写画图词、给最后一条补一张' },
     { key: 'taocan', match: ['出图套餐'], name: '出图套餐', desc: '看电脑上的出图套餐和版本，点一下换上，电脑跟着换；还能看最近出的图' },
+    // 自动配图开关（v1.17.5）：一点就切，名字跟着变，看名字就知道现在开没开
+    {
+        key: 'autoimgtoggle', id: 'tt-autoimg-toggle-wand', match: ['自动配图开关'],
+        name: '打开自动配图（现在关着）', desc: '点一下打开：之后每条正文写完自动配一张图',
+        on: () => !!ctx()?.extensionSettings?.[EXTENSION_KEY]?.autoImageEnabled,
+        onName: '关掉自动配图（现在开着）', onDesc: '点一下关掉：之后不再自动配图，排着队还没画的也不画了',
+    },
     // 官方「提示词查看器」是个开关，开着时它自己把名字换成「停止检查」，这里跟着换，免得看不出开没开
     {
         key: 'inspect', id: 'inspectNextPromptButton', match: ['提示词查看器', 'Inspect Prompts', 'Stop Inspecting'],
@@ -257,6 +266,8 @@ function mountPanel() {
 
 export function initWandMenu() {
     clearInterval(mountTimer);
+    document.removeEventListener(REFRESH_EVENT, schedule);
+    document.addEventListener(REFRESH_EVENT, schedule);
     const ready = () => apply() & mountPanel();
     if (ready()) return;
     let tries = 0;
@@ -265,6 +276,7 @@ export function initWandMenu() {
 
 export function cleanupWandMenu() {
     clearInterval(mountTimer);
+    document.removeEventListener(REFRESH_EVENT, schedule);
     observer?.disconnect();
     observer = null;
     clearTimeout(pending);

@@ -443,9 +443,9 @@ function attach(context, id, message, url, title) {
 let latestJob = 0;
 const stale = (job) => job !== latestJob;
 
-async function drawAndAttach(id, type, job = latestJob) {
+async function drawAndAttach(id, type, job = latestJob, force = false) {
     const s = settings();
-    if (!s.autoImageEnabled || SKIP_TYPES.has(type) || stale(job)) return;
+    if ((!s.autoImageEnabled && !force) || SKIP_TYPES.has(type) || stale(job)) return;
     const context = ctx();
     const message = context?.chat?.[id];
     if (!message || message.is_user || message.is_system || !plainText(message.mes)) return;
@@ -513,12 +513,37 @@ function onReceived(id, type) {
     enqueue(() => drawAndAttach(Number(id), type, job), '自动配图');
 }
 
-// 手动按钮：不看开关，直接给这条配
+// 手动按钮：不看开关，直接给这条配。不去临时改开关本身：以前借开关一用、画完再改回去，
+// 画的那一分钟里在魔法棒点了开关，画完又被改回原样（v1.17.5）
 async function drawAndAttachForce(id) {
+    await drawAndAttach(id, 'manual', latestJob, true);
+}
+
+// 魔法棒「打开 / 关掉自动配图」（v1.17.5）：一点就切，不用进设置。
+// 名字和说明跟着开关变，写在 wand-menu.js 的 ITEMS 里（key: autoimgtoggle），这里只发个信号让它重画
+const TOGGLE_WAND_ID = 'tt-autoimg-toggle-wand';
+export const WAND_REFRESH_EVENT = 'tt-wand-refresh';
+
+function syncToggleUi() {
+    const on = !!settings().autoImageEnabled;
+    const box = document.getElementById('tt-autoimg-on');
+    if (box && box.checked !== on) box.checked = on;
+    const icon = document.querySelector(`#${TOGGLE_WAND_ID} .extensionsMenuExtensionButton`);
+    if (icon) {
+        icon.classList.toggle('fa-toggle-on', on);
+        icon.classList.toggle('fa-toggle-off', !on);
+    }
+    document.getElementById(TOGGLE_WAND_ID)?.classList.toggle('tt-wand-on', on);
+    document.dispatchEvent(new CustomEvent(WAND_REFRESH_EVENT));
+}
+
+function toggleAutoImage() {
     const s = settings();
-    const was = s.autoImageEnabled;
-    s.autoImageEnabled = true;
-    try { await drawAndAttach(id, 'manual'); } finally { s.autoImageEnabled = was; }
+    s.autoImageEnabled = !s.autoImageEnabled;
+    if (!s.autoImageEnabled) latestJob++; // 关掉时排着队、还没画的那张也不画了
+    save();
+    syncToggleUi();
+    toast(s.autoImageEnabled ? 'success' : 'info', s.autoImageEnabled ? '自动配图开了，下一条正文开始配图' : '自动配图关了');
 }
 
 async function reviseLook(name, request) {
@@ -1007,6 +1032,7 @@ const WAND_ITEMS = [
     { id: WAND_ID, icon: 'fa-pen-to-square', text: '改配图提示词', open: openPromptPopup },
     { id: 'tt-cast-wand', icon: 'fa-id-badge', text: '看定妆照', open: openCastPopup },
     { id: 'tt-autoimg-settings-wand', icon: 'fa-sliders', text: '自动配图设置', open: openSettingsPopup },
+    { id: TOGGLE_WAND_ID, icon: 'fa-toggle-off', text: '自动配图开关', open: toggleAutoImage },
 ];
 
 function mountWandItem() {
@@ -1021,6 +1047,7 @@ function mountWandItem() {
         item.innerHTML = `<div class="fa-solid ${w.icon} extensionsMenuExtensionButton"></div><span>${w.text}</span>`;
         item.addEventListener('click', () => w.open());
         menu.appendChild(item);
+        if (w.id === TOGGLE_WAND_ID) syncToggleUi();
     }
     return true;
 }
@@ -1036,7 +1063,8 @@ function mount() {
         box.checked = !!s[key];
         box.addEventListener('change', () => { settings()[key] = box.checked; save(); after?.(); });
     };
-    bind('tt-autoimg-on', 'autoImageEnabled');
+    // 设置里勾了，魔法棒那项跟着变；关掉时排队没画的也不画了
+    bind('tt-autoimg-on', 'autoImageEnabled', () => { if (!settings().autoImageEnabled) latestJob++; syncToggleUi(); });
     bind('tt-autoimg-portrait', 'autoImagePortrait');
     bind('tt-autoimg-quiet', 'autoImageQuietToast', applyQuietToast);
     bind('tt-autoimg-clean', 'autoImageCleanView', applyQuietToast);
