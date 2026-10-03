@@ -3003,3 +3003,17 @@
     overflow: hidden;
     text-overflow: ellipsis;
 }
+
+/* v1.18.13 变量小框压缩：默认一行，点开才看每项 */
+#chat .mes .tt-mvu-card.tt-mvu-collapsed { padding: 4px 10px; }
+#chat .mes .tt-mvu-card.tt-mvu-collapsed .tt-mvu-row { display: none; }
+#chat .mes .tt-mvu-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+#chat .mes .tt-mvu-arrow { flex: none; opacity: .6; font-size: .9em; }

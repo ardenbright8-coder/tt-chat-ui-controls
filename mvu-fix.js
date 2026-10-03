@@ -26,6 +26,7 @@ let receivedListener = null;
 let refreshListener = null;
 let chatListener = null;
 const checked = new Set(); // 已经替它按过「重新处理变量」的消息（按原文记），免得来回按
+const openCards = new Set(); // 点开过的变量小框（按楼层），重画时保持展开
 
 function settings() {
     const all = ctx()?.extensionSettings;
@@ -460,24 +461,28 @@ function decorateMessage(el, chat) {
     const changes = readChanges(message.mes);
     const after = statAt(chat, id);
     const rows = compare(changes, statBefore(chat, id), after);
-    // 开场白只放初始值，没改就不显示
-    if (id === 0 && !changes.length && !bare.length) { existing?.remove(); return; }
+    // v1.18.13 压缩（用户：「基本上没发现有什么用，它只是一个状态栏而已，要不你给它压缩一下」）：
+    // 没改的不显示；正常的只留一行「变量 · 林婉茹忠诚度 +3」，点一下才展开；只有没算上（坏了）才整个摊开标红。
+    if (!changes.length && !bare.length) { existing?.remove(); return; }
     const isLast = id === chat.length - 1;
     const broken = bare.length > 0 || rows.some((r) => r.ok === false);
-    const sig = JSON.stringify([message.mes.length, message.mes.slice(-200), rows.map((r) => [r.old, r.now, r.ok]), bare.length, isLast]);
+    const open = broken || openCards.has(id);
+    const sig = JSON.stringify([message.mes.length, message.mes.slice(-200), rows.map((r) => [r.old, r.now, r.ok]), bare.length, isLast, open]);
     if (existing && existing.dataset.sig === sig) return;
     existing?.remove();
 
     const card = document.createElement('div');
-    card.className = `${CARD}${broken ? ' tt-mvu-broken' : ''}`;
+    card.className = `${CARD}${broken ? ' tt-mvu-broken' : ''}${open ? '' : ' tt-mvu-collapsed'}`;
     card.dataset.sig = sig;
+    // 一行摘要：数字变了的写「林婉茹忠诚度 +3」，没有数字变化就写改了几项
+    const numeric = rows.filter((r) => typeof r.old === 'number' && typeof r.now === 'number' && r.now !== r.old && r.ok !== false)
+        .map((r) => `${r.path.slice(-2).join('')} ${r.now - r.old > 0 ? '+' : ''}${r.now - r.old}`);
     let head;
     if (bare.length && !changes.length) head = '变量 · AI 的格式不对，MVU 没认';
-    else if (!changes.length) head = '变量 · 这条没改';
     else if (!after) head = `变量 · ${changes.length} 项，还没算`;
     else if (broken) head = `变量 · ${changes.length} 项，有没算上的`;
-    else head = `变量 · 改了 ${changes.length} 项`;
-    let html = `<div class="tt-mvu-head">${esc(head)}</div>`;
+    else head = `变量 · ${numeric.length ? numeric.slice(0, 3).join('　') + (numeric.length > 3 ? ' …' : '') : `改了 ${changes.length} 项`}`;
+    let html = `<div class="tt-mvu-head">${esc(head)}${broken ? '' : `<span class="tt-mvu-arrow">${open ? '收起' : '展开'}</span>`}</div>`;
     html += rows.map(rowHtml).join('');
     if (bare.length && !changes.length) {
         html += compare(readChanges(wrapBarePatches(message.mes) || ''), statBefore(chat, id), null).map(rowHtml).join('');
@@ -494,6 +499,11 @@ function decorateMessage(el, chat) {
         fixAndRecalc(id);
     });
     card.addEventListener('click', (event) => {
+        if (!broken && event.target.closest?.('.tt-mvu-head')) {
+            if (openCards.has(id)) openCards.delete(id); else openCards.add(id);
+            schedule();
+            return;
+        }
         const row = event.target.closest?.('.tt-mvu-long');
         if (row) row.classList.toggle('tt-mvu-open');
     });
