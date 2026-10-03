@@ -2606,3 +2606,167 @@
         margin-left: 0;
     }
 }
+
+/* v1.17.0: 出图套餐 popup (taocan.js), laid out like the desktop panel: a row of big set cards,
+   the open set's version cards below it, recent images as a grid. The one in use has a blue frame. */
+.tt-taocan {
+    --tt-tc-blue: #4a8cff;
+    text-align: left;
+}
+
+.tt-tc-sets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.tt-tc-set {
+    flex: 0 0 calc(50% - 5px);
+    max-width: 170px;
+    box-sizing: border-box;
+    background: rgba(0, 0, 0, .22);
+    border: 2px solid transparent;
+    border-radius: 10px;
+    padding: 5px;
+    cursor: pointer;
+    text-align: center;
+}
+
+.tt-tc-set.using,
+.tt-tc-ver.using {
+    border-color: var(--tt-tc-blue);
+}
+
+.tt-tc-set.open {
+    background: rgba(255, 255, 255, .1);
+}
+
+.tt-tc-set img,
+.tt-tc-ver img,
+.tt-tc-nopic {
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+    border-radius: 7px;
+    background: rgba(255, 255, 255, .05);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: .75em;
+    opacity: .9;
+}
+
+.tt-tc-set-title {
+    font-weight: 700;
+    margin-top: 3px;
+}
+
+.tt-tc-set-name,
+.tt-tc-set-count,
+.tt-tc-ver-name {
+    font-size: .8em;
+    opacity: .75;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.tt-tc-on,
+.tt-tc-ver.using .tt-tc-ver-id {
+    color: var(--tt-tc-blue);
+    font-weight: 600;
+}
+
+.tt-tc-vers:not(:empty) {
+    margin-top: 10px;
+    background: rgba(255, 255, 255, .08);
+    border-radius: 10px;
+    padding: 8px 10px;
+}
+
+.tt-tc-box-head {
+    font-size: .9em;
+    margin-bottom: 6px;
+}
+
+.tt-tc-row {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+}
+
+.tt-tc-ver {
+    flex: 0 0 120px;
+    background: rgba(0, 0, 0, .22);
+    border: 2px solid transparent;
+    border-radius: 10px;
+    padding: 4px;
+    cursor: pointer;
+    text-align: center;
+}
+
+.tt-tc-ver.busy {
+    opacity: .5;
+}
+
+.tt-tc-ver-id {
+    font-weight: 600;
+    font-size: .85em;
+    margin-top: 2px;
+}
+
+.tt-tc-unsaved {
+    color: #e0a050;
+    font-weight: 400;
+}
+
+.tt-taocan h4 {
+    margin: 14px 0 6px;
+}
+
+.tt-tc-recent {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+}
+
+.tt-tc-pic {
+    position: relative;
+    cursor: pointer;
+}
+
+.tt-tc-pic img {
+    width: 100%;
+    aspect-ratio: 3 / 4;
+    object-fit: cover;
+    border-radius: 6px;
+    display: block;
+}
+
+.tt-tc-badge {
+    position: absolute;
+    left: 3px;
+    top: 3px;
+    padding: 0 5px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, .6);
+    color: #fff;
+    font-size: .7em;
+}
+
+.tt-tc-empty {
+    grid-column: 1 / -1;
+    opacity: .75;
+    padding: 8px 0;
+}
+
+.tt-tc-big img {
+    max-width: 100%;
+    border-radius: 8px;
+}
+
+.tt-tc-note {
+    margin-top: 6px;
+    opacity: .8;
+}

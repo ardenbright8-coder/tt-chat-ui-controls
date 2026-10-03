@@ -11,6 +11,7 @@ import { initChatInputHint, cleanupChatInputHint } from './chat-input-hint.js';
 import { initTips, cleanupTips } from './tip.js';
 import { initUpdateWatch, cleanupUpdateWatch, reloadSoon } from './update-watch.js';
 import { initImmersive, cleanupImmersive } from './immersive.js';
+import { initTaocan, cleanupTaocan } from './taocan.js';
 
 const EXTENSION_KEY = 'chat-text-color';
 
@@ -818,6 +819,7 @@ export async function init() {
     initTips();
     initUpdateWatch();
     initImmersive();
+    initTaocan();
     if (initialized) {
         mountUi();
         return;
@@ -845,6 +847,7 @@ export async function cleanup() {
     cleanupTips();
     cleanupUpdateWatch();
     cleanupImmersive();
+    cleanupTaocan();
     cleanupContextLock();
     cleanupPromptDetachGuard();
     stopMessageBannerFix?.();
