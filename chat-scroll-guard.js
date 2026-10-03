@@ -16,6 +16,7 @@ export function initChatScrollGuard() {
     let watchdog = null;
     let readerTookOver = false;
     let active = true;
+    const FRAME_HOOK = Symbol('ttScrollGuard');
 
     function clear() {
         snapshot = null;
@@ -91,10 +92,12 @@ export function initChatScrollGuard() {
         if (event.type === 'keydown') {
             if (event.target?.id !== 'send_textarea' || event.key !== 'Enter'
                 || event.shiftKey || event.isComposing) return;
-        } else if (!event.target?.closest?.('#send_but')) {
+        } else if (!event.target?.closest?.('#send_but, #mes_continue, #option_continue')) {
             return;
         }
-        readerTookOver = false; // A new Send starts a new, independent protection window.
+        // A new Send or Continue starts a new, independent protection window.
+        // v1.16.7: Continue counts too (user 2026-10-02: tapping quick-continue made the page jump).
+        readerTookOver = false;
         arm();
         // A slash command or an empty input might not produce MESSAGE_SENT.
         if (snapshot) finish();
@@ -102,7 +105,7 @@ export function initChatScrollGuard() {
 
     function onUserIntent(event) {
         if (!snapshot) return;
-        if (event.target?.closest?.('#send_form, #form_sheld, #send_but, #send_textarea')) return;
+        if (event.target?.closest?.('#send_form, #form_sheld, #send_but, #send_textarea, #options')) return;
         const point = event.touches?.[0] ?? event.changedTouches?.[0] ?? event;
         const rect = chat.getBoundingClientRect();
         const inside = chat === event.target || chat.contains(event.target)
@@ -121,6 +124,47 @@ export function initChatScrollGuard() {
         scheduleRestore();
     }
 
+    // Status bars and card widgets render inside iframes. Touches there never reach this
+    // document, so the guard kept pulling #chat back while the reader scrolled over them
+    // during generation (user 2026-10-02: "划不动……在边缘上能动"). Listen inside each frame too.
+    function onFrameIntent() {
+        if (!active || !snapshot) return;
+        readerTookOver = true;
+        clear();
+    }
+
+    function hookWindow(frame) {
+        try {
+            const win = frame.contentWindow;
+            if (!win || win[FRAME_HOOK]) return;
+            win[FRAME_HOOK] = true;
+            for (const type of ['touchstart', 'touchmove', 'wheel', 'pointerdown']) {
+                win.addEventListener(type, onFrameIntent, { capture: true, passive: true });
+            }
+        } catch {
+            // Cross-origin frame: covered only by the blur fallback below.
+        }
+    }
+
+    function hookFrames() {
+        for (const frame of chat.getElementsByTagName('iframe')) {
+            if (frame[FRAME_HOOK]) continue;
+            frame[FRAME_HOOK] = true;
+            frame.addEventListener('load', () => hookWindow(frame));
+            hookWindow(frame);
+        }
+    }
+
+    function onWindowBlur() {
+        const focused = document.activeElement;
+        if (focused?.tagName === 'IFRAME' && chat.contains(focused)) onFrameIntent();
+    }
+
+    function onChatMutation() {
+        hookFrames();
+        scheduleRestore();
+    }
+
     function onNavigationKey(event) {
         if (event.target?.closest?.('input, textarea, [contenteditable="true"]')) return;
         if (['PageUp', 'PageDown', 'Home', 'End', 'ArrowUp', 'ArrowDown', ' '].includes(event.key)) {
@@ -129,8 +173,9 @@ export function initChatScrollGuard() {
         }
     }
 
-    const observer = new MutationObserver(scheduleRestore);
+    const observer = new MutationObserver(onChatMutation);
     observer.observe(chat, { childList: true, subtree: true });
+    hookFrames();
     const poll = setInterval(scheduleRestore, 150); // Covers media size and CSS layout changes.
     const subscriptions = [];
     function subscribe(name, handler) {
@@ -158,6 +203,7 @@ export function initChatScrollGuard() {
     document.addEventListener('pointerdown', onUserIntent, { capture: true, passive: true });
     chat.addEventListener('scroll', onScroll, { passive: true });
     chat.addEventListener('load', scheduleRestore, true);
+    window.addEventListener('blur', onWindowBlur);
 
     dispose = () => {
         active = false;
@@ -175,6 +221,7 @@ export function initChatScrollGuard() {
         document.removeEventListener('pointerdown', onUserIntent, true);
         chat.removeEventListener('scroll', onScroll);
         chat.removeEventListener('load', scheduleRestore, true);
+        window.removeEventListener('blur', onWindowBlur);
         dispose = null;
     };
 }
