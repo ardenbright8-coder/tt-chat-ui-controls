@@ -9,6 +9,7 @@ import { initWandMenu, cleanupWandMenu } from './wand-menu.js';
 import { initCharWorld, cleanupCharWorld } from './char-world.js';
 import { initChatInputHint, cleanupChatInputHint } from './chat-input-hint.js';
 import { initTips, cleanupTips } from './tip.js';
+import { initUpdateWatch, cleanupUpdateWatch, reloadSoon } from './update-watch.js';
 
 const EXTENSION_KEY = 'chat-text-color';
 
@@ -814,6 +815,7 @@ export async function init() {
     initCharWorld();
     initChatInputHint();
     initTips();
+    initUpdateWatch();
     if (initialized) {
         mountUi();
         return;
@@ -824,10 +826,10 @@ export async function init() {
 }
 
 // 扩展管理里点「更新」后酒馆只提示「刷新才生效」，用户每次得手动关掉重开。这里更新完自动刷新一次。
-// 注意：酒馆调的是更新前已经加载的那份代码，所以从装上这版之后的下一次更新起才生效
+// 注意：酒馆调的是更新前已经加载的那份代码，所以从装上这版之后的下一次更新起才生效。
+// 用户手机上这个钩子没被叫到过（v1.16.5 实测），另有 update-watch.js 自己盯版本号，谁先发现谁刷新
 export async function onUpdate() {
-    globalThis.toastr?.info?.('酒馆拓展更新好了，2 秒后自动刷新', '酒馆拓展');
-    setTimeout(() => location.reload(), 2000);
+    reloadSoon();
 }
 
 export async function cleanup() {
@@ -839,6 +841,7 @@ export async function cleanup() {
     cleanupCharWorld();
     cleanupChatInputHint();
     cleanupTips();
+    cleanupUpdateWatch();
     cleanupContextLock();
     cleanupPromptDetachGuard();
     stopMessageBannerFix?.();
