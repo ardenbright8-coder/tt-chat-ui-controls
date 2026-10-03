@@ -308,10 +308,19 @@ function disarmDeepen(reason) {
     schedulePosition();
 }
 
-function onDeepen(event) {
+// v1.18.15 用户 2026-10-04：
+// 1. 深入另起一条新回复，不接在上一条后面续写（「万一深入不好或者改偏，我还可以删掉……一长串的深入，有一条不行就得删一堆」）。
+//    他的酒馆空着发送 = 接着上一条续写，所以不点发送按钮，直接叫酒馆生成一条新的（generate('normal')）。
+// 2. 输入框里有字：当成这一轮深入的「临时补充」加在说明后面一起给 AI，不作为他的消息发出去，输入框清空
+//    （「我给婉茹送了一个玉簪……把我这段话也给带上……做个临时补充」）。出错就把字放回去。
+async function onDeepen(event) {
     event.preventDefault();
     if (generating()) return;
-    const text = settings().deepenPrompt || DEFAULT_DEEPEN;
+    const context = ctx();
+    const box = document.getElementById('send_textarea');
+    const extra = (box?.value ?? '').trim();
+    let text = settings().deepenPrompt || DEFAULT_DEEPEN;
+    if (extra) text += `\n\n【这一轮的补充（{{user}}刚写的，照着它往下深入）】\n${extra}`;
     if (!setDeepenPrompt(text)) {
         globalThis.toastr?.warning?.('这个版本的酒馆不支持临时加说明', '深入');
         return;
@@ -319,11 +328,26 @@ function onDeepen(event) {
     deepenArmed = true;
     clearTimeout(deepenTimer);
     deepenTimer = setTimeout(() => disarmDeepen('5 分钟没出完'), 5 * 60 * 1000);
-    const box = document.getElementById('send_textarea');
-    vlog('深入', `点了深入${box?.value.trim() ? '（输入框里有字，一起发）' : ''}`);
-    const send = document.getElementById('send_but');
-    if (send) send.click();
-    else disarmDeepen('找不到发送按钮');
+    const restore = () => {
+        if (extra && box && !box.value.trim()) { box.value = extra; box.dispatchEvent(new Event('input', { bubbles: true })); }
+    };
+    if (extra && box) { box.value = ''; box.dispatchEvent(new Event('input', { bubbles: true })); }
+    vlog('深入', `点了深入，另起一条新回复${extra ? `；临时补充：${extra.slice(0, 200)}` : ''}`);
+    try {
+        if (typeof context?.generate === 'function') {
+            await context.generate('normal');
+        } else {
+            // 老版本没有 generate：退回点发送（这时可能接着上一条续写）
+            const send = document.getElementById('send_but');
+            if (!send) throw new Error('找不到发送按钮');
+            send.click();
+        }
+    } catch (error) {
+        restore();
+        disarmDeepen('出错了');
+        vlog('出错', `深入生成失败：${error?.message || error}`);
+        globalThis.toastr?.error?.(String(error?.message || error), '深入');
+    }
 }
 
 function bindGeneration() {
@@ -359,7 +383,7 @@ function mountPanel() {
     </div>
     <div class="inline-drawer-content">
       <div class="tt-tip-row"><label class="checkbox_label tt-hold-check"><input type="checkbox" id="tt-ct-vars"> <span>变量按钮收进 ≡ 菜单</span></label>${tip('输入框上面「重新处理变量」「重新读取初始变量」那排大按钮藏起来，改从 ≡ 菜单的「变量」点开用。')}</div>
-      <div class="tt-tip-row"><label class="checkbox_label tt-hold-check"><input type="checkbox" id="tt-ct-deepen"> <span>深入按钮</span></label>${tip('输入框上面快捷工具那一排的「深入」。点了不用打字，AI 围着眼下这场戏接着写深一条，多用对话把人物演出来。')}</div>
+      <div class="tt-tip-row"><label class="checkbox_label tt-hold-check"><input type="checkbox" id="tt-ct-deepen"> <span>深入按钮</span></label>${tip('输入框上面快捷工具那一排的「深入」。点了另起一条新回复，AI 围着眼下这场戏写深一条，多用对话把人物演出来。输入框里先写几句（比如「我送了她一支玉簪」），点深入就当成这一轮的补充一起带上，不会作为你的消息发出去。')}</div>
       <div class="tt-tip-row"><b>深入时给 AI 的说明</b>${tip('点「深入」时，这段话会临时加给 AI，只管这一条，出完就撤掉。改完点「保存」才算数。')}<span id="tt-deepen-dirty" class="tt-dirty">● 没保存</span></div>
       <textarea id="tt-ct-prompt" class="text_pole" rows="10"></textarea>
       <div class="tt-ct-actions">
