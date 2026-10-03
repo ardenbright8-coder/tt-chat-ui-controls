@@ -163,9 +163,10 @@ export function bindContentEditing(entry, actions) {
 
 // Rate-limit only scrolls accompanying a changing native text selection.
 // Do not rewrite selection endpoints or run a loop that fights ordinary panning.
+// v1.18.7：每秒 3 行 → 1.5 行（用户：「一滑一下就几十行……再压几倍都行」）
 export function selectionScrollStep(previous, requested, elapsed, lineHeight, credit = 0) {
     const line = Math.max(12, lineHeight);
-    const budget = Math.min(line, credit + Math.max(0, elapsed) * line * 3 / 1000);
+    const budget = Math.min(line, credit + Math.max(0, elapsed) * line * 1.5 / 1000);
     const distance = requested - previous;
     const used = Math.min(Math.abs(distance), budget);
     return { top: previous + Math.sign(distance) * used, credit: budget - used };
@@ -222,8 +223,9 @@ export function edgeScrollAllowance({ direction, endTop, endBottom, visTop, visB
     else if (direction < 0) depth = ((visTop + zone) - endTop) / zone;
     if (!(depth > 0)) return { depth: 0, rate: 0, cap: 0 };
     const d = Math.min(depth, 1.5);
-    // Lines per second: ~3 at the zone boundary, up to ~15 when the finger is past the edge.
-    return { depth, rate: line * (3 + 8 * d), cap: line * (1 + d) };
+    // v1.18.7 压慢：每秒约 1 行（刚到边）到约 5.5 行（拖出边外）；原来是 3～15 行，
+    // 再加上每次滚动白送 0.25 行，手机一秒几十次滚动事件，实际一秒滚二三十行（用户 2026-10-04）。
+    return { depth, rate: line * (1 + 3 * d), cap: line * 0.5 };
 }
 
 function pointRect(node, offset) {
@@ -330,12 +332,13 @@ export function bindSelectionScrollLimit(source) {
             ends = next;
         }
     };
+    // 记小数位置：慢速时一次只走零点几像素，直接写 scrollTop 会被取整吃掉、永远不动
     const apply = (node, previous, top, time, credit) => {
         state.set(node, { top, time, credit });
-        if (Math.abs(top - node.scrollTop) >= 1) {
-            node.scrollTop = top;
+        const target = Math.round(top);
+        if (Math.abs(target - node.scrollTop) >= 1) {
+            node.scrollTop = target;
             expected.set(node, node.scrollTop);
-            state.get(node).top = node.scrollTop;
         }
     };
     const scroll = event => {
@@ -346,8 +349,6 @@ export function bindSelectionScrollLimit(source) {
         const requested = node.scrollTop;
         if (expected.has(node) && Math.abs(expected.get(node) - requested) < 1) {
             expected.delete(node);
-            previous.top = requested;
-            previous.time = time;
             return;
         }
         expected.delete(node);
@@ -381,7 +382,7 @@ export function bindSelectionScrollLimit(source) {
             apply(node, previous, previous.top, time, 0);
             return;
         }
-        const budget = Math.min(allow.cap, previous.credit + Math.max(0, time - previous.time) * allow.rate / 1000 + line * 0.25);
+        const budget = Math.min(allow.cap, previous.credit + Math.max(0, time - previous.time) * allow.rate / 1000);
         const used = Math.min(Math.abs(distance), budget);
         apply(node, previous, previous.top + Math.sign(distance) * used, time, budget - used);
     };
