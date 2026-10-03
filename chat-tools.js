@@ -106,6 +106,7 @@ function settings() {
     const s = all[EXTENSION_KEY] = all[EXTENSION_KEY] || {};
     if (typeof s.varsInMenu !== 'boolean') s.varsInMenu = true;
     if (typeof s.deepenButton !== 'boolean') s.deepenButton = true;
+    if (typeof s.hideAgentButton !== 'boolean') s.hideAgentButton = true;
     if (typeof s.deepenPrompt !== 'string' || !s.deepenPrompt.trim() || s.deepenPrompt === DEEPEN_V1 || s.deepenPrompt === DEEPEN_V2) s.deepenPrompt = DEFAULT_DEEPEN;
     delete s.bottomButton;
     return s;
@@ -251,16 +252,26 @@ function ensureButtons() {
             row.append(b);
         }
     }
-    const anchor = form.querySelector(':scope > #nonQRFormItems');
-    if (anchor) {
-        if (row.nextElementSibling !== anchor) form.insertBefore(row, anchor);
-    } else if (row.parentElement !== form) {
-        form.append(row);
+    // v1.18.16：放进输入框那一行右边那组按钮的最前面（发送 / Agent 左边），用户在截图里圈的位置
+    const right = document.getElementById('rightSendForm');
+    if (right) {
+        if (right.firstElementChild !== row) right.insertBefore(row, right.firstElementChild);
+    } else {
+        const anchor = form.querySelector(':scope > #nonQRFormItems');
+        if (anchor) { if (row.nextElementSibling !== anchor) form.insertBefore(row, anchor); }
+        else if (row.parentElement !== form) form.append(row);
     }
+}
+
+// 藏 TauriTavern 的 Agent 按钮（发送左边那个原子图标）：用户「我一般不会用那个东西」。
+// 只加 body class 用 CSS 藏；Agent 模式开着时（按钮有 active / running）不藏，免得关不掉
+function applyAgentHide() {
+    document.body?.classList.toggle('tt-hide-agent', !!settings().hideAgentButton);
 }
 
 function position() {
     posFrame = null;
+    applyAgentHide();
     ensureButtons();
     const row = document.getElementById(ROW_ID);
     if (!row) return;
@@ -384,6 +395,7 @@ function mountPanel() {
     <div class="inline-drawer-content">
       <div class="tt-tip-row"><label class="checkbox_label tt-hold-check"><input type="checkbox" id="tt-ct-vars"> <span>变量按钮收进 ≡ 菜单</span></label>${tip('输入框上面「重新处理变量」「重新读取初始变量」那排大按钮藏起来，改从 ≡ 菜单的「变量」点开用。')}</div>
       <div class="tt-tip-row"><label class="checkbox_label tt-hold-check"><input type="checkbox" id="tt-ct-deepen"> <span>深入按钮</span></label>${tip('输入框上面快捷工具那一排的「深入」。点了另起一条新回复，AI 围着眼下这场戏写深一条，多用对话把人物演出来。输入框里先写几句（比如「我送了她一支玉簪」），点深入就当成这一轮的补充一起带上，不会作为你的消息发出去。')}</div>
+      <div class="tt-tip-row"><label class="checkbox_label tt-hold-check"><input type="checkbox" id="tt-ct-agent"> <span>藏掉 Agent 按钮</span></label>${tip('发送按钮左边那个原子图标（TauriTavern 的 Agent 模式）。Agent 模式开着时按钮照常显示，方便关掉。')}</div>
       <div class="tt-tip-row"><b>深入时给 AI 的说明</b>${tip('点「深入」时，这段话会临时加给 AI，只管这一条，出完就撤掉。改完点「保存」才算数。')}<span id="tt-deepen-dirty" class="tt-dirty">● 没保存</span></div>
       <textarea id="tt-ct-prompt" class="text_pole" rows="10"></textarea>
       <div class="tt-ct-actions">
@@ -402,6 +414,7 @@ function mountPanel() {
     };
     bind('tt-ct-vars', 'varsInMenu', () => { applyBar(); mountMenuItem(); });
     bind('tt-ct-deepen', 'deepenButton', schedulePosition);
+    bind('tt-ct-agent', 'hideAgentButton', applyAgentHide);
     const area = document.getElementById('tt-ct-prompt');
     area.value = s.deepenPrompt;
     promptStatus(false);
@@ -497,6 +510,7 @@ export function cleanupChatTools() {
     document.querySelectorAll(`.${HIDE_CLASS}`).forEach((el) => el.classList.remove(HIDE_CLASS));
     document.querySelectorAll(`.${EMPTY_BAR}`).forEach((el) => el.classList.remove(EMPTY_BAR));
     for (const id of [MENU_ID, BOTTOM_MENU_ID, ROW_ID, SETTINGS_ID]) document.getElementById(id)?.remove();
+    document.body?.classList.remove('tt-hide-agent');
 }
 
 export const __test = { applyBar, position, onDeepen, settings, varButtons };
