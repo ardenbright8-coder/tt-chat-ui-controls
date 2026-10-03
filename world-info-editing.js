@@ -284,25 +284,31 @@ function caretTop(textarea, pos, cache) {
     return top;
 }
 
-export function createTextareaDrive(source, lineHeight, onDone) {
+// 选字时我来滚：measure() 每帧告诉这里该往哪边滚、多深（0 = 不滚），scroller 是要滚的那个框。
+// 纯文本框量镜像 div；官方代码编辑器（CodeMirror，.cm-scroller 里的可编辑区）量选区那一端的位置。
+export function createSelectionDrive({ getScroller, measure, isSelecting, lineHeight, onDone }) {
     let lockedUntil = 0;
     let fingerDown = false;
     let frozen = [];          // [node, 原来的 inline overflowY]
     let frame = null;
     let exact = null;
+    let scroller = null;
     let last = 0;
     let moved = 0;
-    const cache = {};
     const now = () => performance.now();
 
     const freeze = () => {
         if (frozen.length) return;
-        for (const node of scrollContainers(source)) {
+        scroller = getScroller();
+        if (!scroller) return;
+        const nodes = scrollContainers(scroller);
+        if (!nodes.includes(scroller)) nodes.unshift(scroller);
+        for (const node of nodes) {
             if (node === document.scrollingElement || node === document.documentElement || node === document.body) continue;
             frozen.push([node, node.style.overflowY]);
             node.style.overflowY = 'hidden';
         }
-        exact = source.scrollTop;
+        exact = scroller.scrollTop;
         moved = 0;
     };
     const unfreeze = () => {
@@ -317,45 +323,63 @@ export function createTextareaDrive(source, lineHeight, onDone) {
         frame = null;
         const time = now();
         // 手指还按着、或者选区刚变过（0.6 秒内）就一直接管；都没了就还给原生
-        if (!fingerDown && time > lockedUntil) { unfreeze(); return; }
-        if (source.selectionStart === source.selectionEnd) { unfreeze(); return; }
-        const line = Math.max(12, lineHeight(source));
-        const pos = source.selectionDirection === 'backward' ? source.selectionStart : source.selectionEnd;
-        const top = caretTop(source, pos, cache);
-        const viewTop = source.scrollTop;
-        const viewBottom = viewTop + source.clientHeight;
-        const zone = Math.max(line * 1.5, 36);
-        let dir = 0;
-        let depth = 0;
-        if (top + line > viewBottom - zone) { dir = 1; depth = (top + line - (viewBottom - zone)) / zone; }
-        else if (top < viewTop + zone && viewTop > 0) { dir = -1; depth = (viewTop + zone - top) / zone; }
+        if ((!fingerDown && time > lockedUntil) || !isSelecting() || !scroller) { unfreeze(); return; }
         const elapsed = Math.min(64, time - (last || time));
         last = time;
-        if (dir) {
-            const d = Math.min(Math.max(depth, 0), 1.5);
+        const m = measure(scroller);
+        if (m && m.dir) {
+            const line = Math.max(12, lineHeight());
+            const d = Math.min(Math.max(m.depth, 0), 1.5);
             const rate = line * (1 + 3 * d);                 // 每秒约 1～5.5 行
-            const max = source.scrollHeight - source.clientHeight;
-            exact = Math.min(max, Math.max(0, (exact ?? viewTop) + dir * rate * elapsed / 1000));
+            const max = scroller.scrollHeight - scroller.clientHeight;
+            exact = Math.min(max, Math.max(0, (exact ?? scroller.scrollTop) + m.dir * rate * elapsed / 1000));
             const target = Math.round(exact);
-            if (target !== source.scrollTop) { moved += Math.abs(target - source.scrollTop); source.scrollTop = target; }
+            if (target !== scroller.scrollTop) { moved += Math.abs(target - scroller.scrollTop); scroller.scrollTop = target; }
         } else {
-            exact = source.scrollTop;
+            exact = scroller.scrollTop;
         }
         frame = requestAnimationFrame(tick);
     };
     return {
         get active() { return frozen.length > 0; },
+        owns(node) { return frozen.some(([n]) => n === node); },
         onSelection() {
-            if (source.selectionStart === source.selectionEnd) return;
+            if (!isSelecting()) return;
             lockedUntil = now() + 600;
             freeze();
-            if (frame === null) { last = 0; frame = requestAnimationFrame(tick); }
+            if (frozen.length && frame === null) { last = 0; frame = requestAnimationFrame(tick); }
         },
         fingerDown() { fingerDown = true; },
         fingerUp() { fingerDown = false; lockedUntil = Math.min(lockedUntil, now() + 120); },
         stop() { fingerDown = false; lockedUntil = 0; unfreeze(); },
-        destroy() { this.stop(); cache.mirror?.remove(); },
     };
+}
+
+// 边缘区判断：光标（选区移动那一端）进了可视带上下沿 zone 以内就往那边滚
+function edgeDir(caretTop, caretBottom, bandTop, bandBottom, line, canUp) {
+    const zone = Math.max(line * 1.5, 36);
+    if (caretBottom > bandBottom - zone) return { dir: 1, depth: (caretBottom - (bandBottom - zone)) / zone };
+    if (canUp && caretTop < bandTop + zone) return { dir: -1, depth: (bandTop + zone - caretTop) / zone };
+    return { dir: 0, depth: 0 };
+}
+
+// 兼容 v1.18.8 的名字：纯文本框
+export function createTextareaDrive(source, lineHeight, onDone) {
+    const cache = {};
+    const drive = createSelectionDrive({
+        getScroller: () => source,
+        isSelecting: () => source.selectionStart !== source.selectionEnd,
+        lineHeight: () => lineHeight(source),
+        onDone,
+        measure: (scroller) => {
+            const line = Math.max(12, lineHeight(source));
+            const pos = source.selectionDirection === 'backward' ? source.selectionStart : source.selectionEnd;
+            const top = caretTop(source, pos, cache);
+            return edgeDir(top, top + line, scroller.scrollTop, scroller.scrollTop + scroller.clientHeight, line, scroller.scrollTop > 0);
+        },
+    });
+    const destroy = () => { drive.stop(); cache.mirror?.remove(); };
+    return Object.assign(drive, { destroy });
 }
 
 export function bindSelectionScrollLimit(source) {
@@ -372,8 +396,37 @@ export function bindSelectionScrollLimit(source) {
         const style = getComputedStyle(editable ?? source);
         return Number.parseFloat(style.lineHeight) || (Number.parseFloat(style.fontSize) || 16) * 1.5;
     };
-    const drive = createTextareaDrive(source, lineHeight, (moved) => {
-        import('./var-log.js').then(({ vlog }) => vlog('选字滚动', `世界书文本框拖选字结束，自己滚了 ${Math.round(moved)} 像素`)).catch(() => {});
+    const logDone = (kind) => (moved) => {
+        import('./var-log.js').then(({ vlog }) => vlog('选字滚动', `世界书${kind}拖选字结束，自己滚了 ${Math.round(moved)} 像素`)).catch(() => {});
+    };
+    const drive = createTextareaDrive(source, lineHeight, logDone('文本框'));
+    // 官方代码编辑器（CodeMirror）：冻住 .cm-scroller 和外层，按选区移动那一端的位置自己滚
+    const cmDrive = createSelectionDrive({
+        getScroller: () => {
+            const editable = activeEditable(source);
+            if (!editable || editable === source) return null;
+            return editable.closest('.cm-scroller') ?? scrollContainers(editable).find((n) => n !== document.scrollingElement) ?? null;
+        },
+        isSelecting: () => hasContentSelection(source, activeEditable(source)),
+        lineHeight: () => lineHeight(activeEditable(source)),
+        onDone: logDone('编辑器'),
+        measure: (scroller) => {
+            const editable = activeEditable(source);
+            if (!editable) return null;
+            const sel = document.getSelection?.();
+            if (!sel?.rangeCount) return null;
+            const node = moving === 'anchor' ? sel.anchorNode : sel.focusNode;
+            const offset = moving === 'anchor' ? sel.anchorOffset : sel.focusOffset;
+            if (!node || !editable.contains(node)) return null;
+            const rect = pointRect(node, offset);
+            if (!rect) return null;
+            const box = scroller.getBoundingClientRect();
+            const vv = globalThis.visualViewport;
+            const bandTop = Math.max(box.top + scroller.clientTop, vv ? vv.offsetTop : 0);
+            const bandBottom = Math.min(box.top + scroller.clientTop + scroller.clientHeight, vv ? vv.offsetTop + vv.height : innerHeight);
+            if (!(bandBottom > bandTop)) return null;
+            return edgeDir(rect.top, rect.bottom, bandTop, bandBottom, Math.max(12, lineHeight(editable)), scroller.scrollTop > 0);
+        },
     });
     const snapshot = (editable) => {
         state.clear();
@@ -428,7 +481,7 @@ export function bindSelectionScrollLimit(source) {
             ends = null;
             return;
         }
-        // 纯文本框：交给 drive，原生滚动冻住，自己平滑滚
+        // 纯文本框交给 drive，代码编辑器交给 cmDrive：原生滚动冻住，自己平滑滚（cmDrive 要先知道哪一端在动，放到下面）
         if (editable === source) drive.onSelection();
         // A selection just appeared: take fresh baselines for every container.
         if (!selecting) snapshot(editable);
@@ -444,6 +497,7 @@ export function bindSelectionScrollLimit(source) {
                 else if (anchorMoved) moving = 'anchor';
             } else moving = 'focus';
             ends = next;
+            cmDrive.onSelection();
         }
     };
     // 记小数位置：慢速时一次只走零点几像素，直接写 scrollTop 会被取整吃掉、永远不动
@@ -468,7 +522,7 @@ export function bindSelectionScrollLimit(source) {
         expected.delete(node);
         const editable = activeEditable(source);
         // drive 接管时滚动是它自己做的，不再拽回
-        if (drive.active) { state.set(node, { top: requested, time, credit: 0 }); return; }
+        if (drive.active || cmDrive.active) { state.set(node, { top: requested, time, credit: 0 }); return; }
         // Only scrolls that follow a moving selection are touched;
         // ordinary finger panning (selection unchanged) passes through.
         if (!hasContentSelection(source, editable) || time < bypassUntil || time - selectionAt > 120) {
@@ -508,9 +562,9 @@ export function bindSelectionScrollLimit(source) {
         bypassUntil = now() + 250;
         selectionAt = -Infinity;
     };
-    const release = () => { selectionAt = -Infinity; bypassUntil = now() + 80; drive.fingerUp(); };
-    const press = () => drive.fingerDown();
-    const focusChange = () => { selecting = false; selectionAt = -Infinity; ends = null; state.clear(); drive.stop(); };
+    const release = () => { selectionAt = -Infinity; bypassUntil = now() + 80; drive.fingerUp(); cmDrive.fingerUp(); };
+    const press = () => { drive.fingerDown(); cmDrive.fingerDown(); };
+    const focusChange = () => { selecting = false; selectionAt = -Infinity; ends = null; state.clear(); drive.stop(); cmDrive.stop(); };
     document.addEventListener('beforeinput', bypass, true);
     document.addEventListener('keydown', bypass, true);
     document.addEventListener('wheel', bypass, { capture: true, passive: true });
@@ -524,6 +578,7 @@ export function bindSelectionScrollLimit(source) {
     document.addEventListener('touchstart', press, { passive: true });
     return () => {
         drive.destroy();
+        cmDrive.stop();
         document.removeEventListener('touchcancel', release);
         document.removeEventListener('touchstart', press);
         document.removeEventListener('beforeinput', bypass, true);
