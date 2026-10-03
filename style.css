@@ -2916,29 +2916,35 @@
 #send_form #qr--bar.tt-qrbar-empty {
     display: none !important;
 }
-.tt-float-btn {
-    position: fixed;
-    z-index: 30;
-    width: 40px;
-    height: 40px;
+.tt-float-btn { display: none !important; }
+/* v1.18.6 快捷工具一排：输入框上面，跟发送按钮一个颜色的小按钮 */
+#send_form #tt-quick-tools {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+    padding: 4px 8px 2px;
+}
+#send_form #tt-quick-tools[hidden] { display: none; }
+#send_form .tt-quick-btn {
+    height: 30px;
     margin: 0;
-    padding: 0;
-    border-radius: 50%;
-    border: 1px solid var(--SmartThemeBorderColor, #6e665f);
-    background: color-mix(in srgb, var(--SmartThemeBlurTintColor, #3a3530) 92%, transparent);
-    color: var(--SmartThemeBodyColor, #ece5dc);
-    display: none;
+    padding: 0 12px;
+    border-radius: 15px;
+    border: 1px solid var(--SmartThemeBorderColor, rgba(255,255,255,.15));
+    background: transparent;
+    color: var(--SmartThemeBodyColor, #ccc);
+    opacity: .75;
+    display: inline-flex;
     align-items: center;
-    justify-content: center;
-    font-size: 16px;
+    gap: 5px;
+    font-size: 13px;
+    font-family: inherit;
     cursor: pointer;
     -webkit-tap-highlight-color: transparent;
 }
-.tt-float-btn.tt-float-on { display: flex; }
-#tt-deepen-btn {
-    border-color: var(--SmartThemeQuoteColor, #d9a35a);
-    color: var(--SmartThemeQuoteColor, #d9a35a);
-}
+#send_form .tt-quick-btn[hidden] { display: none; }
+#send_form .tt-quick-btn:active { opacity: 1; }
+#send_form #tt-quick-tools.tt-quick-busy .tt-quick-btn { opacity: .35; }
 .tt-vars-pop { display: flex; flex-direction: column; gap: 8px; }
 .tt-vars-pop .menu_button { width: 100%; margin: 0; padding: 10px; }
 #tt-chat-tools-settings textarea { width: 100%; box-sizing: border-box; font-size: .9em; }

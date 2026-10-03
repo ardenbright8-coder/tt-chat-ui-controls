@@ -2,7 +2,7 @@
 // 1. 「重新处理变量」「重新读取初始变量」不常用、还老被误触：输入框上面那排大按钮藏掉，
 //    ≡ 菜单里放一个「变量」，点开一个小框，两个都在里面（点的还是卡里原来那两个按钮，功能不变）。
 //    只给它们加 class 藏起来，不搬、不删（别家的按钮只标号不搬，见 AGENTS.md）。
-// 2. 「深入」：发送按钮正上方一个小圆图标。点了不用打字，给 AI 一次性加一段写法说明再出一条：
+// 2. 「深入」：输入框上面「快捷工具」那一排里的小按钮（v1.18.6 起；1.18.3 时是浮在发送按钮上面的小圆钮）。点了不用打字，给 AI 一次性加一段写法说明再出一条：
 //    留在当前场景写深、按人物内核来、聪明人别降智、不写套路。说明在扩展页「聊天按钮」里能改。
 //    以后要加别的小图标也往发送按钮上面叠。
 // 3. 「到最底下」：≡ 菜单里一项（v1.18.4 起，用户：「也不是常用的，只是更新了以后它才会用」，原来是浮着的小圆钮）。
@@ -215,40 +215,55 @@ function generating() {
     return !!stop && getComputedStyle(stop).display !== 'none';
 }
 
+// 快捷工具这一排（v1.18.6）：输入框上面单独一排，跟发送按钮一个颜色的小按钮，现在只有「深入」，
+// 以后加的快捷工具都往这排放（写进 QUICK_TOOLS）。用户 2026-10-04：「第二排就是以后咱们加的快捷工具」。
+// 这排是本扩展自己的元素，放在输入框那块（#nonQRFormItems）前面；不带 qr 的 class，酒馆助手不会管它。
+const ROW_ID = 'tt-quick-tools';
+const QUICK_TOOLS = [
+    { id: DEEPEN_ID, label: '深入', icon: 'fa-magnifying-glass-plus', title: '深入：围着这场戏写深一条', on: () => settings().deepenButton, click: (e) => onDeepen(e) },
+];
+
 function ensureButtons() {
-    if (!document.getElementById(DEEPEN_ID)) {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.id = DEEPEN_ID;
-        b.className = 'tt-float-btn';
-        b.setAttribute('aria-label', '深入');
-        b.title = '深入：围着这场戏写深';
-        b.innerHTML = '<i class="fa-solid fa-magnifying-glass-plus"></i>';
-        b.addEventListener('click', onDeepen);
-        document.body.append(b);
+    const form = document.getElementById('send_form');
+    if (!form) return;
+    let row = document.getElementById(ROW_ID);
+    if (!row) {
+        row = document.createElement('div');
+        row.id = ROW_ID;
+        for (const tool of QUICK_TOOLS) {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.id = tool.id;
+            b.className = 'tt-quick-btn';
+            b.title = tool.title;
+            b.innerHTML = `<i class="fa-solid ${tool.icon}"></i><span>${tool.label}</span>`;
+            b.addEventListener('click', tool.click);
+            row.append(b);
+        }
+    }
+    const anchor = form.querySelector(':scope > #nonQRFormItems');
+    if (anchor) {
+        if (row.nextElementSibling !== anchor) form.insertBefore(row, anchor);
+    } else if (row.parentElement !== form) {
+        form.append(row);
     }
 }
 
-// 对准发送按钮：横着跟它居中，竖着摆在输入框那块上面
 function position() {
     posFrame = null;
-    const form = document.getElementById('send_form');
-    const send = document.getElementById('send_but');
-    const deepen = document.getElementById(DEEPEN_ID);
-    if (!form || !deepen) return;
-    const s = settings();
-    const formRect = form.getBoundingClientRect();
-    const visibleForm = formRect.height > 0 && getComputedStyle(form).display !== 'none';
-    const sendRect = send && send.offsetParent ? send.getBoundingClientRect() : null;
-    const size = 40;
-    const centerX = sendRect && sendRect.width ? sendRect.left + sendRect.width / 2 : formRect.right - 30;
-    const left = Math.round(Math.min(window.innerWidth - size - 6, Math.max(6, centerX - size / 2)));
-    const baseBottom = Math.round(window.innerHeight - formRect.top + 8);
-
-    const showDeepen = s.deepenButton && visibleForm && !generating();
-    deepen.classList.toggle('tt-float-on', showDeepen);
-    deepen.style.left = `${left}px`;
-    deepen.style.bottom = `${baseBottom}px`;
+    ensureButtons();
+    const row = document.getElementById(ROW_ID);
+    if (!row) return;
+    let any = false;
+    for (const tool of QUICK_TOOLS) {
+        const b = document.getElementById(tool.id);
+        const show = !!tool.on();
+        if (b) b.hidden = !show;
+        any ||= show;
+    }
+    row.hidden = !any;
+    const busy = generating();
+    row.classList.toggle('tt-quick-busy', busy);
 }
 
 function schedulePosition() {
@@ -334,7 +349,7 @@ function mountPanel() {
     </div>
     <div class="inline-drawer-content">
       <div class="tt-tip-row"><label class="checkbox_label tt-hold-check"><input type="checkbox" id="tt-ct-vars"> <span>变量按钮收进 ≡ 菜单</span></label>${tip('输入框上面「重新处理变量」「重新读取初始变量」那排大按钮藏起来，改从 ≡ 菜单的「变量」点开用。')}</div>
-      <div class="tt-tip-row"><label class="checkbox_label tt-hold-check"><input type="checkbox" id="tt-ct-deepen"> <span>深入按钮</span></label>${tip('发送按钮上面一个放大镜小圆钮。点了不用打字，AI 围着眼下这场戏接着写深一条，多用对话把人物演出来。')}</div>
+      <div class="tt-tip-row"><label class="checkbox_label tt-hold-check"><input type="checkbox" id="tt-ct-deepen"> <span>深入按钮</span></label>${tip('输入框上面快捷工具那一排的「深入」。点了不用打字，AI 围着眼下这场戏接着写深一条，多用对话把人物演出来。')}</div>
       <div class="tt-tip-row"><b>深入时给 AI 的说明</b>${tip('点「深入」时，这段话会临时加给 AI，只管这一条，出完就撤掉。改完点「保存」才算数。')}<span id="tt-deepen-dirty" class="tt-dirty">● 没保存</span></div>
       <textarea id="tt-ct-prompt" class="text_pole" rows="10"></textarea>
       <div class="tt-ct-actions">
@@ -447,7 +462,7 @@ export function cleanupChatTools() {
     }
     document.querySelectorAll(`.${HIDE_CLASS}`).forEach((el) => el.classList.remove(HIDE_CLASS));
     document.querySelectorAll(`.${EMPTY_BAR}`).forEach((el) => el.classList.remove(EMPTY_BAR));
-    for (const id of [MENU_ID, BOTTOM_MENU_ID, DEEPEN_ID, SETTINGS_ID]) document.getElementById(id)?.remove();
+    for (const id of [MENU_ID, BOTTOM_MENU_ID, ROW_ID, SETTINGS_ID]) document.getElementById(id)?.remove();
 }
 
 export const __test = { applyBar, position, onDeepen, settings, varButtons };

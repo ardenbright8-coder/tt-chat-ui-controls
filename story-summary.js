@@ -947,6 +947,35 @@ function showLibrary(query = '') {
     });
 }
 
+// 带着的数值摊平成一行一项：「林婉茹 · 忠诚度：43」。MVU 老卡的 [值, "说明"] 只显示值
+function flattenVars(stat, prefix = [], out = []) {
+    if (out.length >= 300) return out;
+    const isPair = Array.isArray(stat) && stat.length === 2 && typeof stat[1] === 'string' && (stat[0] === null || typeof stat[0] !== 'object');
+    if (stat && typeof stat === 'object' && !Array.isArray(stat)) {
+        for (const [k, v] of Object.entries(stat)) {
+            if (k.startsWith('$')) continue;
+            flattenVars(v, [...prefix, k], out);
+        }
+    } else {
+        const value = isPair ? stat[0] : stat;
+        out.push(`${prefix.join(' · ') || '（根）'}：${typeof value === 'object' ? JSON.stringify(value) : String(value)}`);
+    }
+    return out;
+}
+
+function showLibraryVars(item, query = '') {
+    const lines = flattenVars(item.vars?.stat_data ?? {});
+    showBubble({
+        title: '这条带着的数值',
+        meta: `${lines.length} 项 · 替换开场白时原样带过去`,
+        text: lines.join('\n') || '（空）',
+        actions: [
+            { label: '返回', onClick: () => showLibraryItem(item, query) },
+            { label: '关闭', onClick: closeBubble },
+        ],
+    });
+}
+
 function showLibraryItem(item, query = '') {
     const state = openingState();
     const openingNote = state === 'busy'
@@ -991,6 +1020,7 @@ function showLibraryItem(item, query = '') {
                     }
                 },
             },
+            ...(item.vars ? [{ label: '看数值', onClick: () => showLibraryVars(item, query) }] : []),
             ...(latestVars() ? [{
                 label: item.vars ? '换成现在的数值' : '带上现在的数值',
                 onClick: (b) => {
