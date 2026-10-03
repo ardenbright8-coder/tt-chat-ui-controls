@@ -2520,3 +2520,88 @@
 .tt-pe-dirty[hidden] {
     display: none;
 }
+
+/* v1.16.9: immersive chat on phones (body.tt-immersive, immersive.js).
+   The top toolbar slides away; a small handle at the top brings it back, a tap in the chat
+   hides it again, and it stays while a panel is open. The input row is one line (buttons and
+   input side by side) until the input is focused or holds text. In the tavern's fullscreen
+   mode the status bar space is given back to the chat (body.tt-sys-fullscreen).
+   Selectors start with "html body" so they beat the host's mobile geometry rules. */
+@media screen and (max-width: 1000px) {
+    html body.tt-immersive {
+        --tt-imm-top: max(var(--tt-inset-top, 0px), 0px);
+    }
+
+    html body.tt-immersive.tt-sys-fullscreen {
+        --tt-imm-top: 0px;
+    }
+
+    html body.tt-immersive #top-settings-holder,
+    html body.tt-immersive #top-bar {
+        top: var(--tt-imm-top) !important;
+        transform: translateY(calc(-100% - var(--tt-imm-top) - 4px));
+        transition: transform .2s ease;
+    }
+
+    html body.tt-immersive.tt-top-open #top-settings-holder,
+    html body.tt-immersive.tt-top-open #top-bar,
+    html body.tt-immersive:has(#top-settings-holder .drawer-content.openDrawer) #top-settings-holder,
+    html body.tt-immersive:has(#top-settings-holder .drawer-content.openDrawer) #top-bar {
+        transform: none;
+    }
+
+    html body.tt-immersive #sheld {
+        top: var(--tt-imm-top) !important;
+        height: calc(var(--tt-base-viewport-height, var(--doc-height, 100vh)) - var(--tt-imm-top)) !important;
+        min-height: calc(var(--tt-base-viewport-height, var(--doc-height, 100vh)) - var(--tt-imm-top)) !important;
+        max-height: calc(var(--tt-base-viewport-height, var(--doc-height, 100vh)) - var(--tt-imm-top)) !important;
+    }
+
+    html body.tt-immersive #tt-top-handle {
+        display: flex;
+        position: fixed;
+        top: var(--tt-imm-top);
+        left: 50%;
+        transform: translateX(-50%);
+        width: 96px;
+        height: 20px;
+        align-items: center;
+        justify-content: center;
+        z-index: 3006;
+        cursor: pointer;
+    }
+
+    html body.tt-immersive #tt-top-handle > span {
+        width: 44px;
+        height: 5px;
+        border-radius: 3px;
+        background: rgba(255, 255, 255, .5);
+        box-shadow: 0 0 3px rgba(0, 0, 0, .6);
+    }
+
+    html body.tt-immersive.tt-top-open #tt-top-handle,
+    html body.tt-immersive:has(#top-settings-holder .drawer-content.openDrawer) #tt-top-handle {
+        display: none;
+    }
+}
+
+#tt-top-handle {
+    display: none;
+}
+
+@media (pointer: coarse) {
+    body.tt-immersive:not(.tt-input-open) #nonQRFormItems {
+        flex-wrap: nowrap;
+    }
+
+    body.tt-immersive:not(.tt-input-open) #nonQRFormItems > #send_textarea {
+        order: 1;
+        flex: 1 1 0;
+        width: auto;
+    }
+
+    body.tt-immersive:not(.tt-input-open) #nonQRFormItems > #rightSendForm {
+        order: 2;
+        margin-left: 0;
+    }
+}

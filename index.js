@@ -10,6 +10,7 @@ import { initCharWorld, cleanupCharWorld } from './char-world.js';
 import { initChatInputHint, cleanupChatInputHint } from './chat-input-hint.js';
 import { initTips, cleanupTips } from './tip.js';
 import { initUpdateWatch, cleanupUpdateWatch, reloadSoon } from './update-watch.js';
+import { initImmersive, cleanupImmersive } from './immersive.js';
 
 const EXTENSION_KEY = 'chat-text-color';
 
@@ -816,6 +817,7 @@ export async function init() {
     initChatInputHint();
     initTips();
     initUpdateWatch();
+    initImmersive();
     if (initialized) {
         mountUi();
         return;
@@ -842,6 +844,7 @@ export async function cleanup() {
     cleanupChatInputHint();
     cleanupTips();
     cleanupUpdateWatch();
+    cleanupImmersive();
     cleanupContextLock();
     cleanupPromptDetachGuard();
     stopMessageBannerFix?.();
