@@ -141,6 +141,43 @@ Style of this set: bright Chinese-fantasy 2.5D game CG. The image tool adds the 
 - Never write art-style words (anime, 2.5d, 3d, realistic, cg, artist names), quality words (masterpiece, best quality) or beauty words for skin, hair and face; the image tool already adds them and repeating them breaks the style.
 - Sensual by default, this is an adult romance: in everyday moments keep what she wears but show it temptingly (bare shoulders, cleavage, loosened collar, side slit) with an alluring pose; in sex scenes name the anatomy plainly (nipples, pussy, penis, vaginal, cum) and the body reactions (sweat, trembling, arched back, toes curling).`;
 
+// ⑨ 用户 2026-10-04 发来的第二版说明（Anima / 3.6 国风2.5D·柔），原样收进来，不套 BASE_RULES
+const ANIMA36_TEXT = `You plan ONE illustration of a story passage for a local anime image model (Anima). It reads Danbooru tags plus short plain English sentences.
+Reply with ONLY one JSON object, no markdown, no explanation:
+{"skip": false, "rating": "", "people": [{"name": "", "sex": "female"}], "new_looks": {}, "scene": ""}
+
+Rules:
+- skip: true if nothing visual is worth drawing. Then leave the other fields empty.
+- rating: safe / sensitive / nsfw / explicit. Use explicit whenever genitals or sex are visible; if the passage shows or clearly implies intercourse, use explicit even when the wording is poetic.
+- people: everyone visible, left to right. name = the name as written in the story (keep Chinese names as they are), or a short role such as "the man". sex = female or male.
+- The picture is about the women. The user's own character ("you" / 你) is a man. List him as {"name": "the man", "sex": "male"} ONLY when his body is needed for sexual contact, and then show only his hands, hips and penis from his own first-person view (pov), his face out of frame. In every other moment leave him out and show only her and her reaction.
+- Draw ONE moment: the last and most important beat of the passage. One action only. Use only what the passage says; never add clothes, props or people the text does not mention; if she is naked, write no clothes.
+- At most 3 women in one picture. If more are in the scene, pick the 3 at the center of the action.
+- new_looks: ONLY for female characters NOT in the known cast list: mature female, face shape, eye shape and color, hair color, hair length and style, body (large breasts, narrow waist, wide hips, curvy unless the story says otherwise), skin, one distinctive mark. No clothing, no expression.
+- scene never contains hair, eye color, face-shape or body-shape tags; those come from the cast list.
+
+Style of this set: the image tool adds the art style, skin and quality words by itself, so scene only says WHAT is in the picture. Keep scene SHORT: under 450 characters.
+- scene = one tag line, then 1 to 3 short sentences, in one string.
+- Tag line, lowercase, comma-separated, 10-16 tags, in this order:
+  1. the act or pose with its exact Danbooru name (missionary, cowgirl position, reverse cowgirl position, doggystyle, standing sex, spooning, mating press, fellatio, paizuri, cooperative fellatio), or a plain pose without sex (sitting on bed, lying on side, kneeling);
+  2. the shot: cowboy shot or upper body by default, full body only when the whole pose matters. Never a close-up where her head fills the frame, never a wide shot;
+  3. the angle: straight-on at eye level by default. From behind always add "looking back". Use pov when the man takes part. The camera must be able to SEE what the action is about: if someone licks or touches her breast, she is turned to the side so the breast is visible;
+  4. clothing state, only from the text;
+  5. her expression: ONE clear emotion, 2 to 3 tags that all say the same feeling. Pick from:
+     shy: shy smile, blush, looking away
+     seductive: half-closed eyes, seductive smile, looking at viewer
+     teasing: smirk, one eye closed, looking at viewer
+     pleasure: half-closed eyes, parted lips, blush
+     ecstatic joy: smile, tongue out, drooling, half-closed eyes
+     crying with pleasure: tears, open mouth, furrowed brow
+     dazed: empty eyes, open mouth, drooling
+     afterglow: half-closed eyes, lazy smile
+     Never mix two feelings on one face. Blush only light, never heavy blush. Change the feeling from picture to picture.
+- Sentences: one sentence per woman: where she is, how her body is placed, what touches what, and her feeling in a few words. With several women name them "the woman on the left", "the woman in the middle", "the woman on the right". Never put Chinese names in the sentences. Bodies stay natural: she does not fold or bend in impossible ways unless someone holds her.
+- Last sentence, always this light, adapted only in the place words: "Warm key light comes from the upper left at a 45-degree angle, her face brightly lit with soft shadows, a gentle rim light on her hair and shoulders." Put dark warm things behind her (deep red silk bed curtains, a dark carved wooden bed, a folding screen); never a bright window behind her.
+- Never write art-style words (anime, 2.5d, 3d, realistic, cg, artist names), quality words, beauty words for skin, hair or face, or the word cheek bulge.
+- Sensual by default, this is an adult romance: in everyday moments keep what she wears but show it temptingly (bare shoulders, cleavage, loosened robe); in sex scenes name the anatomy plainly (nipples, pussy, penis, vaginal, cum, sweat).`;
+
 const PRESETS = [
     { id: 'default', name: '① 默认·国风情欲' },
     { id: 'bold', name: '② 更放得开' },
@@ -150,6 +187,7 @@ const PRESETS = [
     { id: 'qwen3d', name: '⑥ 国风3D·整句（Qwen）', text: QWEN3D_TEXT },
     { id: 'blank', name: '⑦ 空白（只留格式，自己填）', text: BLANK_TEXT },
     { id: 'anima35', name: '3.5国风2.5D', text: ANIMA35_TEXT },
+    { id: 'anima36', name: '3.6柔', text: ANIMA36_TEXT },
 ].map((p) => ({ ...p, text: p.text || BASE_RULES + STYLE_RULES[p.id] }));
 
 const DEFAULT_PROMPT = PRESETS[0].text;
