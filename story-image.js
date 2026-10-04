@@ -107,6 +107,40 @@ Fields:
 Style of this set:
 - `;
 
+// ⑧ 用户 2026-10-04 发来的整份说明（Anima / 3.5 国风2.5D），原样收进来，不套 BASE_RULES
+const ANIMA35_TEXT = `You plan ONE illustration of a story passage for a local anime image model (Anima). It reads Danbooru tags plus short plain English sentences.
+Reply with ONLY one JSON object, no markdown, no explanation:
+{"skip": false, "rating": "", "people": [{"name": "", "sex": "female"}], "new_looks": {}, "scene": ""}
+
+Rules:
+- skip: true if nothing visual is worth drawing. Then leave the other fields empty.
+- rating: safe / sensitive / nsfw / explicit. Use explicit whenever genitals or sex are visible; if the passage shows or clearly implies intercourse, use explicit even when the wording is poetic.
+- people: everyone visible, left to right. name = the name as written in the story (keep Chinese names as they are), or a short role such as "the man". sex = female or male.
+- The picture is about the women. The user's own character ("you" / 你) is a man. List him as {"name": "the man", "sex": "male"} ONLY when his body is needed for sexual contact (penetration, fellatio, groping, being straddled), and then show only his hands, hips and penis from his own first-person view, his face and head out of frame. In every other moment leave him out and show only her and her reaction.
+- Draw ONE moment: the last and most important beat of the passage. One action only; never mix several positions or sex acts. Use only what the passage actually says (acts, clothes, props). Never add clothes, props or people the text does not mention; if she is naked, do not write any clothes.
+- Include every woman who takes part in this moment (up to 5).
+- new_looks: ONLY for female characters that are NOT in the known cast list. For each, give a fixed appearance as tags: mature female, face shape, eye shape and color, hair color, hair length and style, body (unless the story says otherwise: large breasts, narrow waist, wide hips, curvy), skin, one distinctive mark. No clothing, no expression. Never redescribe the known cast.
+- scene never contains hair, eye color, face-shape or body-shape tags; those come from the cast list.
+
+Style of this set: bright Chinese-fantasy 2.5D game CG. The image tool adds the art style, skin and lighting quality by itself, so scene only says WHAT is in the picture.
+- scene = one tag line, then 2-3 short English sentences, all in one string. Keep the whole scene under 600 characters.
+- Tag line: lowercase, comma-separated, 12-20 tags, in this order:
+  1. the act or pose with its exact Danbooru name (missionary, cowgirl position, reverse cowgirl position, doggystyle, standing sex, spooning, mating press, full nelson, fellatio, paizuri, cooperative fellatio, 69), or a plain pose when there is no sex (sitting, lying on bed, leaning forward);
+  2. the shot: close-up, upper body, cowboy shot or full body. Prefer upper body or cowboy shot so her face is big and clear; never a wide shot where faces are tiny;
+  3. the angle: straight-on by default. From behind always add "looking back". From the side always add "looking at viewer". Use pov when the man takes part;
+  4. clothing state, only from the text (nude, open robe, sheer hanfu, panties...);
+  5. expression, 2 to 4 tags, chosen by face part, not synonyms piled together:
+     eyes: half-closed eyes, heavy-lidded eyes, teary eyes, looking at viewer, rolling eyes, closed eyes;
+     mouth: parted lips, open mouth, biting lip, seductive smile, smirk, tongue out;
+     cheeks: blush or rosy cheeks (never heavy blush);
+     mood: shy, seductive, dazed, ecstatic, smug, embarrassed.
+     Calm or flirty moments use soft ones; during sex use stronger ones that match the passage.
+- Sentences: one sentence per woman, saying where she is, how her body is placed and what touches what. With several women name them by place exactly like this: "the woman on the left", "the woman in the middle", "the woman on the right" (4 or 5 women: "woman number 1", "woman number 2"...). Never put Chinese names in the sentences.
+- Last sentence: the place and the light in a few words, matching the story's era. Unless the story is clearly modern it is ancient / fantasy China (carved lattice windows, silk canopy bed, folding screen, jade bath, pavilion, blossoming garden). For example: "A bright palace bedchamber with carved lattice windows in soft daylight."
+- Light is always bright, evenly lit and clean. Never night darkness, candle-dark rooms, backlighting, silhouettes or heavy shadows, even in sad scenes.
+- Never write art-style words (anime, 2.5d, 3d, realistic, cg, artist names), quality words (masterpiece, best quality) or beauty words for skin, hair and face; the image tool already adds them and repeating them breaks the style.
+- Sensual by default, this is an adult romance: in everyday moments keep what she wears but show it temptingly (bare shoulders, cleavage, loosened collar, side slit) with an alluring pose; in sex scenes name the anatomy plainly (nipples, pussy, penis, vaginal, cum) and the body reactions (sweat, trembling, arched back, toes curling).`;
+
 const PRESETS = [
     { id: 'default', name: '① 默认·国风情欲' },
     { id: 'bold', name: '② 更放得开' },
@@ -115,6 +149,7 @@ const PRESETS = [
     { id: 'camera', name: '⑤ 镜头感' },
     { id: 'qwen3d', name: '⑥ 国风3D·整句（Qwen）', text: QWEN3D_TEXT },
     { id: 'blank', name: '⑦ 空白（只留格式，自己填）', text: BLANK_TEXT },
+    { id: 'anima35', name: '3.5国风2.5D', text: ANIMA35_TEXT },
 ].map((p) => ({ ...p, text: p.text || BASE_RULES + STYLE_RULES[p.id] }));
 
 const DEFAULT_PROMPT = PRESETS[0].text;
