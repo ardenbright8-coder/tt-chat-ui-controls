@@ -16,7 +16,7 @@ const PROMPT_VERSION = 8;
 const ctx = () => globalThis.SillyTavern?.getContext?.();
 
 // 画面要亮：模型和写词都容易往「夜里、烛光、昏暗」走，出来又灰又压抑
-const BRIGHT_TAGS = 'bright lighting, well-lit, warm colors, vivid colors';
+const BRIGHT_TAGS = 'bright lighting, well-lit';
 
 // 写词说明 = 公共部分（回 JSON 的格式、跳过规则、长相档案规则）+ 各套装自己的「画面怎么写」。
 // 公共部分每套都一样，保证长相照档案画；套装只换画面风格。画不画、画多露骨交给写词模型自己判断，这里不加内容限制。
@@ -416,7 +416,7 @@ const PROMPT_LIMIT = 1800;
 // 动作、地点、光线（scene）一个字都不许被截掉——以前人一多就把它们挤出上限，图只剩白底
 function buildPrompt(plan, cast) {
     const people = Array.isArray(plan.people) ? plan.people.filter((p) => p && p.name) : [];
-    // 同框最多 5 个女人（用户要的；人越多越容易糊，3 个以上长相会缩短）
+    // 同框最多 5 个女人（用户要的；人越多越容易糊，2 个起长相会缩短）
     const girls = people.filter((p) => String(p.sex).toLowerCase() !== 'male').slice(0, 5);
     const boys = people.filter((p) => String(p.sex).toLowerCase() === 'male');
     const head = [cleanTags(plan.rating) || 'sensitive'];
@@ -424,13 +424,13 @@ function buildPrompt(plan, cast) {
     if (boys.length) head.push(countTag(boys.length, 'boy'));
     if (girls.length && boys.length) head.push('hetero');
     if (!girls.length && !boys.length) head.push('no humans');
-    const tail = [boys.length ? 'pov, faceless male, male head out of frame' : '', cleanTags(plan.scene), BRIGHT_TAGS];
+    const beforeLooks = [boys.length ? 'pov, faceless male, male head out of frame' : '', cleanTags(plan.scene)];
     let looks = girls.map((g) => cleanTags(cast[g.name]?.look || plan.new_looks?.[g.name] || 'mature female'));
-    if (looks.length >= 3) looks = looks.map(shortLook);
+    if (looks.length >= 2) looks = looks.map(shortLook);
     const lookText = (list) => list.length === 1 ? list[0]
         // 多个女角色：用整句把长相绑在位置上，减少 A 的发色跑到 B 头上
         : list.map((l, i) => `the woman ${placeWord(i, list.length)} has ${l.replace(/,\s*/g, ' and ')}`).join(', ');
-    const join = (middle) => cleanTags([...head, middle, ...tail].filter(Boolean).join(', '));
+    const join = (middle) => cleanTags([...head, ...beforeLooks, middle, BRIGHT_TAGS].filter(Boolean).join(', '));
     let prompt = join(lookText(looks));
     if (prompt.length > PROMPT_LIMIT && looks.length) prompt = join(lookText(looks.map(shortLook)));
     if (prompt.length > PROMPT_LIMIT) {

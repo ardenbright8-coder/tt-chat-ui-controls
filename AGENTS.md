@@ -97,6 +97,8 @@
 
 ## 自动配图的写词说明归用户（2026-10-02 定）
 
+**画图词拼接顺序**（v1.18.28，2026-10-04 用户按桌面交接文档指定）：`buildPrompt()` 按「分级 → 人数 → pov 那句（有男人时）→ scene → 长相 → BRIGHT_TAGS」拼；2 个女角色起用原来的 `shortLook()` 缩长相；`BRIGHT_TAGS` 只留 `bright lighting, well-lit`。1800 字符超长时仍先缩长相、再砍长相，scene 留全。`cleanTags()`、写词套装、长相档案、定妆照逻辑都不改，`PROMPT_VERSION` 保持 8。
+
 **改自动配图的提示词（`story-image.js` 里的 `BASE_RULES`、`STYLE_RULES`）之前先读完这一节。**
 
 - 用户在手机上自己改写词说明：每套内置的各存一份在 `autoImageMyTexts`，自己另存的在 `autoImageCustomPresets`。代码里的内置原版只在用户点「恢复原版」时才替换进去，所以更新扩展时手机上那份保持用户自己的。
