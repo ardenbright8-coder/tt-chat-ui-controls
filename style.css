@@ -3244,3 +3244,40 @@ body:is([data-generating="true"], [data-swiping="true"]) #chat .mes.last_mes .me
 .tt-archive-row .tt-archive-meta .tt-archive-tag { font-size: 1em; }
 .tt-archive-time { opacity: .45; }
 .tt-archive-row .tt-archive-preview { padding-left: 0; }
+
+/* v1.18.29 写法说明三层翻页（选哪段 → 存档列表 → 改一条）：每层右上「✕」一下全关，左上「‹ 返回」回上一层 */
+.tt-text-editor-head.tt-tip-row b { margin-right: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tt-text-editor-x {
+    flex: none;
+    width: 36px;
+    height: 36px;
+    margin: 0 0 0 4px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    color: inherit;
+    background: rgba(255,255,255,.1);
+    font: inherit;
+    font-size: 1.05em;
+    line-height: 36px;
+    text-align: center;
+}
+.tt-text-editor-x:active { background: rgba(255,255,255,.2); }
+.tt-text-editor .tt-text-editor-body { gap: 10px; }
+.tt-text-editor .tt-text-editor-body > .tt-text-editor-name { flex: none; }
+.tt-prompt-home .tt-prompt-pick {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    flex: none;
+    gap: 4px;
+    width: 100%;
+    margin: 0;
+    padding: 12px 14px;
+    box-sizing: border-box;
+    text-align: left;
+    white-space: normal;
+}
+.tt-prompt-home .tt-prompt-pick small { opacity: .7; line-height: 1.4; }
+.tt-prompt-using { color: #8fd3a8; font-size: .8em; line-height: 1.4; }
+.tt-wi-draft-actions.tt-prompt-home-actions { display: none; }

@@ -9,7 +9,7 @@
 
 import { tip } from './tip.js';
 import { vlog } from './var-log.js';
-import { openTextEditor } from './text-editor.js';
+import { openPromptBook } from './text-editor.js';
 
 const EXTENSION_KEY = 'chat-text-color';
 const SETTINGS_ID = 'tt-chat-tools-settings';
@@ -472,7 +472,7 @@ async function onDeepen(event) {
     }
 }
 
-// ---------------------------------------------------------------- ≡「写法说明」：选一段，进大窗口改
+// ---------------------------------------------------------------- ≡「写法说明」：选一段 → 存档列表 → 改一条
 
 // 按内容给存档起个名字（v1.18.24）：跟哪套自带的一样就叫那个名；在原版上改的叫「改：新加的那句开头」；
 // 只删了几条叫「原版少 N 条」；全新写的取第一句开头。一句话截到第一个标点、最多 16 个字。
@@ -553,50 +553,29 @@ function archiveFor(p) {
     };
 }
 
-function openPromptEditor(p) {
-    const archive = archiveFor(p);
-    openTextEditor({
-        title: `写法说明 · ${p.name}`,
-        value: settings()[p.key] || p.def(),
-        archive,
-        onSave: (text) => {
-            const s = settings();
-            const before = s[p.key];
-            const next = text.trim() ? text : p.def();
-            // 换下来的旧版自动存一份（列表里没有一样的才存）；不自动删，多了自己删
-            if (before && before.trim() && before !== next && !archive.list().some((x) => x.text.trim() === before.trim())) {
-                archive.add({ text: before, auto: true });
-            }
-            s[p.key] = next;
-            if (p.key === 'deepenPrompt') s.deepenPromptOwn = true;
-            save();
-            vlog('写法说明', `改了「${p.name}」`);
-            globalThis.toastr?.success?.('存好了', `写法说明 · ${p.name}`);
-        },
-    });
+// v1.18.29 改成三层翻页（text-editor.js 的 openPromptBook）：选哪段 → 存档列表 → 改一条。
+// 列表里点一条就直接换上；正在用的永远在列表里（不在就补一条「自动存的」），所以不用再「保存时把换下来的旧版存一份」。
+function useText(p, text) {
+    const s = settings();
+    s[p.key] = text.trim() ? text : p.def();
+    if (p.key === 'deepenPrompt') s.deepenPromptOwn = true;
+    save();
+    vlog('写法说明', `「${p.name}」换上了另一条`);
 }
 
-async function openPromptPicker() {
-    const context = ctx();
-    if (!context?.callGenericPopup) return;
-    const box = document.createElement('div');
-    box.className = 'tt-prompt-picker';
-    box.innerHTML = `<h3 class="tt-tip-row">写法说明 ${tip('这三段是点按钮时临时加给 AI 的说明，只管那一条回复，出完就撤掉。点一段进大窗口改，改完点「保存」；右上角「存档」里有以前的版本，也能自己存。')}</h3>`
-        + PROMPTS.map((p, i) => `<button type="button" class="menu_button tt-prompt-pick" data-i="${i}"><b>${p.name}</b><small>${p.desc}</small></button>`).join('');
-    let popup = null;
-    box.addEventListener('click', (event) => {
-        const pick = event.target.closest('.tt-prompt-pick');
-        if (!pick) return;
-        const p = PROMPTS[Number(pick.dataset.i)];
-        popup?.completeAffirmative?.() ?? document.querySelector('.popup:last-of-type .popup-button-ok')?.click();
-        setTimeout(() => openPromptEditor(p), 150);
+function openPromptPicker() {
+    openPromptBook({
+        title: '写法说明',
+        homeTip: '这三段是点按钮时临时加给 AI 的说明，只管那一条回复，出完就撤掉。点一段进去：看存过的几条、换着用、改字。',
+        listTip: '绿框「✓ 正在用」就是现在用的。点一条直接换上；点「改」进去改字，改的是正在用的那条，保存就生效。名字按内容自动概括，想自己起就在「改」里填。什么都不会自动删，多了自己点「删」（正在用的那条不能删）。',
+        sections: PROMPTS.map((p) => ({
+            name: p.name,
+            desc: p.desc,
+            archive: archiveFor(p),
+            current: () => settings()[p.key] || p.def(),
+            use: (text) => useText(p, text),
+        })),
     });
-    if (context.Popup && context.POPUP_TYPE) {
-        popup = new context.Popup(box, context.POPUP_TYPE.TEXT, '', { okButton: '关闭' });
-        await popup.show();
-    } else {
-        await context.callGenericPopup(box, context.POPUP_TYPE.TEXT, '', { okButton: '关闭' });
-    }
 }
 
 // ---------------------------------------------------------------- 接管发送（v1.18.18）
@@ -756,4 +735,4 @@ export function cleanupChatTools() {
     document.body?.classList.remove('tt-hide-agent');
 }
 
-export const __test = { applyBar, position, onDeepen, onSendClick, openPromptPicker, openPromptEditor, PROMPTS, settings, varButtons };
+export const __test = { applyBar, position, onDeepen, onSendClick, openPromptPicker, PROMPTS, settings, varButtons };
