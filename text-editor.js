@@ -7,7 +7,8 @@
 //   每层左上「‹ 返回」回上一层，右上「✕」一下全关（用户：「保存了以后一键关闭……不用再返回上一层了」）。
 //   列表里正在用的那条绿框「✓ 正在用」；点一条 = 直接换上（不用再点保存），弹「已换上」。
 //   正在用的那条不能删（先换上别的）；「＋ 复制正在用的」复制一份出来改，不碰正在用的。
-//   改一条点保存后停在那页：改的是正在用的就马上生效，改别的只改那条、不换上。
+//   改一条点保存后回到列表（v1.18.30 用户：「保存完……没必要一直停留在这」；v1.18.29 是停在改字页）：
+//   改的是正在用的就马上生效，改别的只改那条、不换上。
 //   v1.18.23～28 是反的：先进改字页，右上角「存档」才翻到列表，点一条只是换进框里、还要再点保存。
 //   名字没起就按内容自动概括（`archive.summarize`），什么都不自动删（用户：「不要删我那些东西……我自己会手动删」）。
 // section = { name, desc, archive, current() → 正在用的文字, use(text) 换上 }
@@ -148,7 +149,7 @@ export function openPromptBook({ title = '写法说明', homeTip = '', listTip =
         if (!entry) return true;
         if (entry.changed() && !ask('这条改的还没保存，不要了吗？')) return false;
         // 「复制正在用的」进来一个字没改就走：跟正在用的一模一样，不留这份重复的
-        if ((entry.isNew && !entry.item.text.trim()) || (entry.copy && !entry.saved)) section.archive.remove(entry.item.id);
+        if ((entry.isNew && !entry.item.text.trim()) || entry.copy) section.archive.remove(entry.item.id);
         entry = null;
         return true;
     }
@@ -254,7 +255,7 @@ export function openPromptBook({ title = '写法说明', homeTip = '', listTip =
         let refreshBar = () => {};
         const draft = makeDraft(item.text, () => refreshBar());
         const changed = () => draft.area.value !== item.text || nameInput.value.trim() !== (item.named ? item.name : '');
-        entry = { item, draft, nameInput, isNew, copy, saved: false, changed };
+        entry = { item, draft, nameInput, isNew, copy, changed };
         nameInput.addEventListener('input', () => refreshBar());
         body.replaceChildren(nameInput, draft.area);
         const [cancel, undo, saveBtn] = threeButtons();
@@ -269,14 +270,13 @@ export function openPromptBook({ title = '写法说明', homeTip = '', listTip =
         undo.addEventListener('click', () => draft.undo());
         saveBtn.addEventListener('click', () => {
             // 刚复制出来的那份跟正在用的字一样，但它不是正在用的那条
-            const wasNow = !(entry.copy && !entry.saved) && same(item.text, section.current());
+            const wasNow = !entry.copy && same(item.text, section.current());
             const typed = nameInput.value.trim();
             section.archive.update(item.id, { name: typed, named: !!typed, text: draft.area.value });
             if (wasNow && draft.area.value.trim()) section.use(draft.area.value);
-            entry.isNew = false;
-            entry.saved = true;
-            refreshBar();
-            globalThis.toastr?.success?.(wasNow ? '存好了，正在用的这条已经生效' : '存好了（没换上，要用就回列表点它）', section.name);
+            entry = null;
+            renderList();
+            globalThis.toastr?.success?.(wasNow ? '存好了，正在用的这条已经生效' : '存好了（没换上，要用就点它）', section.name);
         });
         if (isNew) draft.area.focus({ preventScroll: true });
     }

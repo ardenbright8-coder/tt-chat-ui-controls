@@ -158,7 +158,81 @@ export const DEFAULT_PUSH = `【往下走】
 - 环境背景点到为止，笔墨花在这件事怎么起伏上。
 - 结尾开放：把人物眼下的难处、心思和几种可能摆出来，停在留给{{user}}拿主意、接话的地方。`;
 
-// ≡「写法说明」里能改的三段
+// v1.18.30「活人版」四段（用户 2026-10-13 跟 Claude 一起讨论定的，他试过空着发送那段「效果最好」，另外三段照它的写法改）：
+// 空着发送 = 往外发散为主、顺手写深；写了字发送 = 照他写的走、让他这一下激起新东西；深入 = 原地往深挖；
+// 深入（写了字）= 照他写的走、停在他这一下上挖深。四段都加「不炒冷饭」：他反映 AI 老拿同一件糗事、同一句调情话翻来覆去说。
+// 成人向言情和日常、没有打斗；该正经就正经、该露骨就露骨；情绪要满、会变；人还是这几个人，不切到别人的线。
+const PUSH_LIVE = `【往下走】
+{{user}}这轮没写，交给你往外拓一步：给这段戏带出点新东西，再顺手写深一点。
+
+先想（不写出来）：
+- 接下来能发生点什么新的？一个新念头、一件突然想做的事、一个冒出来的话题、一点小心机、一个暧昧的小意外、一个新玩法。从这几个人的人设、关系和眼前的现场里长出来，顺着上下文走，不凭空蹦出大事。
+- 这件新事落到每个人身上，按各自的人设，会激起什么情绪？
+
+写的时候：
+- 往外走：这一轮要有新东西发生，局面、关系或气氛跟上一条比得变一点，不原地打转，不重复刚才的。
+- 不炒冷饭：前几轮说过的梗、提过的旧事、用过的调情话，这一轮别再拿出来。同一件事非提不可，就得有新角度、新进展。新素材从此刻的现场找：她的身体、身边的东西、刚发生的小事、两人之间新冒出来的念头。
+- 人还是这几个人：可以顺着戏一起去做件事、换个地方，但不跳切到别人的另一条线，不拉不相干的角色进来。
+- 这是成人向的言情和日常：心动、暧昧、试探、吃醋、闹别扭、亲热，或者过日子的小事，没有打斗。气氛跟着戏走：该正经就正经，该撩就撩，该露骨就露骨，不刻意端着。
+- 人设是底线：新冒出来的念头、做的事、亲密时的样子，都得是这个人会有的。
+- 情绪要满、会变：遇事就有反应，紧张、慌乱、狂喜、嫉妒、委屈、羞恼、失控、癫狂都可能。性子冷、能忍的也会有裂缝：手抖、声音变了、话突然少了。被一句话点着，又被一件事浇灭，不是一条直线。脸色、眼神、呼吸、声音、手上的动作、身体的反应，都写得让人看得见。
+- 顺手写深：新事里挑一个最打动人的瞬间多停一笔，其余快些带过。
+- {{user}}的打算是前提，不替他说话、拿主意；停在他得接的地方。`;
+
+const SEND_LIVE = `【写好这一轮】
+{{user}}写的是这一轮的方向。照他的意思让它发生，再顺着它往外带一点：让他这一下激起新的东西，顺手写深一点。
+
+先想（不写出来）：
+- {{user}}这一下要的是什么劲儿？撩、哄、逼、试探、使坏，还是闹着玩？抓住这个劲儿。
+- 这一下落到每个人身上，按各自的人设，会激起什么情绪、引出什么新反应？
+
+写的时候：
+- 照他写的走：不改他的意思，不替他多说话、多做决定；他写的要写饱满，话说得更有味道，动作写出画面。
+- 这一下要有回响：在场的人接得住、反应得出来，局面、关系或气氛因为他这一下变了一点。她的反应可以带出一个新念头、新话头，但不另起他没写的大事。
+- 不炒冷饭：前几轮说过的梗、提过的旧事、用过的调情话，这一轮别再拿出来。同一件事非提不可，就得有新角度、新进展。新素材从此刻的现场找：她的身体、身边的东西、刚发生的小事、两人之间新冒出来的念头。
+- 人还是这几个人：不跳切到别人的另一条线，不拉不相干的角色进来。
+- 这是成人向的言情和日常：心动、暧昧、试探、吃醋、闹别扭、亲热，或者过日子的小事，没有打斗。气氛跟着戏走：该正经就正经，该撩就撩，该露骨就露骨，不刻意端着。
+- 人设是底线：别人怎么接，都得是这个人会有的样子。不为了配合他一味顺从，会躲、会顶回来、会反撩。
+- 情绪要满、会变：遇事就有反应，紧张、慌乱、狂喜、嫉妒、委屈、羞恼、失控、癫狂都可能。性子冷、能忍的也会有裂缝：手抖、声音变了、话突然少了。被一句话点着，又被一件事浇灭，不是一条直线。脸色、眼神、呼吸、声音、手上的动作、身体的反应，都写得让人看得见。
+- 顺手写深：他这一下里挑一个最打动人的瞬间多停一笔。
+- 停在他得接的地方。`;
+
+const DEEPEN_LIVE = `【深入这场戏】
+{{user}}这轮没写，交给你把眼下这一刻往深里写，不急着往前推。
+
+先想（不写出来）：
+- 这一刻每个人想要什么、顾忌什么、藏着什么？{{user}}正在做的事和他的打算是前提，顺着写，别替他改主意。
+- 这一刻还有哪一层没写到？一个没说破的心思、身体的一个反应、一句话底下的意思。
+
+写的时候：
+- 往深挖：笔墨停在这一刻，把它写透。想加点意思，就加一个合情合理的小变化，让这一刻多一层张力或趣味；不另起一条线，不把局面翻过来。
+- 不炒冷饭：往深挖是挖出新东西，不是把前面说过的梗、旧事、调情话再说一遍。
+- 人设是底线：按各自的性格内核和此刻处境去反应，有自己的算盘，不为配合谁变笨变软。
+- 戏靠对话撑：你来我往、话里有话；动作、神态、环境给对话加分量。
+- 这是成人向的言情和日常：该正经就正经，该撩就撩，该露骨就露骨，不刻意端着。
+- 情绪要满、会变：紧张、慌乱、狂喜、嫉妒、委屈、羞恼、失控、癫狂都可能。性子冷、能忍的也会有裂缝：手抖、声音变了、话突然少了。脸色、眼神、呼吸、声音、手上的动作、身体的反应，都写得让人看得见。
+- 节奏放慢，情绪一点点推；停在留给{{user}}接的地方。`;
+
+const DEEPEN_TEXT_LIVE = `【深入这场戏】
+{{user}}这轮写了一段。照他的意思让它发生，然后不急着往前推，就在他这一下上往深里写。
+
+先想（不写出来）：
+- 他这一下要的是什么劲儿？落到每个人身上，激起了什么情绪、碰到了哪个心思？
+- 这一下里还有哪一层没写到？一个没说破的心思、身体的一个反应、一句话底下的意思。
+
+写的时候：
+- 照他写的走：不改他的意思，不替他多说话、多做决定。
+- 往深挖：笔墨停在他这一下激起的反应上，把它写透。想加点意思，就加一个合情合理的小变化；不另起一条线，不把局面翻过来。
+- 不炒冷饭：往深挖是挖出新东西，不是把前面说过的梗、旧事、调情话再说一遍。
+- 人设是底线：按各自的性格内核和此刻处境去反应，有自己的算盘，不为配合谁变笨变软，会躲、会顶回来、会反撩。
+- 戏靠对话撑：你来我往、话里有话；动作、神态、环境给对话加分量。
+- 这是成人向的言情和日常：该正经就正经，该撩就撩，该露骨就露骨，不刻意端着。
+- 情绪要满、会变：紧张、慌乱、狂喜、嫉妒、委屈、羞恼、失控、癫狂都可能。性子冷、能忍的也会有裂缝：手抖、声音变了、话突然少了。脸色、眼神、呼吸、声音、手上的动作、身体的反应，都写得让人看得见。
+- 节奏放慢，情绪一点点推；停在留给{{user}}接的地方。`;
+
+const LIVE_NAME = '活人版';
+
+// ≡「写法说明」里能改的四段（v1.18.30 加了「深入（写了字）」）
 // 存档里「自带的」（v1.18.23 加；v1.18.24 不编号，名字概括内容）：defName 原版的名字，olds 以前的版本
 const PROMPTS = [
     { key: 'deepenPrompt', name: '深入', desc: '点「深入」时用：原地往深挖，另起一条', def: () => DEFAULT_DEEPEN,
@@ -168,13 +242,18 @@ const PROMPTS = [
             { bid: 'v3', name: '戏靠对话撑（短）', text: DEEPEN_V3 },
             { bid: 'v2', name: '能加配角小事，对话为主', text: DEEPEN_V2 },
             { bid: 'v1', name: '锁住场景，七条细写', text: DEEPEN_V1 },
-        ] },
+        ],
+        live: () => DEEPEN_LIVE },
+    { key: 'deepenTextPrompt', name: '深入（写了字）', desc: '输入框有字再点「深入」时用：照你写的走，在你这一下上往深里写', def: () => DEEPEN_TEXT_LIVE,
+        defBid: 'live', defName: LIVE_NAME },
     { key: 'sendPrompt', name: '写了字发送', desc: '输入框有字点发送时用：照你写的走，写出戏来', def: () => DEFAULT_SEND,
         defBid: 'v2', defName: '范式：看局势、立人设、情绪分明、结尾开放',
-        olds: () => [{ bid: 'def', name: '照你写的走，写得好看（短）', text: SEND_V1 }] },
+        olds: () => [{ bid: 'def', name: '照你写的走，写得好看（短）', text: SEND_V1 }],
+        live: () => SEND_LIVE },
     { key: 'pushPrompt', name: '空着发送', desc: '输入框空着点发送时用：另起一条，往下走一步', def: () => DEFAULT_PUSH,
         defBid: 'v2', defName: '范式：推到转折，看局势、立人设、结尾开放',
-        olds: () => [{ bid: 'def', name: '往下走一步，要有转折（短）', text: PUSH_V1 }] },
+        olds: () => [{ bid: 'def', name: '往下走一步，要有转折（短）', text: PUSH_V1 }],
+        live: () => PUSH_LIVE },
 ];
 
 let mountTimer = null;
@@ -191,7 +270,7 @@ let bound = false;
 
 function settings() {
     const all = ctx()?.extensionSettings;
-    if (!all) return { varsInMenu: true, deepenButton: true, sendTakeover: true, deepenPrompt: DEFAULT_DEEPEN, sendPrompt: DEFAULT_SEND, pushPrompt: DEFAULT_PUSH };
+    if (!all) return { varsInMenu: true, deepenButton: true, sendTakeover: true, deepenPrompt: DEEPEN_LIVE, deepenTextPrompt: DEEPEN_TEXT_LIVE, sendPrompt: SEND_LIVE, pushPrompt: PUSH_LIVE };
     const s = all[EXTENSION_KEY] = all[EXTENSION_KEY] || {};
     if (typeof s.varsInMenu !== 'boolean') s.varsInMenu = true;
     if (typeof s.deepenButton !== 'boolean') s.deepenButton = true;
@@ -202,7 +281,22 @@ function settings() {
     // 旧默认原样才换新版；自己改过的不动
     if (typeof s.sendPrompt !== 'string' || !s.sendPrompt.trim() || s.sendPrompt === SEND_V1) s.sendPrompt = DEFAULT_SEND;
     if (typeof s.pushPrompt !== 'string' || !s.pushPrompt.trim() || s.pushPrompt === PUSH_V1) s.pushPrompt = DEFAULT_PUSH;
+    if (typeof s.deepenTextPrompt !== 'string' || !s.deepenTextPrompt.trim()) s.deepenTextPrompt = DEEPEN_TEXT_LIVE;
     if (!s.promptArchive || typeof s.promptArchive !== 'object') s.promptArchive = {};
+    // v1.18.30 四段都换上「活人版」，只换一次（用户：「直接给我写到程序里边」）；换下来的那条不在存档里就补一条「自动存的」，想回去在列表里点它
+    if (!s.liveSwitched) {
+        for (const p of PROMPTS) {
+            const live = (p.live || p.def)();
+            const old = s[p.key];
+            const list = s.promptArchive[p.key] = Array.isArray(s.promptArchive[p.key]) ? s.promptArchive[p.key] : [];
+            if (typeof old === 'string' && old.trim() && old.trim() !== live.trim() && !list.some((x) => String(x.text).trim() === old.trim())) {
+                list.push({ id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, name: '', named: false, text: old, at: Date.now(), auto: true });
+            }
+            s[p.key] = live;
+        }
+        s.deepenPromptOwn = true;
+        s.liveSwitched = true;
+    }
     delete s.bottomButton;
     return s;
 }
@@ -442,7 +536,9 @@ async function onDeepen(event) {
     const context = ctx();
     const box = document.getElementById('send_textarea');
     const typed = (box?.value ?? '').trim();
-    if (!setDeepenPrompt(settings().deepenPrompt || DEFAULT_DEEPEN)) {
+    // v1.18.30 写了字用「深入（写了字）」那段，没写字用「深入」那段
+    const st = settings();
+    if (!setDeepenPrompt(typed ? (st.deepenTextPrompt || DEEPEN_TEXT_LIVE) : (st.deepenPrompt || DEFAULT_DEEPEN))) {
         globalThis.toastr?.warning?.('这个版本的酒馆不支持临时加说明', '深入');
         return;
     }
@@ -504,7 +600,9 @@ function archiveFor(p) {
     const seeded = st.promptArchiveSeeded = st.promptArchiveSeeded && typeof st.promptArchiveSeeded === 'object' ? st.promptArchiveSeeded : {};
     const items = () => (all[p.key] = Array.isArray(all[p.key]) ? all[p.key] : []);
     const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
-    const builtins = [{ bid: p.defBid || 'def', name: p.defName || '原版', text: p.def() }, ...(p.olds?.() || [])];
+    // v1.18.30「活人版」（live）也是自带的一条：已经放过的老用户，下次打开排到最底下
+    const builtins = [{ bid: p.defBid || 'def', name: p.defName || '原版', text: p.def() },
+        ...(p.live ? [{ bid: 'live', name: LIVE_NAME, text: p.live() }] : []), ...(p.olds?.() || [])];
     let dirty = false;
     // v1.18.23 存的条目名字是「存档 3」「换下来的 · 时间」这种，当成没起名，按内容概括
     for (const x of items()) if (typeof x.named !== 'boolean') { x.named = !/^(存档 \d+|存档 · .*|换下来的 · .*|新的一条)$/.test(x.name || ''); dirty = true; }
