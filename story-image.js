@@ -7,6 +7,7 @@
 // 新角色第一次出场先出一张定妆照；不满意在魔法棒「看定妆照」里用中文说怎么改，改完再出一张。
 
 import { tip } from './tip.js';
+import { vlog } from './var-log.js';
 
 const EXTENSION_KEY = 'chat-text-color';
 const SETTINGS_ID = 'tt-autoimg-settings';
@@ -516,9 +517,31 @@ async function draw(context, prompt) {
 }
 
 // 一条消息只留一张配图：重新生成（左右滑）、手动配图再来一张，都是换掉旧的，不往下摞
-function attach(context, id, message, url, title) {
-    // 画图要一分钟，期间这条可能被删了或换了：对不上就不贴
-    if (context.chat[id] !== message) return false;
+// 画图要一分多钟，这期间变量框架（MVU）更新变量会把这条消息换成新的一份，内容没变。
+// 以前认「是不是同一个对象」，一换就当被删了，图悄悄扔掉（用户 10-13：#36 #44 #45 电脑上出了、手机上没有）。
+// 现在认这条消息自带、存进聊天记录、变量更新也不改的两样：发出时间 + 第几版回复（左右滑重新生成就换一版）
+function markOf(message) {
+    return { date: message.send_date, name: message.name, swipe: message.swipe_id ?? 0 };
+}
+
+function findMessage(context, id, message, mark) {
+    const chat = context.chat || [];
+    if (chat[id] === message) return { index: id, target: message, how: '原样' };
+    if (mark.date === undefined) return null;
+    const same = (m) => m && !m.is_user && !m.is_system && m.send_date === mark.date && m.name === mark.name;
+    if (same(chat[id])) return { index: id, target: chat[id], how: '换了一份' };
+    for (let i = chat.length - 1; i >= 0; i--) if (same(chat[i])) return { index: i, target: chat[i], how: `挪到第 ${i} 条` };
+    return null;
+}
+
+// 回：'ok' 贴上了｜'regen' 这条已经重新生成成新一版｜'gone' 找不到这条了
+function attach(context, id, message, url, title, mark = markOf(message)) {
+    const found = findMessage(context, id, message, mark);
+    if (!found) { vlog('配图', `第 ${id} 条找不到了（删了或换了聊天），图没贴：${url}`); return 'gone'; }
+    if ((found.target.swipe_id ?? 0) !== mark.swipe) { vlog('配图', `第 ${found.index} 条已经重新生成成新一版，图没贴：${url}`); return 'regen'; }
+    id = found.index;
+    message = found.target;
+    vlog('配图', `贴到第 ${id} 条（${found.how}）`);
     message.extra = message.extra || {};
     if (!Array.isArray(message.extra.media)) message.extra.media = [];
     message.extra.media = message.extra.media.filter((m) => m?.source !== 'generated'); // 以前版本贴的定妆照、配图也一并换掉
@@ -528,7 +551,7 @@ function attach(context, id, message, url, title) {
     message.extra.media_display = 'list';
     const el = globalThis.jQuery?.(`#chat .mes[mesid="${id}"]`);
     if (el?.length) context.appendMediaToMessage(message, el); // 它会把整块图清空重画，换掉的旧图自己没了
-    return true;
+    return 'ok';
 }
 
 // 只给最新那条画：排着队的旧消息，等轮到它时已经有更新的消息了，就不画，免得图半天后贴到上面去
@@ -577,8 +600,13 @@ async function drawAndAttach(id, type, job = latestJob, force = false) {
     if (stale(job)) return; // 写词那几十秒里又来了新消息
 
     const prompt = buildPrompt(plan, known, settings().autoImagePresetId);
+    const mark = markOf(message);
     const url = await draw(context, prompt);
-    if (url) attach(context, id, message, url, prompt);
+    if (url) {
+        const got = attach(context, id, message, url, prompt, mark);
+        if (got === 'regen') toast('warning', '配图画好了，但这条已经重新生成成新的一版，没贴上');
+        if (got === 'gone') toast('warning', '配图画好了，但这条消息找不到了（删了或换了聊天），没贴上');
+    }
     await context.saveChat();
 
     // 定妆照放最后画、不贴进聊天，只在魔法棒「看定妆照」里看；有新消息等着就先让它
@@ -1230,4 +1258,4 @@ export function cleanupStoryImage() {
 }
 
 // 给电脑上的自测脚本用
-export const __test = { cleanTags, plainText, parsePlan, buildPrompt, packLook, ANIMA36_TEXT, ANIMA36_TEXT_V1, portraitPrompt, DEFAULT_PROMPT, REVISE_PROMPT, PRESETS, settings, presetText, cast };
+export const __test = { attach, markOf, cleanTags, plainText, parsePlan, buildPrompt, packLook, ANIMA36_TEXT, ANIMA36_TEXT_V1, portraitPrompt, DEFAULT_PROMPT, REVISE_PROMPT, PRESETS, settings, presetText, cast };
