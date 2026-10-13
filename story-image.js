@@ -141,8 +141,9 @@ Style of this set: bright Chinese-fantasy 2.5D game CG. The image tool adds the 
 - Never write art-style words (anime, 2.5d, 3d, realistic, cg, artist names), quality words (masterpiece, best quality) or beauty words for skin, hair and face; the image tool already adds them and repeating them breaks the style.
 - Sensual by default, this is an adult romance: in everyday moments keep what she wears but show it temptingly (bare shoulders, cleavage, loosened collar, side slit) with an alluring pose; in sex scenes name the anatomy plainly (nipples, pussy, penis, vaginal, cum) and the body reactions (sweat, trembling, arched back, toes curling).`;
 
-// ⑨ 用户 2026-10-04 发来的第二版说明（Anima / 3.6 国风2.5D·柔），原样收进来，不套 BASE_RULES
-const ANIMA36_TEXT = `You plan ONE illustration of a story passage for a local anime image model (Anima). It reads Danbooru tags plus short plain English sentences.
+// ⑨ 用户 2026-10-04 发来的第二版说明（Anima / 3.6 国风2.5D·柔），原样收进来，不套 BASE_RULES。
+// 留着当旧默认：手机上存的还是这份原样的，升级时换成下面 10-13 的新版（改过的不动）
+const ANIMA36_TEXT_V1 = `You plan ONE illustration of a story passage for a local anime image model (Anima). It reads Danbooru tags plus short plain English sentences.
 Reply with ONLY one JSON object, no markdown, no explanation:
 {"skip": false, "rating": "", "people": [{"name": "", "sex": "female"}], "new_looks": {}, "scene": ""}
 
@@ -177,6 +178,12 @@ Style of this set: the image tool adds the art style, skin and quality words by 
 - Last sentence, always this light, adapted only in the place words: "Warm key light comes from the upper left at a 45-degree angle, her face brightly lit with soft shadows, a gentle rim light on her hair and shoulders." Put dark warm things behind her (deep red silk bed curtains, a dark carved wooden bed, a folding screen); never a bright window behind her.
 - Never write art-style words (anime, 2.5d, 3d, realistic, cg, artist names), quality words, beauty words for skin, hair or face, or the word cheek bulge.
 - Sensual by default, this is an adult romance: in everyday moments keep what she wears but show it temptingly (bare shoulders, cleavage, loosened robe); in sex scenes name the anatomy plainly (nipples, pussy, penis, vaginal, cum, sweat).`;
+
+// ⑨ 3.6柔 10-13 版（用户点名改）：电脑上 3.6 已把肤色锁成白里透红、光换成干净白光；
+// 旧版最后一句固定写暖光、身后放暗暖色东西，手机图整张被染成桃米色（#39 跟用户找的封面比肤色偏橙黄）。只换光这一句
+const ANIMA36_LIGHT_V1 = '- Last sentence, always this light, adapted only in the place words: "Warm key light comes from the upper left at a 45-degree angle, her face brightly lit with soft shadows, a gentle rim light on her hair and shoulders." Put dark warm things behind her (deep red silk bed curtains, a dark carved wooden bed, a folding screen); never a bright window behind her.';
+const ANIMA36_LIGHT = '- Last sentence, always this light, adapted only in the place words: "Clean soft white key light comes from the upper left at a 45-degree angle, her face brightly lit with soft shadows, a gentle rim light on her hair and shoulders." Put deeper-colored things behind her (deep red silk bed curtains, a carved wooden bed, a folding screen); never a bright window behind her.\n- The light is always clean white daylight. Never write the word warm anywhere in the scene (no warm room, warm light, warm glow), and no golden, amber, orange, sunset or candle light.';
+const ANIMA36_TEXT = ANIMA36_TEXT_V1.replace(ANIMA36_LIGHT_V1, ANIMA36_LIGHT);
 
 const PRESETS = [
     { id: 'default', name: '① 默认·国风情欲' },
@@ -231,6 +238,9 @@ function settings() {
         if (PRESETS.some((p) => p.id === s.autoImagePresetId)) s.autoImageMyTexts[s.autoImagePresetId] = s.autoImagePrompt;
         s.autoImagePromptsOwned = true;
     }
+    // 3.6柔 换 10-13 版：手机上存的还是旧默认原样才换，自己改过的不动
+    if (s.autoImageMyTexts.anima36 === ANIMA36_TEXT_V1) s.autoImageMyTexts.anima36 = ANIMA36_TEXT;
+    if (s.autoImagePrompt === ANIMA36_TEXT_V1) s.autoImagePrompt = ANIMA36_TEXT;
     // 以后新加的内置套装，用户还没有自己那份时才补上
     for (const p of PRESETS) if (typeof s.autoImageMyTexts[p.id] !== 'string') s.autoImageMyTexts[p.id] = p.text;
     if (typeof s.autoImagePrompt !== 'string' || !s.autoImagePrompt.trim()) s.autoImagePrompt = presetText(s.autoImagePresetId, s);
@@ -414,7 +424,15 @@ const PROMPT_LIMIT = 1800;
 
 // 规划 + 长相档案 → 最终画图词。长相原样从档案抄，不让写词模型改。
 // 动作、地点、光线（scene）一个字都不许被截掉——以前人一多就把它们挤出上限，图只剩白底
-function buildPrompt(plan, cast) {
+// 3.6柔：脸型、下巴、肤色归电脑上的 3.6 套餐管（圆脸圆下巴、白里透红锁死，用户 10-13 定），
+// 长相档案里的 oval face、fair skin 这些会跟套餐抢着管（下巴被拉尖、肤色不稳），画图时不带；档案本身不动
+const PACK_OWNS_LOOK = /\b(oval|round|heart-shaped|v-shaped|long|square|diamond|oblong|narrow|slim|sharp|chubby)\s+face\b|\bchin\b|\bjawline\b|\bskin\b/i;
+function packLook(look) {
+    const kept = look.split(/,\s*/).filter((t) => !PACK_OWNS_LOOK.test(t));
+    return kept.length ? kept.join(', ') : look;
+}
+
+function buildPrompt(plan, cast, presetId) {
     const people = Array.isArray(plan.people) ? plan.people.filter((p) => p && p.name) : [];
     // 同框最多 5 个女人（用户要的；人越多越容易糊，2 个起长相会缩短）
     const girls = people.filter((p) => String(p.sex).toLowerCase() !== 'male').slice(0, 5);
@@ -426,6 +444,7 @@ function buildPrompt(plan, cast) {
     if (!girls.length && !boys.length) head.push('no humans');
     const beforeLooks = [boys.length ? 'pov, faceless male, male head out of frame' : '', cleanTags(plan.scene)];
     let looks = girls.map((g) => cleanTags(cast[g.name]?.look || plan.new_looks?.[g.name] || 'mature female'));
+    if (presetId === 'anima36') looks = looks.map(packLook);
     if (looks.length >= 2) looks = looks.map(shortLook);
     const lookText = (list) => list.length === 1 ? list[0]
         // 多个女角色：用整句把长相绑在位置上，减少 A 的发色跑到 B 头上
@@ -557,7 +576,7 @@ async function drawAndAttach(id, type, job = latestJob, force = false) {
     if (fresh.length) await saveCast();
     if (stale(job)) return; // 写词那几十秒里又来了新消息
 
-    const prompt = buildPrompt(plan, known);
+    const prompt = buildPrompt(plan, known, settings().autoImagePresetId);
     const url = await draw(context, prompt);
     if (url) attach(context, id, message, url, prompt);
     await context.saveChat();
@@ -1211,4 +1230,4 @@ export function cleanupStoryImage() {
 }
 
 // 给电脑上的自测脚本用
-export const __test = { cleanTags, plainText, parsePlan, buildPrompt, portraitPrompt, DEFAULT_PROMPT, REVISE_PROMPT, PRESETS, settings, presetText, cast };
+export const __test = { cleanTags, plainText, parsePlan, buildPrompt, packLook, ANIMA36_TEXT, ANIMA36_TEXT_V1, portraitPrompt, DEFAULT_PROMPT, REVISE_PROMPT, PRESETS, settings, presetText, cast };
