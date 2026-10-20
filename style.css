@@ -2796,8 +2796,8 @@
     opacity: .8;
 }
 
-/* v1.17.5 魔法棒自动配图开关：开着时图标亮一点，一眼看出开没开 */
-#tt-autoimg-toggle-wand.tt-wand-on .extensionsMenuExtensionButton {
+/* v1.17.5 魔法棒出图开关（v1.18.35 起是「出图」那一条）：开着时图标亮一点，一眼看出开没开 */
+#tt-image-hub-wand.tt-wand-on .extensionsMenuExtensionButton {
     color: var(--SmartThemeQuoteColor, #e18a24);
 }
 
@@ -3281,3 +3281,19 @@ body:is([data-generating="true"], [data-swiping="true"]) #chat .mes.last_mes .me
 .tt-prompt-home .tt-prompt-pick small { opacity: .7; line-height: 1.4; }
 .tt-prompt-using { color: #8fd3a8; font-size: .8em; line-height: 1.4; }
 .tt-wi-draft-actions.tt-prompt-home-actions { display: none; }
+
+/* v1.18.35 魔法棒「出图」卡片页（story-image.js 的 openHubPopup）：上面一个开关，下面卡片，关着时整片变灰点不动 */
+.tt-hub h3 { margin: 0 0 10px; }
+.tt-hub .tt-hub-switch { border: 1px solid var(--SmartThemeBorderColor); border-radius: 12px; padding: 10px 12px; text-align: left; }
+.tt-hub .tt-hub-switch.tt-hub-on { border-color: rgba(143, 211, 168, .6); background: rgba(143, 211, 168, .08); }
+.tt-hub .tt-hub-switch .checkbox_label span { font-size: 1.15em; font-weight: 600; }
+.tt-hub .tt-hub-switch small { display: block; opacity: .7; margin-top: 4px; line-height: 1.4; }
+.tt-hub .tt-hub-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.tt-hub .tt-hub-card { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; margin: 0; padding: 10px; min-height: 96px; border-radius: 12px; text-align: left; white-space: normal; }
+.tt-hub .tt-hub-card i { font-size: 1.3em; opacity: .85; }
+.tt-hub .tt-hub-card b { font-size: 1.05em; }
+.tt-hub .tt-hub-card small { opacity: .65; line-height: 1.35; font-size: .82em; }
+.tt-hub .tt-hub-now { margin-top: auto; color: #8fd3a8; font-size: .82em; line-height: 1.35; }
+.tt-hub .tt-hub-act { display: flex; width: 100%; box-sizing: border-box; gap: 8px; margin: 8px 0 0; padding: 10px; border-radius: 10px; justify-content: center; }
+.tt-hub .tt-hub-off { opacity: .4; }
+.tt-hub .tt-hub-off .tt-hub-card, .tt-hub .tt-hub-off .tt-hub-act { cursor: not-allowed; }

@@ -214,7 +214,7 @@ let chatListener = null;
 let mountTimer = null;
 let queue = Promise.resolve();
 
-const toast = (kind, text) => globalThis.toastr?.[kind]?.(text, '自动配图');
+const toast = (kind, text) => globalThis.toastr?.[kind]?.(text, '出图');
 const esc = (v) => String(v ?? '').replace(/[<&>"]/g, (c) => ({ '<': '&lt;', '&': '&amp;', '>': '&gt;', '"': '&quot;' }[c]));
 
 function settings() {
@@ -351,7 +351,7 @@ async function requestWithTarget(context, target, messages, maxTokens) {
 async function askModel(context, messages, maxTokens) {
     const s = settings();
     if (!s.autoImageProfile || !profiles().some((p) => p.id === s.autoImageProfile)) {
-        throw new Error('先在「自动配图」里选一个写画图词的连接配置');
+        throw new Error('先在魔法棒「出图」→「写词模型和显示」里选一个写画图词的模型');
     }
     const target = findTarget(s.autoImageProfile);
     if (!target && !context.ConnectionManagerRequestService?.sendRequest) throw new Error('这个版本的酒馆没有「连接配置」请求接口');
@@ -510,6 +510,8 @@ async function saveCast() {
 // ---------------------------------------------------------------- 生图
 
 async function draw(context, prompt) {
+    // v1.18.35 出图只剩一个开关（用户 10-20：「就一个开关……关以后就不要再老报错了」）：关着时手动补图、重出定妆照也不画
+    if (!settings().autoImageEnabled) throw new Error('出图关着，先在魔法棒「出图」里打开');
     const sd = context.SlashCommandParser?.commands?.sd;
     if (!sd?.callback) throw new Error('没找到酒馆自带的图像生成（/sd），先在扩展里打开「图像生成」');
     const url = await sd.callback({ quiet: 'true' }, prompt);
@@ -640,7 +642,7 @@ async function drawAndAttachForce(id) {
 }
 
 // 魔法棒「打开 / 关掉自动配图」（v1.17.5）：一点就切，不用进设置。
-// 名字和说明跟着开关变，写在 wand-menu.js 的 ITEMS 里（key: autoimgtoggle），这里只发个信号让它重画
+// 名字和说明跟着开关变，写在 wand-menu.js 的 ITEMS 里（v1.18.35 起 key: imagehub），这里只发个信号让它重画
 const TOGGLE_WAND_ID = 'tt-autoimg-toggle-wand';
 export const WAND_REFRESH_EVENT = 'tt-wand-refresh';
 
@@ -648,12 +650,8 @@ function syncToggleUi() {
     const on = !!settings().autoImageEnabled;
     const box = document.getElementById('tt-autoimg-on');
     if (box && box.checked !== on) box.checked = on;
-    const icon = document.querySelector(`#${TOGGLE_WAND_ID} .extensionsMenuExtensionButton`);
-    if (icon) {
-        icon.classList.toggle('fa-toggle-on', on);
-        icon.classList.toggle('fa-toggle-off', !on);
-    }
-    document.getElementById(TOGGLE_WAND_ID)?.classList.toggle('tt-wand-on', on);
+    // v1.18.35 起魔法棒里是「出图」那一条（tt-image-hub-wand），开着时图标亮
+    document.getElementById('tt-image-hub-wand')?.classList.toggle('tt-wand-on', on);
     document.dispatchEvent(new CustomEvent(WAND_REFRESH_EVENT));
 }
 
@@ -675,6 +673,8 @@ async function reviseLook(name, request) {
         { role: 'user', content: `Current appearance: ${entry.look}\nUser request: ${request}` },
     ], 3000);
     const look = cleanTags(reply.split('\n').filter((l) => l.includes(',')).sort((a, b) => b.length - a.length)[0] || reply);
+    // v1.18.35 用户 10-20 反映「定妆照我让它改，它理解不了」：每次改长相把你写的、改之前、改之后都记进测试日志「定妆照」，好对着查
+    vlog('定妆照', `改「${name}」\n你写的：${request}\n改之前：${entry.look}\n改之后：${look}\n模型原话前 300 字：${String(reply).slice(0, 300)}`);
     if (look.split(',').length < 4) throw new Error('改长相没成功：' + reply.slice(0, 80));
     entry.look = look;
     await saveCast();
@@ -769,7 +769,7 @@ function settingsHtml() {
       <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
     </div>
     <div class="inline-drawer-content">
-      <div class="tt-tip-row"><label class="checkbox_label tt-hold-check"><input type="checkbox" id="tt-autoimg-on"> <span>每条正文自动配一张图</span></label>${tip('主模型每写完一条正文，交给下面选的模型规划一张图，再用「图像生成」画好贴到这条正文末尾。主模型和当前连接都不受影响。手机上勾选框要按住半秒才会变，防手滑。')}</div>
+      <div class="tt-tip-row"><label class="checkbox_label tt-hold-check"><input type="checkbox" id="tt-autoimg-on"> <span>出图（开着每条正文自动配一张图）</span></label>${tip('出图只有这一个开关，跟魔法棒「出图」里那个是同一个。开着：主模型每写完一条正文，交给下面选的模型规划一张图，再用「图像生成」画好贴到这条正文末尾，也能手动补。关着：什么图都不出，也不弹连不上电脑的红框。手机上勾选框要按住半秒才会变，防手滑。')}</div>
       <div class="tt-tip-row"><label class="checkbox_label tt-hold-check"><input type="checkbox" id="tt-autoimg-portrait"> <span>新角色补一张定妆照</span></label>${tip('新角色出场后补画一张定妆照。不进聊天，在左下角魔法棒「看定妆照」里看，长相也在那里改。')}</div>
       <div class="tt-tip-row"><label class="checkbox_label tt-hold-check"><input type="checkbox" id="tt-autoimg-quiet"> <span>画图时不弹提示</span></label>${tip('画图时酒馆会一直挂着一条「正在生成图像…」，挡着看正文。勾上就不弹它，出错的红色提示照样弹。')}</div>
       <div class="tt-tip-row"><label class="checkbox_label tt-hold-check"><input type="checkbox" id="tt-autoimg-clean"> <span>图铺满气泡</span></label>${tip('聊天里的图铺满气泡宽度，点图不放大，图上只留右上角一个「存到手机」按钮。')}</div>
@@ -1147,17 +1147,108 @@ async function openSettingsPopup() {
     }
 }
 
+// ---------------------------------------------------------------- 魔法棒「出图」（v1.18.35）
+// 用户 10-20：魔法棒里出图的 5 条（改配图提示词、看定妆照、自动配图设置、自动配图开关、出图套餐）太散，
+// 「整合成一个按钮，点击就出图……进去以后做成那种卡片形状的」。只剩一个开关「出图」：开 = 每条正文自动配一张、也能手动补；
+// 关 = 什么图都不出，也不弹连不上电脑的红框。各张卡还是打开原来那几个弹窗，功能没改。
+let openTaocanPopup = null;
+export function setTaocanOpener(fn) { openTaocanPopup = fn; }
+
+function lastStoryId() {
+    const chat = ctx()?.chat || [];
+    let id = chat.length - 1;
+    while (id >= 0 && (chat[id]?.is_user || chat[id]?.is_system)) id--;
+    return id;
+}
+
+function drawLast() {
+    if (!settings().autoImageEnabled) { toast('info', '出图关着，先把上面的开关打开'); return; }
+    const id = lastStoryId();
+    if (id < 0) { toast('info', '这个聊天里还没有正文'); return; }
+    toast('info', '开始配图，大约一分钟');
+    enqueue(() => drawAndAttachForce(id), '手动配图');
+}
+
+function hubCards() {
+    const s = settings();
+    const presetName = presetById(s.autoImagePresetId, s)?.name;
+    const profile = s.autoImageProfile ? profiles().find((p) => p.id === s.autoImageProfile)?.name : '';
+    const people = Object.keys(cast() || {}).length;
+    return [
+        { key: 'taocan', icon: 'fa-layer-group', name: '出图套餐', desc: '电脑上的套餐和版本，点一下换上；看最近出的图', now: '', open: () => openTaocanPopup?.() },
+        { key: 'cast', icon: 'fa-id-badge', name: '看定妆照', desc: '这张卡每个角色长什么样，能改长相、重出', now: people ? `${people} 个角色` : '还没有角色', open: openCastPopup },
+        { key: 'prompt', icon: 'fa-pen-to-square', name: '提示词风格', desc: '挑一套、改字、复制、恢复原版', now: presetName ? `正在用：${presetName}` : '', open: openPromptPopup },
+        { key: 'settings', icon: 'fa-sliders', name: '写词模型和显示', desc: '用哪个模型写画图词；画图时弹不弹提示、图铺不铺满', now: profile || '还没选写词模型', open: openSettingsPopup },
+    ];
+}
+
+function hubHtml() {
+    const on = !!settings().autoImageEnabled;
+    const url = String(ctx()?.extensionSettings?.sd?.comfy_url || '').replace(/^https?:\/\//, '').replace(/\/+$/, '');
+    const cards = hubCards().map((c) => `<div class="tt-hub-card menu_button" data-key="${c.key}"><i class="fa-solid ${c.icon}"></i><b>${c.name}</b><small>${c.desc}</small>${c.now ? `<span class="tt-hub-now">${c.now}</span>` : ''}</div>`).join('');
+    return `<h3>出图</h3>
+<div class="tt-hub-switch${on ? ' tt-hub-on' : ''}">
+  <div class="tt-tip-row"><label class="checkbox_label tt-hold-check"><input type="checkbox" id="tt-hub-on"${on ? ' checked' : ''}> <span>出图</span></label>${tip('开着：每条正文写完自动配一张图，也能点下面「给最后一条配一张」手动补。关着：什么图都不出，也不弹「连不上电脑出图」的红框。手机上按住半秒才切换，防手滑。')}</div>
+  <small>${on ? '开着：每条正文自动配一张' : '关着：不出图，也不报错'}${url ? `　画图的电脑：${url}` : ''}</small>
+</div>
+<div class="tt-hub-body${on ? '' : ' tt-hub-off'}">
+  <div class="tt-hub-grid">${cards}</div>
+  <div class="menu_button tt-hub-act" data-act="last"><i class="fa-solid fa-wand-magic-sparkles"></i> 给最后一条配一张</div>
+  <div class="menu_button tt-hub-act" data-act="sd"><i class="fa-solid fa-paintbrush"></i> 自己挑着画一张（酒馆自带菜单）</div>
+</div>`;
+}
+
+async function openHubPopup() {
+    const context = ctx();
+    if (!context?.callGenericPopup) { toast('info', '弹不出窗口'); return; }
+    const box = document.createElement('div');
+    box.className = 'tt-autoimg tt-hub';
+    const paint = () => { box.innerHTML = hubHtml(); };
+    paint();
+    box.addEventListener('change', (event) => {
+        if (event.target?.id !== 'tt-hub-on') return;
+        const s = settings();
+        s.autoImageEnabled = !!event.target.checked;
+        if (!s.autoImageEnabled) latestJob++; // 关掉时排着队、还没画的那张也不画了
+        save();
+        syncToggleUi();
+        vlog('配图', `出图开关 → ${s.autoImageEnabled ? '开' : '关'}（魔法棒「出图」）`);
+        paint();
+    });
+    box.addEventListener('click', async (event) => {
+        const card = event.target.closest?.('.tt-hub-card');
+        const act = event.target.closest?.('.tt-hub-act');
+        if (!card && !act) return;
+        if (!settings().autoImageEnabled) { toast('info', '出图关着，先把上面的开关打开'); return; }
+        if (card) {
+            const c = hubCards().find((x) => x.key === card.dataset.key);
+            await c?.open();
+            paint(); // 从卡里回来，绿字（正在用哪套、几个角色）跟着更新
+        } else if (act.dataset.act === 'last') {
+            drawLast();
+        } else if (act.dataset.act === 'sd') {
+            // 酒馆自带「生成图片」点了是个小菜单（你自己 / 整个故事 / 最后的信息 / 给我发一张……），会被这页挡在后面：先关这页再点
+            const native = document.getElementById('sd_gen');
+            if (!native) { toast('info', '没找到酒馆自带的「生成图片」，先在扩展里打开「图像生成」'); return; }
+            box.closest('dialog')?.querySelector('.popup-button-ok')?.click();
+            setTimeout(() => native.click(), 350);
+        }
+    });
+    await context.callGenericPopup(box, context.POPUP_TYPE.TEXT, '', { wide: true, large: true, okButton: '关闭', allowVerticalScrolling: true });
+}
+
 // 本扩展在魔法棒里的项。贴底顺序在 wand-menu.js 的 OWN_WAND 里管
+// v1.18.35 起出图只剩这一条；原来那 4 条（改配图提示词、看定妆照、自动配图设置、自动配图开关）的 id 留在 OLD_WAND_IDS 里，挂的时候顺手删掉
+const HUB_WAND_ID = 'tt-image-hub-wand';
+const OLD_WAND_IDS = [WAND_ID, 'tt-cast-wand', 'tt-autoimg-settings-wand', TOGGLE_WAND_ID];
 const WAND_ITEMS = [
-    { id: WAND_ID, icon: 'fa-pen-to-square', text: '改配图提示词', open: openPromptPopup },
-    { id: 'tt-cast-wand', icon: 'fa-id-badge', text: '看定妆照', open: openCastPopup },
-    { id: 'tt-autoimg-settings-wand', icon: 'fa-sliders', text: '自动配图设置', open: openSettingsPopup },
-    { id: TOGGLE_WAND_ID, icon: 'fa-toggle-off', text: '自动配图开关', open: toggleAutoImage },
+    { id: HUB_WAND_ID, icon: 'fa-image', text: '出图', open: openHubPopup },
 ];
 
 function mountWandItem() {
     const menu = document.getElementById('extensionsMenu');
     if (!menu) return false;
+    OLD_WAND_IDS.forEach((id) => document.getElementById(id)?.remove());
     for (const w of WAND_ITEMS) {
         if (document.getElementById(w.id)) continue;
         const item = document.createElement('div');
@@ -1167,7 +1258,7 @@ function mountWandItem() {
         item.innerHTML = `<div class="fa-solid ${w.icon} extensionsMenuExtensionButton"></div><span>${w.text}</span>`;
         item.addEventListener('click', () => w.open());
         menu.appendChild(item);
-        if (w.id === TOGGLE_WAND_ID) syncToggleUi();
+        if (w.id === HUB_WAND_ID) syncToggleUi();
     }
     return true;
 }
@@ -1197,14 +1288,7 @@ function mount() {
     document.querySelector(`#${SETTINGS_ID} .inline-drawer-toggle`)?.addEventListener('click', () => { fillProfiles(); renderCast(); });
 
     settingsEditor = bindPromptEditor(document.querySelector(`#${SETTINGS_ID} .tt-prompt-editor`));
-    document.getElementById('tt-autoimg-now').addEventListener('click', () => {
-        const chat = ctx()?.chat || [];
-        let id = chat.length - 1;
-        while (id >= 0 && (chat[id]?.is_user || chat[id]?.is_system)) id--;
-        if (id < 0) { toast('info', '这个聊天里还没有正文'); return; }
-        toast('info', '开始配图，大约一分钟');
-        enqueue(() => drawAndAttachForce(id), '手动配图');
-    });
+    document.getElementById('tt-autoimg-now').addEventListener('click', drawLast);
     return true;
 }
 

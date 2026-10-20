@@ -8,6 +8,7 @@
 // 电脑那头（ComfyUI 插件 jiuguan_mianban）归另一个窗口管，格式要改先跟它商量。
 
 import { tip } from './tip.js';
+import { setTaocanOpener } from './story-image.js';
 
 const WAND_ID = 'tt-taocan-wand';
 const ctx = () => globalThis.SillyTavern?.getContext?.();
@@ -215,25 +216,11 @@ async function openPopup() {
     await context.callGenericPopup(box, context.POPUP_TYPE.TEXT, '', { wide: true, large: true, okButton: '关闭', allowVerticalScrolling: true });
 }
 
-function mountWandItem() {
-    const menu = document.getElementById('extensionsMenu');
-    if (!menu) return false;
-    if (document.getElementById(WAND_ID)) return true;
-    const item = document.createElement('div');
-    item.id = WAND_ID;
-    item.className = 'list-group-item flex-container flexGap5 interactable';
-    item.tabIndex = 0;
-    item.innerHTML = '<div class="fa-solid fa-layer-group extensionsMenuExtensionButton"></div><span>出图套餐</span>';
-    item.addEventListener('click', () => openPopup());
-    menu.appendChild(item);
-    return true;
-}
-
+// v1.18.35 魔法棒里不再单独挂「出图套餐」，收进魔法棒「出图」那页的卡片（story-image.js 的 openHubPopup）
 export function initTaocan() {
     clearInterval(mountTimer);
-    if (mountWandItem()) return;
-    let tries = 0;
-    mountTimer = setInterval(() => { if (mountWandItem() || ++tries > 60) clearInterval(mountTimer); }, 500);
+    setTaocanOpener(openPopup);
+    document.getElementById(WAND_ID)?.remove();
 }
 
 export function cleanupTaocan() {
