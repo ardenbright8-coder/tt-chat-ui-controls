@@ -11,6 +11,7 @@
 - 聊天：`chat-scroll-guard.js` 看旧消息时保住位置｜`immersive.js` 沉浸式聊天｜`chat-input-hint.js` 输入框灰字｜`chat-tools.js` 聊天按钮（变量收进 ≡、快捷工具「深入」、到最底下、藏 Agent、接管发送、≡「写法说明」）｜`text-editor.js` 改长文字的大窗口（`openTextEditor`）
 - 变量：`mvu-fix.js` 自动修 MVU 格式 + 变量小框｜`var-log.js` ≡「测试日志」（查问题全靠它）
 - 魔法棒「出图」（v1.18.35，`story-image.js` 的 `openHubPopup`）：出图只剩这一条入口、一个开关（`autoImageEnabled`）。关着时 `draw()` 直接不画（手动补图、重出定妆照也不画）。四张卡打开的还是原来那几个弹窗（套餐那个由 `taocan.js` 用 `setTaocanOpener` 递过来，`taocan.js` 自己不再挂魔法棒项）；旧魔法棒项 id 在 `OLD_WAND_IDS`，挂的时候删掉。「自己挑着画」要先关这页再点 `#sd_gen`，不然酒馆那个小菜单被挡在后面。用户 10-20：「整合成一个按钮……进去以后做成那种卡片形状的」「就做一个开关就行了」
+- 定妆照放开（v1.18.36，`story-image.js` 的 `REVISE_PROMPT` / `PORTRAIT_PICK_PROMPT` / `portraitDress`）：改长相回 JSON `{look, outfit, setting, mood}`，衣服背景神态存进那个角色的 `outfit / setting / mood`；`outfit` 空着就每次现挑（`lastOutfit` 记上回穿的，叫它换个样）。两段都不许写灯光词。只画成年人。用户 10-20：「我每次说写得熟女一点，或者说换个衣服啥的，都换不了」「固定出就没意思」。电脑那头 3.6 套餐也写死了国风古风、红金衣饰、黑发、熟女，另做了 3.7「出图提示词优化」放开（个人娱乐酒馆面板）；手机这边放开了，用 3.6 照样会被画回古风
 - 排版容错：`format-fix.js`（v1.18.34）往酒馆「正则」里放一条全局、只改显示的规则，去掉标签和 ``` 前的缩进；AI 照着缩进的示范写状态栏，酒馆 markdown 当成代码原样显示。规则 id `tt-chat-ui-controls-format-fix`，开关关了就删规则；停用扩展不删（停用不该改显示）。用户 10-20：「一劳永逸」
 - 剧情：`story-summary.js` 总结全文 / 总结库 / 空白开局 / 总结带数值
 - 配图：`story-image.js` 自动配图、定妆照、提示词风格｜`taocan.js` 出图套餐（连电脑 ComfyUI）

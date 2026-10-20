@@ -200,9 +200,20 @@ const PRESETS = [
 
 const DEFAULT_PROMPT = PRESETS[0].text;
 
-const REVISE_PROMPT = `You maintain one character's fixed appearance for an anime image model that reads Danbooru tags.
-You get her current appearance tags and the user's request in Chinese. Change ONLY what the request asks for; copy every other tag over unchanged (hairstyle, body, skin, marks stay as they are unless the request mentions them).
-Output ONLY the revised appearance: English tags, lowercase, comma-separated, covering mature female, face shape, eye shape and color, hair color, hair length and style, body, skin, one distinctive mark. No clothing, no expression, no explanation.`;
+// v1.18.35 改长相放开（用户 10-20：「我每次说写得熟女一点，或者说换个衣服啥的，都换不了」「年龄不能自由点吗」）：
+// 以前只许改脸和身材、衣服表情一概扔掉，还每次硬塞 mature female。现在年龄感、脸、皮肤、身材、发型发色都照他说的改；
+// 说到衣服、年代背景、神态，另外记进 outfit / setting / mood，定妆照照着画。只画成年人这条不变
+const REVISE_PROMPT = `You maintain one adult woman's look for an anime image model that reads Danbooru tags.
+You get her current appearance tags, her current portrait outfit, setting and mood (any may be empty), and the user's request in Chinese.
+Do what the request asks. Appearance (look): age feel (she is always an adult: young adult woman, woman in her twenties, mature woman, milf and so on), face shape, eyes, skin tone, body, hair color and style, marks. Change what the request mentions and copy every other appearance tag over unchanged.
+If the request mentions her clothes or accessories, put them in outfit; background, place or era (modern, ancient chinese, 1930s and so on) in setting; expression, pose or attitude in mood. Whatever the request does not mention, copy over as given (empty stays empty). If the user wants her clothes to change freely again (随便穿, 每次换, 衣服别固定), set outfit and setting to empty.
+Reply with JSON only, no explanation: {"look": "...", "outfit": "...", "setting": "...", "mood": "..."}. All values are English tags, lowercase, comma-separated. look has no clothing and no expression. Never write lighting or color grading (no warm, dim, dark, moody): lighting is fixed elsewhere.`;
+
+// 定妆照没定衣服时，按这张卡的年代和剧情现挑一套，每次换个样（用户 10-20：「每次都是一套衣服……固定出就没意思」）
+const PORTRAIT_PICK_PROMPT = `You dress one adult woman for a single portrait by an anime image model that reads Danbooru tags.
+You get her name, her appearance tags, the character card and the latest story text. Work out the story's era and world (modern city, ancient china, fantasy, 1930s shanghai and so on) and pick something she would plausibly wear in it, a little sensual (bare shoulders, cleavage or a slit is fine). Pick a different outfit from the one listed as last time, and a fitting background and mood.
+mood is only her expression and pose. Never write lighting, time of day brightness or color grading anywhere (no warm, dim, dark, night lighting, moody, cinematic): lighting is fixed elsewhere and must stay bright.
+Reply with JSON only: {"outfit": "...", "setting": "...", "mood": "..."}. English tags, lowercase, comma-separated. No appearance tags (no face, hair, body).`;
 
 // 这些类型的消息不配图：续写会把同一条拉长、扮演是替用户写、quiet/extension 是后台或扩展自己发的
 const SKIP_TYPES = new Set(['continue', 'impersonate', 'quiet', 'extension', 'first_message']);
@@ -462,8 +473,45 @@ function buildPrompt(plan, cast, presetId) {
 }
 
 // 定妆照：只放在魔法棒「看定妆照」里看，不贴进聊天。照样要带点情欲感
-function portraitPrompt(look) {
-    return cleanTags(`sensitive, 1girl, solo, ${look}, upper body, looking at viewer, seductive smile, blush, bare shoulders, off shoulder, collarbone, cleavage, hanfu, indoors, chinese style room, blurry background, ${BRIGHT_TAGS}`);
+// v1.18.35 衣服、背景、神态不再写死成汉服 + 中式房间 + 勾人的笑：用 dress（他改长相时说的，或者现挑的）
+function portraitPrompt(look, dress = {}) {
+    const outfit = cleanTags(dress.outfit || '') || 'bare shoulders, collarbone, cleavage';
+    const setting = cleanTags(dress.setting || '') || 'indoors';
+    const mood = cleanTags(dress.mood || '') || 'seductive smile, light blush';
+    return cleanTags(`sensitive, 1girl, solo, ${look}, ${outfit}, upper body, looking at viewer, ${mood}, ${setting}, blurry background, ${BRIGHT_TAGS}`);
+}
+
+function parseJsonReply(reply) {
+    const text = String(reply ?? '');
+    const m = text.match(/\{[\s\S]*\}/);
+    if (!m) return null;
+    try { return JSON.parse(m[0]); } catch { return null; }
+}
+
+// 定妆照穿什么：他定过（entry.outfit）就照他的；没定就按卡和剧情现挑一套，跟上回不一样
+async function portraitDress(context, name, entry) {
+    if (entry.outfit) return { outfit: entry.outfit, setting: entry.setting, mood: entry.mood };
+    const char = context.characters?.[context.characterId];
+    const last = [...(context.chat || [])].reverse().find((m) => m && !m.is_user && !m.is_system);
+    const parts = [`Name: ${name}`, `Appearance: ${entry.look}`];
+    if (char?.description) parts.push(`Character card:\n${plainText(char.description).slice(0, 1200)}`);
+    if (char?.scenario) parts.push(`Scenario:\n${plainText(char.scenario).slice(0, 400)}`);
+    if (last?.mes) parts.push(`Latest story text:\n${plainText(last.mes).slice(-1200)}`);
+    parts.push(`Last time she wore: ${entry.lastOutfit || '(nothing yet)'}`);
+    try {
+        const dress = parseJsonReply(await askModel(context, [
+            { role: 'system', content: PORTRAIT_PICK_PROMPT },
+            { role: 'user', content: parts.join('\n\n') },
+        ], 2000));
+        if (dress?.outfit) {
+            entry.lastOutfit = cleanTags(dress.outfit);
+            vlog('定妆照', `「${name}」这回穿：${dress.outfit}｜背景：${dress.setting || ''}｜神态：${dress.mood || ''}`);
+            return dress;
+        }
+    } catch (error) {
+        vlog('定妆照', `「${name}」挑衣服没成功，照默认画：${error?.message || error}`);
+    }
+    return {};
 }
 
 // ---------------------------------------------------------------- 长相档案
@@ -615,7 +663,7 @@ async function drawAndAttach(id, type, job = latestJob, force = false) {
     if (s.autoImagePortrait) {
         for (const [name] of fresh) {
             if (stale(job)) break;
-            const p = await draw(context, portraitPrompt(known[name].look));
+            const p = await draw(context, portraitPrompt(known[name].look, await portraitDress(context, name, known[name])));
             if (p && known[name]) { known[name].portrait = p; await saveCast(); }
         }
     }
@@ -670,15 +718,18 @@ async function reviseLook(name, request) {
     if (!entry) return;
     const reply = await askModel(context, [
         { role: 'system', content: REVISE_PROMPT },
-        { role: 'user', content: `Current appearance: ${entry.look}\nUser request: ${request}` },
+        { role: 'user', content: `Current appearance: ${entry.look}\nCurrent portrait outfit: ${entry.outfit || ''}\nCurrent portrait setting: ${entry.setting || ''}\nCurrent portrait mood: ${entry.mood || ''}\nUser request: ${request}` },
     ], 3000);
-    const look = cleanTags(reply.split('\n').filter((l) => l.includes(',')).sort((a, b) => b.length - a.length)[0] || reply);
+    const json = parseJsonReply(reply);
+    // 回的不是 JSON（老模型、格式写歪）就照老办法：挑最长那行逗号标签当长相
+    const look = cleanTags(json?.look || reply.split('\n').filter((l) => l.includes(',')).sort((a, b) => b.length - a.length)[0] || reply);
     // v1.18.35 用户 10-20 反映「定妆照我让它改，它理解不了」：每次改长相把你写的、改之前、改之后都记进测试日志「定妆照」，好对着查
-    vlog('定妆照', `改「${name}」\n你写的：${request}\n改之前：${entry.look}\n改之后：${look}\n模型原话前 300 字：${String(reply).slice(0, 300)}`);
+    vlog('定妆照', `改「${name}」\n你写的：${request}\n改之前：${entry.look}｜衣服 ${entry.outfit || '（没定）'}｜背景 ${entry.setting || '（没定）'}｜神态 ${entry.mood || '（没定）'}\n改之后：${look}｜衣服 ${json?.outfit || ''}｜背景 ${json?.setting || ''}｜神态 ${json?.mood || ''}\n模型原话前 300 字：${String(reply).slice(0, 300)}`);
     if (look.split(',').length < 4) throw new Error('改长相没成功：' + reply.slice(0, 80));
     entry.look = look;
+    if (json) for (const k of ['outfit', 'setting', 'mood']) entry[k] = cleanTags(json[k] || '');
     await saveCast();
-    const url = await draw(context, portraitPrompt(look));
+    const url = await draw(context, portraitPrompt(look, await portraitDress(context, name, entry)));
     if (url) {
         entry.portrait = url;
         await saveCast();
@@ -797,7 +848,8 @@ function renderCast() {
 <div class="tt-cast-row" data-name="${esc(name)}">
   <div class="tt-cast-head">${c.portrait ? `<img src="${esc(c.portrait)}" alt="">` : ''}<b>${esc(name)}</b></div>
   <textarea class="text_pole tt-cast-look" rows="3">${esc(c.look)}</textarea>
-  <input class="text_pole tt-cast-ask" placeholder="想怎么改（中文），比如：脸再瓜子一点，丹凤眼，头发换成栗色">
+  <small class="tt-cast-dress">定妆照衣服：${c.outfit ? esc([c.outfit, c.setting].filter(Boolean).join('｜')) : '没定，每次按这张卡的年代换一套'}</small>
+  <input class="text_pole tt-cast-ask" placeholder="想怎么改（中文），比如：熟女一点，短发栗色，穿现代 OL 装；写「衣服随便」就每次换">
   <div class="flex-container">
     <div class="menu_button tt-cast-redo">按这个改，再出一张定妆照</div>
     <div class="menu_button tt-cast-del">删掉这个角色</div>
@@ -1380,4 +1432,4 @@ export function cleanupStoryImage() {
 }
 
 // 给电脑上的自测脚本用
-export const __test = { attach, markOf, cleanTags, plainText, parsePlan, buildPrompt, packLook, ANIMA36_TEXT, ANIMA36_TEXT_V1, portraitPrompt, DEFAULT_PROMPT, REVISE_PROMPT, PRESETS, settings, presetText, cast };
+export const __test = { attach, markOf, cleanTags, plainText, parsePlan, buildPrompt, packLook, ANIMA36_TEXT, ANIMA36_TEXT_V1, portraitPrompt, parseJsonReply, PORTRAIT_PICK_PROMPT, DEFAULT_PROMPT, REVISE_PROMPT, PRESETS, settings, presetText, cast };
