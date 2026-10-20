@@ -1,0 +1,21 @@
+import fs from 'node:fs';
+import { execFileSync } from 'node:child_process';
+const dir = fs.readdirSync('E:/个人AI资源管理/60_公用资源（钩子·skill·搜索引擎·可后期扩展）').find((n) => n.startsWith('模型API密钥'));
+const j = JSON.parse(fs.readFileSync(`E:/个人AI资源管理/60_公用资源（钩子·skill·搜索引擎·可后期扩展）/${dir}/酒馆模型清单.json`, 'utf8'));
+const p = j.平台.find((x) => x.名字.includes(process.argv[2]));
+const code = `
+const c=SillyTavern.getContext();
+const h=c.getRequestHeaders();
+const w=await fetch('/api/secrets/write',{method:'POST',headers:h,body:JSON.stringify({key:'api_key_custom',value:${JSON.stringify(p.钥匙)}})});
+const s=c.chatCompletionSettings;
+s.chat_completion_source='custom'; s.custom_url=${JSON.stringify(p.地址)}; s.custom_model=${JSON.stringify(process.argv[3])};
+$('#chat_completion_source').val('custom').trigger('change');
+$('#custom_api_url_text').val(s.custom_url).trigger('input');
+$('#custom_model_id').val(${JSON.stringify(process.argv[3])}).trigger('input');
+c.saveSettingsDebounced();
+$('#api_button_openai').trigger('click');
+await new Promise(r=>setTimeout(r,6000));
+return 'secret '+w.status+' online='+c.onlineStatus;`;
+fs.writeFileSync('_setapi.js', code);
+console.log(execFileSync('node', ['cdp.mjs', 'file', '_setapi.js']).toString());
+fs.unlinkSync('_setapi.js');

@@ -1208,9 +1208,44 @@ function mount() {
     return true;
 }
 
+// v1.18.33 自动配图关着，就挡掉「连不上电脑出图」的红框（用户 10-20：「它不生图的话，就不要老是提醒嘛」）。
+// 红框是酒馆自带「图像生成」弹的：来源选了 ComfyUI，一打开酒馆就去问电脑 /object_info 要模型清单，电脑出图没开就报
+// 「后端错误 SD request failed … object_info」。只挡这一种，别的报错照常弹；挡下的记进测试日志「配图」。
+const SD_DOWN = /SD request failed|object_info/i;
+let toastBodyObs = null;
+let toastBoxObs = null;
+
+function hushSdToasts(box) {
+    if (settings().autoImageEnabled) return;
+    for (const el of box.querySelectorAll(':scope > .toast')) {
+        const text = el.innerText || el.textContent || '';
+        if (!SD_DOWN.test(text)) continue;
+        el.remove();
+        vlog('配图', `自动配图关着，挡下一条出图连不上的提示：${text.replace(/\s+/g, ' ').slice(0, 200)}`);
+    }
+}
+
+function watchToasts() {
+    const hook = () => {
+        const box = document.getElementById('toast-container');
+        if (!box || toastBoxObs?.box === box) return;
+        toastBoxObs?.disconnect();
+        toastBoxObs = new MutationObserver(() => hushSdToasts(box));
+        toastBoxObs.box = box;
+        toastBoxObs.observe(box, { childList: true });
+        hushSdToasts(box);
+    };
+    hook();
+    if (!toastBodyObs && document.body) {
+        toastBodyObs = new MutationObserver(hook);
+        toastBodyObs.observe(document.body, { childList: true });
+    }
+}
+
 export function initStoryImage() {
     const context = ctx();
     applyQuietToast();
+    watchToasts();
     const types = context?.eventTypes ?? context?.event_types;
     if (context?.eventSource?.on && types) {
         if (!receivedListener && types.MESSAGE_RECEIVED) {
@@ -1243,6 +1278,9 @@ export function cleanupStoryImage() {
         if (chatListener) off(types.CHAT_CHANGED, chatListener);
     }
     receivedListener = profileListener = chatListener = null;
+    toastBodyObs?.disconnect();
+    toastBoxObs?.disconnect();
+    toastBodyObs = toastBoxObs = null;
     clearInterval(mountTimer);
     chatObserver?.disconnect();
     chatObserver = null;

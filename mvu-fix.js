@@ -151,15 +151,33 @@ export function readChanges(text) {
         const patch = looseParse(m[2]);
         if (isPatch(patch)) pushPatch(patch);
     }
-    // 老写法 _.set('路径', 旧值, 新值); / _.add('路径', 数);
-    for (const m of src.matchAll(/_\.(set|add)\(\s*(['"])(.+?)\2\s*,([^;\n]*?)\)\s*;/g)) {
+    // 老写法 _.set('路径', 旧值, 新值); / _.add('路径', 数);（分号可有可无，MVU 两种都认）
+    for (const m of src.matchAll(/_\.(set|add)\(\s*(['"])(.+?)\2\s*,([^;\n]*?)\)\s*(?:;|$|\/\/)/gm)) {
         const args = splitArgs(m[4]);
         const raw = args[args.length - 1];
         if (raw == null) continue;
-        out.push({ path: m[3].split('.').filter(Boolean), kind: m[1] === 'add' ? 'add' : 'set', value: parseArg(raw) });
+        out.push({ path: parsePath(m[3]), kind: m[1] === 'add' ? 'add' : 'set', value: parseArg(raw) });
     }
     return out;
 }
+
+// 'a.b[0]'、"a['b c'][0]"、'a.b.0' → ['a','b','0']
+// v1.18.33：以前只按点切，「世界.当前时间[0]」切成「当前时间[0]」一整段，读不到值，
+// 老写法的卡（陆雪琪这类）每条都标红「没算上」、还替用户去点重新处理变量。
+export function parsePath(text) {
+    const out = [];
+    for (const m of String(text ?? '').matchAll(/\[\s*(['"])(.*?)\1\s*\]|\[\s*(\d+)\s*\]|([^.[\]]+)/g)) {
+        const part = m[2] ?? m[3] ?? m[4];
+        if (part !== undefined && part.trim() !== '') out.push(part.trim());
+    }
+    return out;
+}
+
+// 给人看的名字：去掉 [0] 这种下标
+const pathLabel = (path) => path.filter((p) => !/^\d+$/.test(p));
+
+// 变化量：修为 1.5 → 1.6 算出来是 0.10000000000000009，留到小数后两位
+const delta = (d) => `${d > 0 ? '+' : ''}${Math.round(d * 100) / 100}`;
 
 function splitArgs(s) {
     const out = [];
@@ -425,7 +443,7 @@ function show(v) {
 }
 
 function rowHtml(r) {
-    const label = r.path.join(' · ') || '（根）';
+    const label = pathLabel(r.path).join(' · ') || '（根）';
     const oldText = show(r.old);
     const newText = show(r.ok === false ? (r.want ?? r.value) : r.now);
     const long = oldText.length > 16 || newText.length > 16;
@@ -434,7 +452,7 @@ function rowHtml(r) {
     let change = '';
     if (typeof r.old === 'number' && typeof r.now === 'number' && r.ok !== false && r.now !== r.old) {
         const d = r.now - r.old;
-        change = `<span class="${d > 0 ? 'tt-mvu-up' : 'tt-mvu-down'}">${d > 0 ? '+' : ''}${d}</span>`;
+        change = `<span class="${d > 0 ? 'tt-mvu-up' : 'tt-mvu-down'}">${delta(d)}</span>`;
     }
     return `<div class="tt-mvu-row${long ? ' tt-mvu-long' : ''}${r.ok === false ? ' tt-mvu-row-bad' : ''}">`
         + `<span class="tt-mvu-name">${esc(label)}</span>`
@@ -476,7 +494,7 @@ function decorateMessage(el, chat) {
     card.dataset.sig = sig;
     // 一行摘要：数字变了的写「林婉茹忠诚度 +3」，没有数字变化就写改了几项
     const numeric = rows.filter((r) => typeof r.old === 'number' && typeof r.now === 'number' && r.now !== r.old && r.ok !== false)
-        .map((r) => `${r.path.slice(-2).join('')} ${r.now - r.old > 0 ? '+' : ''}${r.now - r.old}`);
+        .map((r) => `${pathLabel(r.path).slice(-2).join('')} ${delta(r.now - r.old)}`);
     let head;
     if (bare.length && !changes.length) head = '变量 · AI 的格式不对，MVU 没认';
     else if (!after) head = `变量 · ${changes.length} 项，还没算`;
