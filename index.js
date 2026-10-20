@@ -15,6 +15,7 @@ import { initTaocan, cleanupTaocan } from './taocan.js';
 import { initMvuFix, cleanupMvuFix } from './mvu-fix.js';
 import { initVarLog, cleanupVarLog } from './var-log.js';
 import { initChatTools, cleanupChatTools } from './chat-tools.js';
+import { initFormatFix, cleanupFormatFix } from './format-fix.js';
 
 const EXTENSION_KEY = 'chat-text-color';
 
@@ -826,6 +827,7 @@ export async function init() {
     initVarLog();
     initMvuFix();
     initChatTools();
+    initFormatFix();
     if (initialized) {
         mountUi();
         return;
@@ -856,6 +858,7 @@ export async function cleanup() {
     cleanupTaocan();
     cleanupMvuFix();
     cleanupChatTools();
+    cleanupFormatFix();
     cleanupVarLog();
     cleanupContextLock();
     cleanupPromptDetachGuard();

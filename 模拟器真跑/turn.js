@@ -5,7 +5,7 @@ box.value=globalThis.__msg; box.dispatchEvent(new Event('input',{bubbles:true}))
 document.getElementById('send_but').click();
 const t0=Date.now();
 const gen=()=>{const s=document.getElementById('mes_stop'); return s&&getComputedStyle(s).display!=='none';};
-while(Date.now()-t0<240000){ await new Promise(r=>setTimeout(r,2000)); if(c.chat.length>before+1 && !gen() && !Mvu.isDuringExtraAnalysis?.()) break; }
+while(Date.now()-t0<240000){ await new Promise(r=>setTimeout(r,2000)); if(c.chat.length>before+1 && !gen() && !globalThis.Mvu?.isDuringExtraAnalysis?.()) break; }
 await new Promise(r=>setTimeout(r,8000));
 const id=c.chat.length-1, m=c.chat[id];
 const st=x=>x?.variables?.[x.swipe_id||0]?.stat_data;

@@ -1,0 +1,13 @@
+globalThis.localStorage = { getItem: () => null, setItem() {} };
+globalThis.document = { getElementById: () => null };
+const m = await import(new URL('../format-fix.js', import.meta.url).href);
+const src = m.FIND; const body = src.slice(1, src.lastIndexOf('/')); const flags = src.slice(src.lastIndexOf('/') + 1);
+const re = new RegExp(body, flags);
+const F = '`'.repeat(3);
+const eq = (a, b, n) => { const ok = a === b; console.log(ok ? '绿' : '红', n, ok ? '' : JSON.stringify(a)); if (!ok) process.exitCode = 1; };
+const fix = (t) => t.replace(re, '');
+eq(fix('  <StatusBlock>\n    <details>\n    <summary>x</summary>\n\n    ' + F + '\n    姓名: a\n    ' + F + '\n\n    </details>'), '<StatusBlock>\n<details>\n<summary>x</summary>\n\n' + F + '\n    姓名: a\n' + F + '\n\n</details>', '状态栏去缩进');
+eq(fix('　　她笑了笑。\n    他说：「好」'), '　　她笑了笑。\n    他说：「好」', '正文缩进不动');
+eq(fix('    <b>加粗</b>开头'), '<b>加粗</b>开头', '标签开头的行');
+eq(fix('    < 3 这不是标签'), '    < 3 这不是标签', '小于号不算标签');
+eq(fix('    <StatusPlaceHolderImpl/>'), '<StatusPlaceHolderImpl/>', '自闭合标签');
