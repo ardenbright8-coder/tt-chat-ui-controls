@@ -383,7 +383,64 @@ ${NO_REHASH}
 - 节奏放慢，情绪一点点推；{{user}}在不在场跟剧情走：在场就停在留给他接的地方，不在场就写好在场角色自己的戏、停在自然告一段落的地方。`;
 
 const LIVE3_NAME = '活人版 3';
-const LIVE_LATEST = 'live3';
+
+// v1.18.38「活人版 V5」（用户 2026-10-20 定：在 V3 基础上削弱对话但保留交锋和动作神态环境的骨头架子）：
+const PUSH_LIVE5 = PUSH_LIVE3;
+
+const SEND_LIVE5 = `【写好这一轮】
+{{user}}写的是这一轮的方向。照他的意思让它发生，再顺着它往外带一点：让他这一下激起新的东西，顺手写深一点。
+
+先想（不写出来）：
+- {{user}}这一下要的是什么劲儿？撩、哄、逼、试探、使坏，还是闹着玩？抓住这个劲儿。
+- 这一下落到每个人身上，按各自的人设，会激起什么情绪、引出什么新反应？
+
+写的时候：
+- 照他写的走：不改他的意思，不替他多说话、多做决定；他写的要写饱满，开口要有味道，动作写出画面。
+- 往外带一点：他这一下要有回响，在场的人接得住、反应得出来，局面、关系或气氛因此变一点。可以顺着他这一下引出他没料到的反应、一件突发的小事、一个跟眼下有关的人插进来。地点跟着他写的走，不跳时间，不另起跟他这一下无关的事。
+${NO_REHASH}
+- 这是成人向的言情和日常：心动、暧昧、试探、吃醋、闹别扭、亲热，或者过日子的小事。气氛跟着戏走：该正经就正经，该撩就撩，该露骨就露骨，不刻意端着。
+- 人设是底线：别人怎么接，都得是这个人会有的样子。不为了配合他一味顺从，会躲、会顶回来、会反撩。
+- 情绪要满、会变：遇事就有反应，紧张、慌乱、狂喜、嫉妒、委屈、羞恼、失控、癫狂都可能。性子冷、能忍的也会有裂缝：手抖、声音变了、话突然少了。被一句话点着，又被一件事浇灭，不是一条直线。脸色、眼神、呼吸、声音、手上的动作、身体的反应，都写得让人看得见。
+- 顺手写深：他这一下里挑一个最打动人的瞬间多停一笔。
+- {{user}}在不在场跟剧情走：在场就停在他得接的地方；不在场就写好在场角色自己的戏，停在自然告一段落的地方。`;
+
+const DEEPEN_LIVE5 = `【深入这场戏】
+{{user}}这轮没写，交给你把眼下这一刻往深里写，不急着往前推。
+
+先想（不写出来）：
+- 这一刻每个人想要什么、顾忌什么、藏着什么？{{user}}在不在场跟剧情走：在场时他正在做的事和打算是前提，顺着写，别替他改主意；不在场就按在场角色自己的处境想。
+- 这一刻还有哪一层没写到？
+
+写的时候：
+- 守住这场戏：剧情不换，地点不换，不跳时间，不加新人，不来突发事件。最多在同一处挪一小步（比如换个房间），故事得是连着的。
+- 往深挖：笔墨停在这一刻，把它写透。想加点意思，就加一个合情合理的小变化，让这一刻多一层张力或趣味，不把局面翻过来。
+${NO_REHASH}
+- 人设是底线：按各自的性格内核和此刻处境去反应，有自己的算盘，不为配合谁变笨变软。
+- 留住交锋的架子：开口时你来我往、话里有话；动作、神态、环境一起给这一刻加分量。
+- 这是成人向的言情和日常：该正经就正经，该撩就撩，该露骨就露骨，不刻意端着。
+- 情绪要满、会变：紧张、慌乱、狂喜、嫉妒、委屈、羞恼、失控、癫狂都可能。性子冷、能忍的也会有裂缝：手抖、声音变了、话突然少了。脸色、眼神、呼吸、声音、手上的动作、身体的反应，都写得让人看得见。
+- 节奏放慢，情绪一点点推；{{user}}在场就停在留给他接的地方，不在场就写好在场角色自己的戏、停在自然告一段落的地方。`;
+
+const DEEPEN_TEXT_LIVE5 = `【深入这场戏】
+{{user}}这轮写了一段。照他的意思让它发生，然后不急着往前推，就在他这一下上往深里写。
+
+先想（不写出来）：
+- 他这一下要的是什么劲儿？落到每个人身上，激起了什么情绪、碰到了哪个心思？
+- 这一下里还有哪一层没写到？
+
+写的时候：
+- 照他写的走：不改他的意思，不替他多说话、多做决定。
+- 守住这场戏：剧情不换，地点不换，不跳时间，不加新人，不来突发事件。他自己写了挪地方才挪；故事得是连着的。
+- 往深挖：笔墨停在他这一下激起的反应上，把它写透。想加点意思，就加一个合情合理的小变化，不把局面翻过来。
+${NO_REHASH}
+- 人设是底线：按各自的性格内核和此刻处境去反应，有自己的算盘，不为配合谁变笨变软，会躲、会顶回来、会反撩。
+- 留住交锋的架子：开口时你来我往、话里有话；动作、神态、环境一起给这一刻加分量。
+- 这是成人向的言情和日常：该正经就正经，该撩就撩，该露骨就露骨，不刻意端着。
+- 情绪要满、会变：紧张、慌乱、狂喜、嫉妒、委屈、羞恼、失控、癫狂都可能。性子冷、能忍的也会有裂缝：手抖、声音变了、话突然少了。脸色、眼神、呼吸、声音、手上的动作、身体的反应，都写得让人看得见。
+- 节奏放慢，情绪一点点推；{{user}}在不在场跟剧情走：在场就停在留给他接的地方，不在场就写好在场角色自己的戏、停在自然告一段落的地方。`;
+
+const LIVE5_NAME = '活人版 V5';
+const LIVE_LATEST = 'live5';
 
 // ≡「写法说明」里能改的四段（v1.18.30 加了「深入（写了字）」）
 // 存档里「自带的」（v1.18.23 加；v1.18.24 不编号，名字概括内容）：defName 原版的名字，olds 以前的版本
@@ -396,18 +453,18 @@ const PROMPTS = [
             { bid: 'v2', name: '能加配角小事，对话为主', text: DEEPEN_V2 },
             { bid: 'v1', name: '锁住场景，七条细写', text: DEEPEN_V1 },
         ],
-        lives: () => [{ bid: 'live', name: LIVE_NAME, text: DEEPEN_LIVE }, { bid: 'live2', name: LIVE2_NAME, text: DEEPEN_LIVE2 }, { bid: 'live3', name: LIVE3_NAME, text: DEEPEN_LIVE3 }] },
+        lives: () => [{ bid: 'live', name: LIVE_NAME, text: DEEPEN_LIVE }, { bid: 'live2', name: LIVE2_NAME, text: DEEPEN_LIVE2 }, { bid: 'live3', name: LIVE3_NAME, text: DEEPEN_LIVE3 }, { bid: 'live5', name: LIVE5_NAME, text: DEEPEN_LIVE5 }] },
     { key: 'deepenTextPrompt', name: '深入（写了字）', desc: '输入框有字再点「深入」时用：照你写的走，在你这一下上往深里写', def: () => DEEPEN_TEXT_LIVE,
         defBid: 'live', defName: LIVE_NAME,
-        lives: () => [{ bid: 'live2', name: LIVE2_NAME, text: DEEPEN_TEXT_LIVE2 }, { bid: 'live3', name: LIVE3_NAME, text: DEEPEN_TEXT_LIVE3 }] },
+        lives: () => [{ bid: 'live2', name: LIVE2_NAME, text: DEEPEN_TEXT_LIVE2 }, { bid: 'live3', name: LIVE3_NAME, text: DEEPEN_TEXT_LIVE3 }, { bid: 'live5', name: LIVE5_NAME, text: DEEPEN_TEXT_LIVE5 }] },
     { key: 'sendPrompt', name: '写了字发送', desc: '输入框有字点发送时用：照你写的走，写出戏来', def: () => DEFAULT_SEND,
         defBid: 'v2', defName: '范式：看局势、立人设、情绪分明、结尾开放',
         olds: () => [{ bid: 'def', name: '照你写的走，写得好看（短）', text: SEND_V1 }],
-        lives: () => [{ bid: 'live', name: LIVE_NAME, text: SEND_LIVE }, { bid: 'live2', name: LIVE2_NAME, text: SEND_LIVE2 }, { bid: 'live3', name: LIVE3_NAME, text: SEND_LIVE3 }] },
+        lives: () => [{ bid: 'live', name: LIVE_NAME, text: SEND_LIVE }, { bid: 'live2', name: LIVE2_NAME, text: SEND_LIVE2 }, { bid: 'live3', name: LIVE3_NAME, text: SEND_LIVE3 }, { bid: 'live5', name: LIVE5_NAME, text: SEND_LIVE5 }] },
     { key: 'pushPrompt', name: '空着发送', desc: '输入框空着点发送时用：另起一条，往下走一步', def: () => DEFAULT_PUSH,
         defBid: 'v2', defName: '范式：推到转折，看局势、立人设、结尾开放',
         olds: () => [{ bid: 'def', name: '往下走一步，要有转折（短）', text: PUSH_V1 }],
-        lives: () => [{ bid: 'live', name: LIVE_NAME, text: PUSH_LIVE }, { bid: 'live2', name: LIVE2_NAME, text: PUSH_LIVE2 }, { bid: 'live3', name: LIVE3_NAME, text: PUSH_LIVE3 }] },
+        lives: () => [{ bid: 'live', name: LIVE_NAME, text: PUSH_LIVE }, { bid: 'live2', name: LIVE2_NAME, text: PUSH_LIVE2 }, { bid: 'live3', name: LIVE3_NAME, text: PUSH_LIVE3 }, { bid: 'live5', name: LIVE5_NAME, text: PUSH_LIVE5 }] },
 ];
 
 let mountTimer = null;
@@ -424,7 +481,7 @@ let bound = false;
 
 function settings() {
     const all = ctx()?.extensionSettings;
-    if (!all) return { varsInMenu: true, deepenButton: true, sendTakeover: true, deepenPrompt: DEEPEN_LIVE3, deepenTextPrompt: DEEPEN_TEXT_LIVE3, sendPrompt: SEND_LIVE3, pushPrompt: PUSH_LIVE3 };
+    if (!all) return { varsInMenu: true, deepenButton: true, sendTakeover: true, deepenPrompt: DEEPEN_LIVE5, deepenTextPrompt: DEEPEN_TEXT_LIVE5, sendPrompt: SEND_LIVE5, pushPrompt: PUSH_LIVE5 };
     const s = all[EXTENSION_KEY] = all[EXTENSION_KEY] || {};
     if (typeof s.varsInMenu !== 'boolean') s.varsInMenu = true;
     if (typeof s.deepenButton !== 'boolean') s.deepenButton = true;
