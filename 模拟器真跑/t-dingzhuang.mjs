@@ -55,8 +55,8 @@ for (let i = 1; i <= 2; i++) {
 
 if (起) {
     const require = createRequire(import.meta.url);
-    const 出图 = require('C:/A-AI-gongju/geren-yule/工具/酒馆/出图/后台.js').处理;
-    const 夹 = 'C:/A-AI-gongju/jiuguan-shengtu/ComfyUI_windows_portable/ComfyUI/output';
+    const 出图 = require('F:/程序/0045_个人娱乐/工具/酒馆/出图/后台.js').处理;
+    const 夹 = 'F:/程序/0044_酒馆生图/ComfyUI_windows_portable/ComfyUI/output';
     let 号 = 起;
     for (const x of 画) {
         const r = await 出图.生图试一张({ 描述: x.词, 种子: 2026102100 + 号 });
