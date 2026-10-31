@@ -25,40 +25,52 @@ const ctx = () => globalThis.SillyTavern?.getContext?.();
 
 // v1.18.42 四段写法说明从头来（用户 2026-10-31）：人设、文风都写进预设了，这四段只说这一轮干什么，越短越好
 // （「每次发太多的话，模型受不了」）。以前的活人版、V1～V5 全删（用户：「以前的能删掉就删掉……太长了，该写的都写到预设里边了」）。
-// 只留两版自带的，名字就叫「第一版」「第二版」，别再往下编号：第一版是用户自己发来的原文（默认用它），第二版是 Claude 写的，他自己换着试。
-// 🚨 不写 {{user}}，一律用「我」：「我」是在背后控剧情的人；{{user}} 发出去会被换成他在故事里那个角色的名字，两回事
-// （用户：「用户跟 user 是两个概念……要灵活，可以办任何事」）。四段归用户，改字要他发原文或点头。
+// v1.18.43 自带三版，名字就叫「第一版」「第二版」「第三版」，别再往下编号；默认第三版（用户自己写的、他说「优化得很好」）。
+// 第一版是用户第一次发的原文、第二版是 Claude 写的，这两版照他的两条改过：
+// 🚨 ① 不写「我」、不写 {{user}}、不写任何身份，用「本轮」「本轮给出的内容」（用户：「不要带我或者身份，这样容易搞晕」）；
+// 🚨 ② 不写「这一下」「停在这一刻 / 这一秒」：模型会以为什么都不能动，就原地重复（用户：「停留在这一秒……就重复写」）。
+// 深入是「留在这段戏里往深写，时间照常走」，不是定格。四段归用户，改字要他发原文或点头。
 const SEND_1 = `【写好这一轮】
-照我的意思把这段内容写出来，不改原意、写饱满；再顺着它往前带一步，让在场的人有回响，局面或气氛因此变一点。`;
+把本轮给出的内容按原意写出来，写饱满；再顺着它往前带一步，让在场的人有回响，局面或气氛因此变一点。`;
 const PUSH_1 = `【往下走】
-我这轮没写。顺着上文直接往下推一步，让新的事情发生；局面、关系或气氛要有实质变化，不原地打转。`;
+本轮留空。顺着上文直接往下推一步，让新的事情发生；局面、关系或气氛要有实质变化，不原地打转。`;
 const DEEPEN_1 = `【深入这场戏】
-我这轮没写。停在眼下这一刻往深里写，把还没写透的心思、情绪和细节写足。不推剧情，不换场景，不跳时间，不加新人。`;
+本轮留空。留在当前这段戏里往深里写，把还没写透的心思、情绪和细节写足。不推新剧情，不换场景，不大幅跳时间，不加新人。`;
 const DEEPEN_TEXT_1 = `【深入这场戏】
-照我的意思让这段内容发生，然后停在它激起的当场反应、心思和情绪上往深里写。不往下推，不换场景，不跳时间，不加新人。`;
+让本轮给出的内容发生，然后留在这段戏里，顺着它激起的反应、心思和情绪往深里写。不往下推，不换场景，不大幅跳时间，不加新人。`;
 
 const SEND_2 = `【写好这一轮】
-我这轮写的是要发生的事，可能是台词、动作、旁白，也可能是给剧情的指示。照我的意思写出来，不改意思，写饱满；再顺着它往前带一点，让在场的人有回响，局面或气氛因此变一点。`;
+本轮给出的是要发生的事，可能是台词、动作、旁白，也可能是对剧情的指示。按原意写出来，写饱满；再顺着它往前带一点，让在场的人有回响，局面或气氛因此变一点。`;
 const PUSH_2 = `【往下走】
-我这轮没写。顺着上下文往下推一步，让新的事情发生，局面、关系或气氛跟上一条比要有变化，不原地打转。走多远看戏需要，但要接得上前面。`;
+本轮留空。顺着上下文往下推一步，让新的事情发生，局面、关系或气氛跟上一轮比要有变化，不原地打转。走多远看戏需要，但要接得上前面。`;
 const DEEPEN_2 = `【深入这场戏】
-我这轮没写。不往前推，停在眼下这一刻往深里写，把还没写到的心思、情绪、细节写透。不换场景，不跳时间，不加新人。`;
+本轮留空。不往下一段推，留在当前这段戏里接着写，时间照常往前走，把还没写到的心思、情绪和人物之间的互动写透。不换场景，不加新人。`;
 const DEEPEN_TEXT_2 = `【深入这场戏】
-我这轮写了一段。照我的意思让它发生，然后停在它激起的反应上往深里写，不往前推，不换场景，不跳时间。`;
+让本轮给出的内容发生，然后留在这段戏里接着写：在场的人怎么接、心思怎么变、气氛怎么走，都写透。不往下一段推，不换场景，不加新人。`;
 
-// 换上第一版的标记：手机上 liveSwitched 不是它，就换一次、清掉旧存档（见 settings()）
-const LIVE_LATEST = 'short1';
+const SEND_3 = `【写好这一轮】
+按本轮给出的内容原意写饱满，再顺着这段戏的势头往前延展一小步。让在场人物顺着各自的性子自然应对、有来有往，使眼下的局面或气氛随之发生一点变化。`;
+const PUSH_3 = `【往下走】
+本轮留空。顺着上下文把戏往下一个阶段推一步，让新的事情发生。自行把握推进的节奏和跨度，让局面、关系或气氛比上一轮有实质变化，不原地打转。`;
+const DEEPEN_3 = `【深入这场戏】
+本轮留空。留在当前这段戏的范围里往深处展开，不跨向下一阶段。时间正常流动，把这段局面里还没写透的心思、情绪和人物之间微妙的互动写厚实。不开新情节，不换场景，不大幅跳时间，不加新人。`;
+const DEEPEN_TEXT_3 = `【深入这场戏】
+按本轮给出的内容让事情发生，然后留在它所处的这段局面里往深处展开。顺着它带来的变化，把在场人物的反应、心思浮动和周围的气氛写透，不急着往下推新剧情，不换场景，不大幅跳时间，不加新人。`;
 
-// ≡「写法说明」里能改的四段；存档里「自带的」就第一版、第二版两条
+// 换上默认版的标记：手机上 liveSwitched 不是它，就换一次（见 settings()）
+const LIVE_LATEST = 'short3';
+
+// ≡「写法说明」里能改的四段；def 是默认用的那版，builtins 是列表里自带的几条（按这个顺序排）
+const three = (a, b, c) => () => [{ bid: 'short1', name: '第一版', text: a }, { bid: 'short2', name: '第二版', text: b }, { bid: 'short3', name: '第三版', text: c }];
 const PROMPTS = [
-    { key: 'deepenPrompt', name: '深入', desc: '点「深入」时用：原地往深挖，另起一条', def: () => DEEPEN_1,
-        defBid: 'short1', defName: '第一版', lives: () => [{ bid: 'short2', name: '第二版', text: DEEPEN_2 }] },
-    { key: 'deepenTextPrompt', name: '深入（写了字）', desc: '输入框有字再点「深入」时用：照你写的走，在这一下上往深里写', def: () => DEEPEN_TEXT_1,
-        defBid: 'short1', defName: '第一版', lives: () => [{ bid: 'short2', name: '第二版', text: DEEPEN_TEXT_2 }] },
-    { key: 'sendPrompt', name: '写了字发送', desc: '输入框有字点发送时用：照你写的走，写出戏来', def: () => SEND_1,
-        defBid: 'short1', defName: '第一版', lives: () => [{ bid: 'short2', name: '第二版', text: SEND_2 }] },
-    { key: 'pushPrompt', name: '空着发送', desc: '输入框空着点发送时用：另起一条，往下走一步', def: () => PUSH_1,
-        defBid: 'short1', defName: '第一版', lives: () => [{ bid: 'short2', name: '第二版', text: PUSH_2 }] },
+    { key: 'deepenPrompt', name: '深入', desc: '点「深入」时用：留在这段戏里往深写，另起一条', def: () => DEEPEN_3,
+        builtins: three(DEEPEN_1, DEEPEN_2, DEEPEN_3) },
+    { key: 'deepenTextPrompt', name: '深入（写了字）', desc: '输入框有字再点「深入」时用：照你写的发生，再往深写', def: () => DEEPEN_TEXT_3,
+        builtins: three(DEEPEN_TEXT_1, DEEPEN_TEXT_2, DEEPEN_TEXT_3) },
+    { key: 'sendPrompt', name: '写了字发送', desc: '输入框有字点发送时用：照你写的走，写出戏来', def: () => SEND_3,
+        builtins: three(SEND_1, SEND_2, SEND_3) },
+    { key: 'pushPrompt', name: '空着发送', desc: '输入框空着点发送时用：另起一条，往下走一步', def: () => PUSH_3,
+        builtins: three(PUSH_1, PUSH_2, PUSH_3) },
 ];
 
 let mountTimer = null;
@@ -75,7 +87,7 @@ let bound = false;
 
 function settings() {
     const all = ctx()?.extensionSettings;
-    if (!all) return { varsInMenu: true, deepenButton: true, sendTakeover: true, deepenPrompt: DEEPEN_1, deepenTextPrompt: DEEPEN_TEXT_1, sendPrompt: SEND_1, pushPrompt: PUSH_1 };
+    if (!all) return { varsInMenu: true, deepenButton: true, sendTakeover: true, deepenPrompt: DEEPEN_3, deepenTextPrompt: DEEPEN_TEXT_3, sendPrompt: SEND_3, pushPrompt: PUSH_3 };
     const s = all[EXTENSION_KEY] = all[EXTENSION_KEY] || {};
     if (typeof s.varsInMenu !== 'boolean') s.varsInMenu = true;
     if (typeof s.deepenButton !== 'boolean') s.deepenButton = true;
@@ -83,12 +95,13 @@ function settings() {
     if (typeof s.sendTakeover !== 'boolean') s.sendTakeover = true;
     if (!s.promptArchive || typeof s.promptArchive !== 'object') s.promptArchive = {};
     if (!s.promptArchiveSeeded || typeof s.promptArchiveSeeded !== 'object') s.promptArchiveSeeded = {};
-    // v1.18.42 换上第一版，只换一次：四段的旧存档整个清掉（用户：「以前的能删掉就删掉」），
-    // 下次打开「写法说明」列表里只剩第一版、第二版；之后他自己存的、改的照常留着
+    // 换上默认版，每版只换一次。从 1.18.41 及以前升上来：四段旧存档整个清掉（用户：「以前的能删掉就删掉」）；
+    // 从 1.18.42 升上来：只换掉自带的那几条，他这几分钟自己存的留着。列表里自带的是第一、二、三版
     if (s.liveSwitched !== LIVE_LATEST) {
         for (const p of PROMPTS) {
             s[p.key] = p.def();
-            s.promptArchive[p.key] = [];
+            const list = Array.isArray(s.promptArchive[p.key]) ? s.promptArchive[p.key] : [];
+            s.promptArchive[p.key] = s.liveSwitched === 'short1' ? list.filter((x) => !x.builtin && !x.auto) : [];
             delete s.promptArchiveSeeded[p.key];
         }
         s.deepenPromptOwn = true;
@@ -336,7 +349,7 @@ async function onDeepen(event) {
     const typed = (box?.value ?? '').trim();
     // v1.18.30 写了字用「深入（写了字）」那段，没写字用「深入」那段
     const st = settings();
-    if (!setDeepenPrompt(typed ? (st.deepenTextPrompt || DEEPEN_TEXT_1) : (st.deepenPrompt || DEEPEN_1))) {
+    if (!setDeepenPrompt(typed ? (st.deepenTextPrompt || DEEPEN_TEXT_3) : (st.deepenPrompt || DEEPEN_3))) {
         globalThis.toastr?.warning?.('这个版本的酒馆不支持临时加说明', '深入');
         return;
     }
@@ -398,8 +411,8 @@ function archiveFor(p) {
     const seeded = st.promptArchiveSeeded = st.promptArchiveSeeded && typeof st.promptArchiveSeeded === 'object' ? st.promptArchiveSeeded : {};
     const items = () => (all[p.key] = Array.isArray(all[p.key]) ? all[p.key] : []);
     const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
-    // v1.18.30 起「活人版」这些（lives）也是自带的：已经放过的老用户，下次打开排到最底下
-    const builtins = [{ bid: p.defBid || 'def', name: p.defName || '原版', text: p.def() }, ...(p.lives?.() || []), ...(p.olds?.() || [])];
+    // 自带的几条（第一、二、三版）按 PROMPTS 里 builtins 的顺序排
+    const builtins = p.builtins();
     let dirty = false;
     // v1.18.23 存的条目名字是「存档 3」「换下来的 · 时间」这种，当成没起名，按内容概括
     for (const x of items()) if (typeof x.named !== 'boolean') { x.named = !/^(存档 \d+|存档 · .*|换下来的 · .*|新的一条)$/.test(x.name || ''); dirty = true; }
@@ -492,14 +505,14 @@ async function onSendClick(event) {
     const box = document.getElementById('send_textarea');
     const typed = (box?.value ?? '').trim();
     if (typed) {
-        armPrompt(settings().sendPrompt || SEND_1, '写了字发送');
+        armPrompt(settings().sendPrompt || SEND_3, '写了字发送');
         return; // 让酒馆照常发
     }
     const context = ctx();
-    if (typeof context?.generate !== 'function') { armPrompt(settings().pushPrompt || PUSH_1, '空着发送'); return; }
+    if (typeof context?.generate !== 'function') { armPrompt(settings().pushPrompt || PUSH_3, '空着发送'); return; }
     event.preventDefault();
     event.stopImmediatePropagation();
-    if (!armPrompt(settings().pushPrompt || PUSH_1, '空着发送')) return;
+    if (!armPrompt(settings().pushPrompt || PUSH_3, '空着发送')) return;
     try {
         await context.generate('normal');
     } catch (error) {
