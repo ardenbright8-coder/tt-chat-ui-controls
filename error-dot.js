@@ -72,10 +72,12 @@ function toastText(el) {
     return { title, message };
 }
 
-// 谁报的：前后一分钟内 MVU 在更新变量，就算它的（「后端错误」框本身不写是谁调的）
+// 谁报的：框里写明是 MVU 的才算它的；只是前后一分钟内 MVU 在更新变量，就标「分不清」——
+// 主聊天跟变量更新常常挨着发，「后端错误」框本身不写是谁调的（v1.18.44：主聊天 AI Studio 的 403 被记成了 MVU）
 function sourceOf(text) {
     if (SD_DOWN.test(text)) return '出图（图像生成）';
-    if (MVU_TOAST.test(text) || Date.now() - lastMvuAt < 60000) return '变量更新（MVU 额外模型）';
+    if (MVU_TOAST.test(text)) return '变量更新（MVU 额外模型）';
+    if (Date.now() - lastMvuAt < 60000) return '主聊天或变量更新（两个挨着发，分不清）';
     return '酒馆';
 }
 

@@ -46,8 +46,10 @@ const ITEMS = [
     },
     { key: 'vars', match: ['变量管理器', 'Variable Manager'], name: '管理角色数值', desc: '看和改聊天里存的数值，角色卡状态栏（好感、状态这些）就靠它' },
     { key: 'logs', match: ['日志查看器', 'Log Viewer'], name: '查看运行记录', desc: '程序后台记的流水账，出毛病时翻它找原因' },
+    // 别家扩展（预设里带的）加的一项，用户 2026-10-31：「这个 log 放到不常用的里边」
+    { key: 'uploadlog', id: 'spreset_upload_log', match: ['上传 log', '上传log'], name: '上传 log', desc: '把运行记录传给预设作者排查问题，平时用不上' },
 ];
-const DEFAULT_HIDDEN = ['sync', 'databank'];
+const DEFAULT_HIDDEN = ['sync', 'databank', 'uploadlog'];
 
 // ≡ 菜单（左下角三条杠）里酒馆自带的项（v1.18.2）。认 id，认不到再认名字（去掉空格比）
 const OPTION_ITEMS = [
@@ -79,6 +81,12 @@ function settings() {
     const s = all[EXTENSION_KEY];
     if (!Array.isArray(s.wandHidden)) s.wandHidden = [...DEFAULT_HIDDEN];
     if (!Array.isArray(s.optionsHidden)) s.optionsHidden = [...DEFAULT_OPTIONS_HIDDEN];
+    // v1.18.44「上传 log」收进不常用，老设置补一次
+    if (!s.wandHiddenUploadLog) {
+        s.wandHiddenUploadLog = true;
+        if (!s.wandHidden.includes('uploadlog')) s.wandHidden.push('uploadlog');
+        save();
+    }
     if (!s.optionsHiddenAn) {
         s.optionsHiddenAn = true;
         if (!s.optionsHidden.includes('an')) s.optionsHidden.push('an');
