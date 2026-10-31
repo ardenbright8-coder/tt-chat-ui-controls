@@ -3340,3 +3340,17 @@ body:is([data-generating="true"], [data-swiping="true"]) #chat .mes.last_mes .me
 /* v1.18.40 ≡「更多工具」→「额外模型解析」→ 改接口 / 改预设：跳到 MVU 设置后，那一块框亮 2.5 秒（more-tools.js） */
 .tt-mvu-flash { outline: 2px solid #d8b4b8 !important; outline-offset: 3px; border-radius: 10px; transition: outline-color .3s; }
 .tt-hub .tt-hub-note { display: block; opacity: .75; margin: -4px 0 8px; line-height: 1.45; text-align: left; }
+
+/* v1.18.45 ≡「更多工具」→「变量」最上面：变量是谁算的（mvu-watch.js） */
+.tt-mw { display: flex; flex-direction: column; gap: 6px; text-align: left; margin-bottom: 4px; }
+.tt-mw .tt-mw-head { border-radius: 10px; padding: 8px 10px; line-height: 1.45; border: 1px solid var(--SmartThemeBorderColor); }
+.tt-mw .tt-mw-list { display: flex; flex-direction: column; gap: 4px; }
+.tt-mw .tt-mw-row { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: baseline; padding: 6px 10px; border-radius: 8px; background: rgba(255,255,255,.04); line-height: 1.4; }
+.tt-mw .tt-mw-row b { white-space: nowrap; font-weight: 600; }
+.tt-mw .tt-mw-row small { opacity: .55; white-space: nowrap; }
+.tt-mw .tt-mw-ok { color: #8fd3a8; }
+.tt-mw .tt-mw-fail { color: #d8b4b8; }
+.tt-mw .tt-mw-run { color: #ddd2a8; }
+.tt-mw .tt-mw-main { color: inherit; opacity: .85; }
+.tt-mw .tt-mw-row b, .tt-mw .tt-mw-row small { color: var(--SmartThemeBodyColor); }
+.tt-mw .tt-mw-empty { opacity: .6; }

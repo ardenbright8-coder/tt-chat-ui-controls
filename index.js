@@ -19,6 +19,7 @@ import { initFormatFix, cleanupFormatFix } from './format-fix.js';
 import { initErrorDot, cleanupErrorDot } from './error-dot.js';
 import { initMoreTools, cleanupMoreTools } from './more-tools.js';
 import { initOpencodeSession, cleanupOpencodeSession } from './opencode-session.js';
+import { initMvuWatch, cleanupMvuWatch } from './mvu-watch.js';
 
 const EXTENSION_KEY = 'chat-text-color';
 
@@ -834,6 +835,7 @@ export async function init() {
     initErrorDot();
     initMoreTools();
     initOpencodeSession();
+    initMvuWatch();
     if (initialized) {
         mountUi();
         return;
@@ -868,6 +870,7 @@ export async function cleanup() {
     cleanupErrorDot();
     cleanupMoreTools();
     cleanupOpencodeSession();
+    cleanupMvuWatch();
     cleanupVarLog();
     cleanupContextLock();
     cleanupPromptDetachGuard();

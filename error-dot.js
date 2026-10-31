@@ -8,6 +8,7 @@
 
 import { tip } from './tip.js';
 import { vlog } from './var-log.js';
+import { noteToast } from './mvu-watch.js';
 
 const EXTENSION_KEY = 'chat-text-color';
 const STORE_KEY = 'tt-error-list';
@@ -106,6 +107,7 @@ function onToast(el) {
     el.dataset.ttErrSeen = '1';
     const { title, message } = toastText(el);
     const text = `${title} ${message}`;
+    noteToast(el.classList.contains('toast-error') ? 'error' : 'info', title, message); // 变量是谁算的（mvu-watch.js）
     if (el.classList.contains('toast-info') && MVU_TOAST.test(text)) {
         lastMvuAt = Date.now();
         setBusy();

@@ -10,6 +10,7 @@
 import { tip } from './tip.js';
 import { vlog } from './var-log.js';
 import { openPromptBook } from './text-editor.js';
+import { watchHtml, onWatchChange } from './mvu-watch.js';
 
 const EXTENSION_KEY = 'chat-text-color';
 const SETTINGS_ID = 'tt-chat-tools-settings';
@@ -164,10 +165,16 @@ async function openVarsPopup() {
     const box = document.createElement('div');
     box.className = 'tt-vars-pop';
     const found = varButtons();
-    box.innerHTML = `<h3 class="tt-tip-row">变量 ${tip('这两个按钮是角色卡自带的（MVU 变量）。重新处理变量：把最后一条回复的变量重新算一遍，数值没变时点。重新读取初始变量：角色卡改了初始数值、或者开局变量坏了才用。')}</h3>`
+    // v1.18.45 上面加一块「变量是谁算的」（mvu-watch.js），用户 10-31：「我得监控一下它到底用没用变量」
+    box.innerHTML = `<h3 class="tt-tip-row">变量 ${tip('上面一块：这张卡的变量是额外模型（MVU「额外模型解析」里填的那个，比如 deepseek）在算，还是主模型自己写；下面一行一轮，写着谁算的、成没成、几秒、改了几处。世界书条目名里没有 [mvu_update] 的卡，MVU 不叫额外模型。下面两个按钮是角色卡自带的（MVU 变量）。重新处理变量：把最后一条回复的变量重新算一遍，数值没变时点。重新读取初始变量：角色卡改了初始数值、或者开局变量坏了才用。')}</h3>`
+        + '<div class="tt-vars-watch"></div>'
         + (found.length
             ? VAR_BUTTONS.map((name) => `<button type="button" class="menu_button tt-vars-act" data-name="${name}">${name}</button>`).join('')
             : '<small>这张角色卡没有变量按钮。</small>');
+    const watchBox = box.querySelector('.tt-vars-watch');
+    const paintWatch = async () => { try { watchBox.innerHTML = await watchHtml(); } catch (error) { watchBox.textContent = `读不到变量记录：${error?.message || error}`; } };
+    paintWatch();
+    const stopWatch = onWatchChange(paintWatch);
     let popup = null;
     box.addEventListener('click', (event) => {
         const act = event.target.closest('.tt-vars-act');
@@ -178,12 +185,16 @@ async function openVarsPopup() {
         target.click();
         popup?.completeAffirmative?.() ?? document.querySelector('.popup:last-of-type .popup-button-ok')?.click();
     });
-    if (!context?.callGenericPopup) return;
-    if (context.Popup && context.POPUP_TYPE) {
-        popup = new context.Popup(box, context.POPUP_TYPE.TEXT, '', { okButton: '关闭' });
-        await popup.show();
-    } else {
-        await context.callGenericPopup(box, context.POPUP_TYPE.TEXT, '', { okButton: '关闭' });
+    try {
+        if (!context?.callGenericPopup) return;
+        if (context.Popup && context.POPUP_TYPE) {
+            popup = new context.Popup(box, context.POPUP_TYPE.TEXT, '', { okButton: '关闭', wide: true, allowVerticalScrolling: true });
+            await popup.show();
+        } else {
+            await context.callGenericPopup(box, context.POPUP_TYPE.TEXT, '', { okButton: '关闭', wide: true, allowVerticalScrolling: true });
+        }
+    } finally {
+        stopWatch();
     }
 }
 
