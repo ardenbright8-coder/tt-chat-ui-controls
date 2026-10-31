@@ -9,7 +9,7 @@
 - `style.css`：所有样子，按版本号分段往后加（`/* v1.x.x … */`）
 - `manifest.json`：版本号，**每次推送必改**，手机靠它发现新版并自动刷新
 - 聊天：`chat-scroll-guard.js` 看旧消息时保住位置｜`immersive.js` 沉浸式聊天｜`chat-input-hint.js` 输入框灰字｜`chat-tools.js` 聊天按钮（变量收进 ≡、快捷工具「深入」、到最底下、藏 Agent、接管发送、≡「写法说明」）｜`text-editor.js` 改长文字的大窗口（`openTextEditor`）
-- 变量：`mvu-fix.js` 自动修 MVU 格式 + 变量小框｜`var-log.js` ≡「测试日志」（查问题全靠它）
+- 变量：`mvu-fix.js` 自动修 MVU 格式 + 变量小框｜`var-log.js` ≡「测试日志」（查问题全靠它）｜`mvu-watch.js` 每轮变量是谁算的（额外模型 / 主模型、成没成），显示在「更多工具 → 变量」
 - 魔法棒「出图」（v1.18.35，`story-image.js` 的 `openHubPopup`）：出图只剩这一条入口、一个开关（`autoImageEnabled`）。关着时 `draw()` 直接不画（手动补图、重出定妆照也不画）。四张卡打开的还是原来那几个弹窗（套餐那个由 `taocan.js` 用 `setTaocanOpener` 递过来，`taocan.js` 自己不再挂魔法棒项）；旧魔法棒项 id 在 `OLD_WAND_IDS`，挂的时候删掉。「自己挑着画」要先关这页再点 `#sd_gen`，不然酒馆那个小菜单被挡在后面。用户 10-20：「整合成一个按钮……进去以后做成那种卡片形状的」「就做一个开关就行了」
 - 定妆照放开（v1.18.36，`story-image.js` 的 `REVISE_PROMPT` / `PORTRAIT_PICK_PROMPT` / `portraitDress`）：改长相回 JSON `{look, outfit, setting, mood}`，衣服背景神态存进那个角色的 `outfit / setting / mood`；`outfit` 空着就每次现挑（`lastOutfit` 记上回穿的，叫它换个样）。两段都不许写灯光词。只画成年人。用户 10-20：「我每次说写得熟女一点，或者说换个衣服啥的，都换不了」「固定出就没意思」。电脑那头 3.6 套餐也写死了国风古风、红金衣饰、黑发、熟女，另做了 3.7「出图提示词优化」放开（个人娱乐酒馆面板）；手机这边放开了，用 3.6 照样会被画回古风
 - 排版容错：`format-fix.js`（v1.18.34）往酒馆「正则」里放一条全局、只改显示的规则，去掉标签和 ``` 前的缩进；AI 照着缩进的示范写状态栏，酒馆 markdown 当成代码原样显示。规则 id `tt-chat-ui-controls-format-fix`，开关关了就删规则；停用扩展不删（停用不该改显示）。用户 10-20：「一劳永逸」
@@ -95,6 +95,8 @@
 **报错小点**（v1.18.39，`error-dot.js`，用户 2026-10-31 定的）：盯 `#toast-container` 新冒的框（不改 toastr）。红框（`.toast-error`）按「来源 + 原因 + 原文去掉数字」认同一个问题，**同一个问题只弹第一次**，之后删掉、只加次数；清空后再出又弹一次。不定时提醒（用户：「一个问题报一次就行了」）。MVU 蓝框（`[MVU额外模型解析]` 那几条）一律不弹，小点变淡黄 20 秒。前后一分钟有 MVU 蓝框的「后端错误」算 MVU 的。出图关着时 SD 红框不记（story-image.js 已经挡了）。小点在 `#leftSendForm` 里绝对定位、浮在魔法棒右边，不占位置；颜色淡马卡龙（粉 `#d8b4b8` / 黄 `#ddd2a8`，半透明），用户：「弄淡一点……马卡龙色……灰一点」。清单存 localStorage `tt-error-list`，「复制给 AI」复制成功才清空，清掉的放 `tt-error-list-last` 能「再复制上一份」；模拟器（TauriTavern 2.3.0）里复制文字是好的。下一步用户想要手机自动传到 GitHub / 谷歌云盘，省掉复制粘贴，还没定怎么做。
 
 **≡「更多工具」**（v1.18.39，`more-tools.js`）：测试日志、变量、总结库三项原菜单项还在，`wand-menu.js` 的 `MORE_OPTIONS` 藏掉；「更多工具」一页卡片（跟「出图」同一套 `.tt-hub`），点卡先关这页再替用户点原来那一项。外面留：转换为群聊、开始新聊天、管理聊天文件、删除消息、写法说明、到最底下、总结全文、空白开局。作者注释加进默认收起（老设置补一次，`optionsHiddenAn`），用户：「作者注释完全没用过」。v1.18.40 最前面加「额外模型解析」（MVU 的变量模型设置）：三层 = 更多工具 → 额外模型解析（`openMvuPage`）→ 改接口 / 改预设，第三层只指路：开扩展页、展开「MVU 变量框架」抽屉、打开「模型来源」那个 details，滚到那一块、加 `tt-mvu-flash` 框亮 2.5 秒。「模型来源」框里那个「与插头相同 / 自定义 / 更多」下拉之前的 `.mvu-field` 算预设，下拉和它后面的算接口（`mvuParts`）。用户在「自己做一页卡片替 MVU 改开关」和「只指路」里挑了只指路：「咱稳稳健点……功能稳最要紧」，别改成替 MVU 写设置。卡上的现状是从 MVU 页面上的下拉读出来的，MVU 改了页面结构就会读不到（只显示空，不会改坏东西）。
+
+**「变量」页的「变量是谁算的」**（v1.18.45，`mvu-watch.js`，用户 2026-10-31：「我得监控一下它到底用没用变量」「集成到这个变量里边……换到这就行了」）：放在「更多工具 → 变量」那页最上面，不放报错小点里；小点不改。头一行写这张卡由谁算（认法跟 MVU 一样：卡的主世界书条目名里有 `[mvu_update]`/`[mvu_plot]` 才走额外模型），下面一轮一行最多 10 轮。只读，不替 MVU 改设置、不替卡加标签。额外模型因为内容拒绝而失败时如实显示失败，不做任何绕开拒绝的东西。
 
 **OpenCode 会话标记补丁**（v1.18.41，`opencode-session.js`，用户 2026-10-31：Command Code 到期，MVU 额外模型「先用 Open Code 吧，凑合凑合」）：OpenCode 2026-09 起每个请求要带 `x-opencode-session`，不带回 400 `MissingSessionID`。MVU「自定义」填不了请求头；酒馆助手（`applyCustomApiOverrides`）还会把它发成 `openai` 来源 + `reverse_proxy`，额外请求头整个丢掉（10-31 截请求实测）；MVU「更多」要酒馆后台的 CORS 转发，TauriTavern 没实现。所以包 `window.fetch`，只改 `/api/backends/chat-completions/generate` 里目标是 opencode.ai 的：custom 来源补请求头；openai + reverse_proxy 改成 custom 来源、钥匙放进 Authorization 再补标记。标记每次打开酒馆生成一个，存 sessionStorage。模拟器实测：MVU 用 `deepseek-v4.1-flash` 约 19 秒算出 5 条更新。另外：MVU 只对世界书里有 `[mvu_update]` / `[mvu_plot]` 条目的卡走额外模型，别的卡退回「随 AI 输出」。
 
