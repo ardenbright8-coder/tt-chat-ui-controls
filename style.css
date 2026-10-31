@@ -3370,3 +3370,10 @@ body:is([data-generating="true"], [data-swiping="true"]) #chat .mes.last_mes .me
 .tt-adopt .tt-ad-locked { opacity: .6; font-weight: normal; white-space: nowrap; }
 .tt-adopt .tt-ad-strip { margin: 0 0 10px; align-items: flex-start; }
 .tt-adopt .tt-ad-empty { display: flex; width: 100%; box-sizing: border-box; gap: 8px; margin: 0; padding: 10px; border-radius: 10px; justify-content: center; text-align: center; line-height: 1.4; }
+
+/* v1.18.47 「变量」页「每条给谁看」：入口做成按钮，点开是目录，右边下拉一改就存 */
+.tt-mw .tt-mw-dir { border: 0; padding: 0; }
+.tt-mw .tt-mw-dir > summary.menu_button { display: flex; width: 100%; box-sizing: border-box; gap: 8px; margin: 0; padding: 10px; border-radius: 10px; justify-content: center; list-style: none; }
+.tt-mw .tt-mw-dir > summary::-webkit-details-marker { display: none; }
+.tt-mw .tt-mw-dir[open] > summary.menu_button { margin-bottom: 8px; }
+.tt-mw .tt-mw-dir select:disabled { opacity: .5; }

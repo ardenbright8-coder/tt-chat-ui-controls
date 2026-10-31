@@ -1,6 +1,6 @@
 // 变量是谁算的（v1.18.45）：每一轮记下变量是 MVU 额外模型（比如 deepseek）算的，还是主模型自己写的、成没成。
 // 用户 2026-10-31：「我得监控一下它到底用没用变量」「我不知道这个是现在到底还启动没启动」「集成到这个变量里边……换到这就行了」
-// 显示在 ≡「更多工具」→「变量」那页最上面（chat-tools.js 的 openVarsPopup 调 watchHtml），卡片上那行灰字是 lastSummary。
+// 显示在 ≡「变量」那页最上面（chat-tools.js 的 openVarsPopup 调 watchHtml）。
 // MVU 的设置只看不改；卡的世界书只在用户点「让额外模型接手这张卡」并确认后才改（v1.18.46，见下面那段）。
 // 怎么认（照 MVU 4.x 自己的规矩，2026-10-31 读过它的 bundle）：
 // 1. 世界书条目名里有 [mvu_update] 或 [mvu_plot] 的卡才走额外模型；一条都没有，MVU 直接读主模型回复里的 <UpdateVariable>
@@ -178,44 +178,10 @@ function rowText(r) {
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
 const hhmm = (at) => { const d = new Date(at); const p = (x) => String(x).padStart(2, '0'); return `${p(d.getHours())}:${p(d.getMinutes())}`; };
 
-// 「更多工具」变量卡上那行灰字
-export function lastSummary() {
-    const r = current();
-    if (!r) return '';
-    const { text } = rowText(r);
-    return `上一轮：${text.split(' · ').slice(0, 2).join(' · ')}`;
-}
-
-// 「变量」那页最上面一块
-export async function watchHtml() {
-    const s = mvuSettings();
-    const support = await checkSupport();
-    const way = s?.更新方式 || '';
-    let head;
-    if (!s) head = { cls: 'main', text: '没装 MVU，或者这张卡没带 MVU' };
-    else if (way !== '额外模型解析') head = { cls: 'main', text: `MVU 变量更新方式是「${way || '随AI输出'}」，额外模型没在用，变量由主模型自己写` };
-    else if (!support.ok) head = { cls: 'fail', text: support.why };
-    else head = { cls: 'ok', text: `这张卡用额外模型算变量：${extraModelName() || '（没填模型）'}` };
-    const id = chatId();
-    const list = load().filter((r) => r.chat === id).slice(-SHOW_ROUNDS).reverse();
-    const rows = list.map((r) => {
-        const { cls, text } = rowText(r);
-        return `<div class="tt-mw-row tt-mw-${cls}"><b>第 ${r.mes} 楼</b><span>${esc(text)}</span><small>${hhmm(r.at)}</small></div>`;
-    }).join('');
-    const book = cardBook();
-    const acts = [];
-    if (s && book && !support.ok) acts.push('<div class="menu_button tt-mw-act" data-act="adopt"><i class="fa-solid fa-wand-magic-sparkles"></i> 让额外模型接手这张卡</div>');
-    if (book && undoRecord(book)) acts.push('<div class="menu_button tt-mw-act" data-act="undo"><i class="fa-solid fa-rotate-left"></i> 撤销接手（世界书改回原样）</div>');
-    return `<div class="tt-mw">
-  <div class="tt-mw-head tt-mw-${head.cls}">${esc(head.text)}</div>
-  ${acts.join('')}
-  ${rows ? `<div class="tt-mw-list">${rows}</div>` : '<small class="tt-mw-empty">这个聊天还没记到哪一轮。发一条消息，回完这里就有了</small>'}
-</div>`;
-}
-
 // ---------------------------------------------------------------- 让额外模型接手这张卡（v1.18.46）
-// 用户 2026-10-31：「不要每次都让我手动加」「识别这块它自己识别，我就给它授权……识别错了，它是个目录……我来自己选，选中一个再点确认」
-// 「开局不要弹了」——只在「变量」页点按钮才认、才弹。
+// 用户 2026-10-31：「不要每次都让我手动加」「自动用吧……它默认用，我可以帮它改一改就行了」「改完以后……别我下次再弄……又忘了」
+// 进卡自动认一次、自动改（不弹窗），「变量」页「每条给谁看」目录随时改、一改就存；改的是世界书本身，新开故事照样在。
+// 这本书扩展动过（有 mvuAdoptUndo 记录）或用户点过「别自动接手」（mvuAdoptSkip），就再也不自动认——全以用户改的为准。
 // 认法照 MVU 官方「迁移旧 MVU 卡」：变量更新规则 / 变量输出格式 → [mvu_update]（只给额外模型）；
 // 正文格式这类「格式指定」→ [mvu_plot]（只给主模型）；变量列表、状态说明、[initvar] → 不加（两边都看）。
 // 最稳的退路也是官方给的：只加一条空的 [mvu_update] 条目，原来的条目一条不动。
@@ -336,74 +302,180 @@ export async function undoAdopt(book) {
     return true;
 }
 
-function adoptRow(uid, e, cls) {
+const tagOf = (name) => (/\[mvu_update\]/i.test(name) ? 'update' : /\[mvu_plot\]/i.test(name) ? 'plot' : 'both');
+const baseName = (name) => String(name || '').replace(/\[mvu_update\]|\[mvu_plot\]/gi, '');
+const skipList = () => (Array.isArray(extSettings().mvuAdoptSkip) ? extSettings().mvuAdoptSkip : []);
+
+function ensureRecord(book) {
+    const s = extSettings();
+    s.mvuAdoptUndo ||= {};
+    s.mvuAdoptUndo[book] ||= { at: Date.now(), entries: {}, added: [] };
+    return s.mvuAdoptUndo[book];
+}
+
+// 目录里改一条：右边下拉一改就存（v1.18.46 用户：「它默认用，我可以帮它改一改……看不对就可以改」）
+// 第一次动这条先把原样记下；改回「两边都看」时名字、内容都回到原样
+export async function setPick(book, uid, pick) {
+    const c = ctx();
+    const data = await c.loadWorldInfo(book);
+    const e = data?.entries?.[uid];
+    const choice = CHOICES.find((x) => x.key === pick);
+    if (!e || !choice) return false;
+    const record = ensureRecord(book);
+    if (!record.entries[uid]) record.entries[uid] = { comment: e.comment, content: e.content };
+    const orig = record.entries[uid];
+    e.comment = `${baseName(orig.comment)}${choice.tag}`;
+    e.content = pick === 'plot' && hasUvPlaceholder(orig.content) ? stripUvPlaceholder(orig.content) : orig.content;
+    c.saveSettingsDebounced?.();
+    await saveBook(book, data);
+    vlog('变量', `世界书「${book}」第 ${uid} 条「${baseName(orig.comment)}」改成：${choice.label}`);
+    return true;
+}
+
+// 自动接手（v1.18.46 用户 10-31：「自动用吧……它默认用，我可以帮它改一改就行了」）：
+// 进卡时这张卡的世界书一条标签都没有、MVU 选的是「额外模型解析」、卡里真有 MVU、用户没点过「别自动接手」，才认一次、改一次。
+// 改完标签就写在书上了，下回这本书已经有标签，不会再认（同一张卡新开聊天也不会）。不弹窗，只冒一句提示叫用户去「变量」页看。
+let adoptTimer = null;
+let adopting = false;
+export async function autoAdopt() {
+    if (adopting) return;
+    const s = mvuSettings();
+    const book = cardBook();
+    if (!s || s.更新方式 !== '额外模型解析' || !book || !globalThis.Mvu) return;
+    if (skipList().includes(book) || undoRecord(book)) return; // 动过就不再自动认，以用户改的为准
+    adopting = true;
+    try {
+        const data = await ctx().loadWorldInfo(book);
+        const entries = Object.entries(data?.entries || {});
+        if (!entries.length || entries.some(([, e]) => TAG.test(e.comment || ''))) return;
+        const picks = {};
+        for (const [uid, e] of entries) {
+            const cls = classifyEntry(e);
+            if (cls.pick === 'update' || cls.pick === 'plot') picks[uid] = cls.pick;
+        }
+        if (!Object.keys(picks).length) {
+            vlog('变量', `世界书「${book}」没认出变量规则，没自动接手（「变量」页能手动挑或加空标签）`);
+            return;
+        }
+        const done = await applyAdopt(book, picks, true, false);
+        vlog('变量', `世界书「${book}」自动让额外模型接手：\n  ${done.join('\n  ')}`);
+        globalThis.toastr?.info?.(`挪了 ${done.length} 条给额外模型，去 ≡「变量」看，认错了在那里改`, '已让额外模型接手这张卡', { timeOut: 8000 });
+        persist();
+    } catch (error) {
+        vlog('出错', `自动接手失败：${error?.message || error}`);
+    } finally {
+        adopting = false;
+    }
+}
+
+function scheduleAutoAdopt() {
+    clearTimeout(adoptTimer);
+    // 等卡里的 MVU 脚本加载完（它是角色卡脚本，开聊天后才进来）
+    adoptTimer = setTimeout(() => { autoAdopt(); }, 4000);
+}
+
+function dirRow(uid, e) {
+    const pick = tagOf(e.comment || '');
     const off = e.disable ? '<em>关着</em>' : '';
-    const name = esc(e.comment || `（没名字 #${uid}）`);
-    if (cls.locked) return `<div class="tt-ad-row"><span>${name}${off}<small>${esc(cls.why)}</small></span><b class="tt-ad-locked">不动</b></div>`;
-    const opts = CHOICES.map((x) => `<option value="${x.key}"${x.key === cls.pick ? ' selected' : ''}>${x.label}</option>`).join('');
-    return `<div class="tt-ad-row"><span>${name}${off}${cls.why ? `<small>${esc(cls.why)}</small>` : ''}</span><select data-uid="${uid}">${opts}</select></div>`;
+    const name = esc(baseName(e.comment) || `（没名字 #${uid}）`);
+    if (INITVAR.test(e.comment || '')) return `<div class="tt-ad-row"><span>${name}${off}<small>初始变量，不动</small></span><b class="tt-ad-locked">不动</b></div>`;
+    const opts = CHOICES.map((x) => `<option value="${x.key}"${x.key === pick ? ' selected' : ''}>${x.label}</option>`).join('');
+    return `<div class="tt-ad-row"><span>${name}${off}</span><select data-uid="${uid}">${opts}</select></div>`;
 }
 
-export function adoptHtml(book, entries) {
-    const all = Object.entries(entries || {}).map(([uid, e]) => ({ uid, e, cls: classifyEntry(e) }));
-    const moved = all.filter((x) => ['update', 'plot'].includes(x.cls.pick));
-    const rest = all.filter((x) => !['update', 'plot', 'keep'].includes(x.cls.pick));
-    const canStrip = moved.some((x) => x.cls.strip);
-    return `<h3>让额外模型接手这张卡</h3>
-<small class="tt-ad-note">世界书「${esc(book)}」。扩展先认好了每条该给谁看：「交给额外模型」的主模型就看不到了，「只给主模型」的额外模型看不到。认错了就改右边的选项，再点「确认」。改之前会记下原样，「变量」页能撤销。</small>
-<div class="tt-ad-group"><b>认出来要挪的（${moved.length} 条）</b>${moved.map((x) => adoptRow(x.uid, x.e, x.cls)).join('') || '<small>一条都没认出来，到下面「其余条目」里自己挑，或者点「只加一条空标签」</small>'}</div>
-${canStrip ? '<label class="checkbox_label tt-ad-strip"><input type="checkbox" checked> <span>顺手去掉正文格式里叫主模型写 &lt;UpdateVariable&gt; 的那几行（不去掉，主模型还会接着写变量，白费时间）</span></label>' : ''}
-<details class="tt-ad-group"><summary>其余条目（${rest.length} 条，默认两边都看，不动）</summary>${rest.map((x) => adoptRow(x.uid, x.e, x.cls)).join('')}</details>
-<div class="menu_button tt-ad-empty"><i class="fa-solid fa-shield"></i> 只加一条空标签（最稳：原来的条目一条不动，额外模型照样接手，但主模型还会接着写变量）</div>`;
+// 「每条给谁看」目录：上面是挪了的，下面「两边都看」的是备选
+async function directoryHtml(book) {
+    const data = await ctx().loadWorldInfo(book);
+    const all = Object.entries(data?.entries || {});
+    const moved = all.filter(([, e]) => tagOf(e.comment || '') !== 'both');
+    const rest = all.filter(([, e]) => tagOf(e.comment || '') === 'both');
+    const nUp = moved.filter(([, e]) => tagOf(e.comment) === 'update').length;
+    const nPlot = moved.length - nUp;
+    return `<details class="tt-adopt tt-mw-dir"><summary class="menu_button"><i class="fa-solid fa-list-check"></i> 每条给谁看（交给额外模型 ${nUp} 条 · 只给主模型 ${nPlot} 条）点开看、点开改</summary>
+<small class="tt-ad-note">右边一改就存。「交给额外模型」的主模型看不到，「只给主模型」的额外模型看不到，「两边都看」就是原样。</small>
+<div class="tt-ad-group">${moved.map(([uid, e]) => dirRow(uid, e)).join('') || '<small>一条都没挪</small>'}</div>
+<details class="tt-ad-group"><summary>其余 ${rest.length} 条（两边都看，备选：想挪哪条就改哪条）</summary>${rest.map(([uid, e]) => dirRow(uid, e)).join('')}</details>
+</details>`;
 }
 
-async function openAdopt() {
+// 「变量」那页最上面一块
+export async function watchHtml() {
+    const s = mvuSettings();
+    const support = await checkSupport();
+    const way = s?.更新方式 || '';
+    const book = cardBook();
+    const record = book ? undoRecord(book) : null;
+    let head;
+    if (!s) head = { cls: 'main', text: '没装 MVU，或者这张卡没带 MVU' };
+    else if (way !== '额外模型解析') head = { cls: 'main', text: `MVU 变量更新方式是「${way || '随AI输出'}」，额外模型没在用，变量由主模型自己写` };
+    else if (!support.ok) head = { cls: 'fail', text: support.why + (book && skipList().includes(book) ? '（这张卡你设了「别自动接手」）' : '') };
+    else head = { cls: 'ok', text: `这张卡用额外模型算变量：${extraModelName() || '（没填模型）'}${record ? '（扩展自动接手的）' : ''}` };
+    const id = chatId();
+    const list = load().filter((r) => r.chat === id).slice(-SHOW_ROUNDS).reverse();
+    const rows = list.map((r) => {
+        const { cls, text } = rowText(r);
+        return `<div class="tt-mw-row tt-mw-${cls}"><b>第 ${r.mes} 楼</b><span>${esc(text)}</span><small>${hhmm(r.at)}</small></div>`;
+    }).join('');
+    const parts = [];
+    if (s && book && !support.ok) {
+        parts.push('<div class="menu_button tt-mw-act" data-act="adopt"><i class="fa-solid fa-wand-magic-sparkles"></i> 让额外模型接手这张卡</div>');
+        parts.push('<div class="menu_button tt-mw-act" data-act="empty"><i class="fa-solid fa-shield"></i> 只加一条空标签（最稳：条目一条不动，但主模型还会接着写变量）</div>');
+    }
+    if (s && book && support.ok) {
+        try { parts.push(await directoryHtml(book)); } catch (error) { parts.push(`<small>读不到世界书目录：${esc(error?.message || error)}</small>`); }
+    }
+    if (book && record) parts.push('<div class="menu_button tt-mw-act" data-act="optout"><i class="fa-solid fa-rotate-left"></i> 这张卡别自动接手（世界书改回原样）</div>');
+    return `<div class="tt-mw">
+  <div class="tt-mw-head tt-mw-${head.cls}">${esc(head.text)}</div>
+  ${parts.join('')}
+  ${rows ? `<div class="tt-mw-list">${rows}</div>` : '<small class="tt-mw-empty">这个聊天还没记到哪一轮。发一条消息，回完这里就有了</small>'}
+</div>`;
+}
+
+// 「变量」页里的按钮、目录下拉（chat-tools.js 的弹窗把点击 / 改动交给这里）
+export async function watchAction(act, arg) {
     const c = ctx();
     const book = cardBook();
-    if (!book) { globalThis.toastr?.info?.('这张卡没挂世界书', '变量'); return; }
-    const data = await c.loadWorldInfo(book);
-    const box = document.createElement('div');
-    box.className = 'tt-adopt';
-    box.innerHTML = adoptHtml(book, data?.entries);
-    let emptyOnly = false;
-    let popup = null;
-    const opts = { okButton: '确认', cancelButton: '取消', wide: true, large: true, allowVerticalScrolling: true };
-    box.querySelector('.tt-ad-empty').addEventListener('click', () => {
-        emptyOnly = true;
-        if (popup?.completeAffirmative) popup.completeAffirmative();
-        else box.closest('dialog')?.querySelector('.popup-button-ok')?.click();
-    });
-    let ok;
-    if (c.Popup && c.POPUP_TYPE) { popup = new c.Popup(box, c.POPUP_TYPE.CONFIRM, '', opts); ok = await popup.show(); } else ok = await c.callGenericPopup(box, c.POPUP_TYPE.CONFIRM, '', opts);
-    if (!ok) return;
-    const picks = {};
-    box.querySelectorAll('select[data-uid]').forEach((sel) => { if (sel.value !== 'both') picks[sel.dataset.uid] = sel.value; });
-    const strip = !!box.querySelector('.tt-ad-strip input')?.checked;
+    if (!book) return;
     try {
-        const done = await applyAdopt(book, picks, strip, emptyOnly);
-        vlog('变量', `世界书「${book}」让额外模型接手：\n  ${done.join('\n  ')}`);
-        globalThis.toastr?.success?.(`改了 ${done.length} 条，下一轮起额外模型接手`, '变量');
+        if (act === 'pick') {
+            await setPick(book, arg.uid, arg.pick);
+        } else if (act === 'adopt' || act === 'empty') {
+            const s = extSettings();
+            s.mvuAdoptSkip = skipList().filter((b) => b !== book);
+            c.saveSettingsDebounced?.();
+            if (act === 'empty') {
+                const done = await applyAdopt(book, {}, false, true);
+                vlog('变量', `世界书「${book}」${done.join('')}`);
+            } else {
+                const data = await c.loadWorldInfo(book);
+                const picks = {};
+                for (const [uid, e] of Object.entries(data?.entries || {})) {
+                    const cls = classifyEntry(e);
+                    if (cls.pick === 'update' || cls.pick === 'plot') picks[uid] = cls.pick;
+                }
+                if (!Object.keys(picks).length) {
+                    globalThis.toastr?.info?.('没认出变量规则。可以点「只加一条空标签」', '变量');
+                    return;
+                }
+                const done = await applyAdopt(book, picks, true, false);
+                vlog('变量', `世界书「${book}」手动让额外模型接手：\n  ${done.join('\n  ')}`);
+            }
+            globalThis.toastr?.success?.('接手了，下面「每条给谁看」能改', '变量');
+        } else if (act === 'optout') {
+            const ok = await c.callGenericPopup(`世界书「${book}」改回接手之前的样子，以后这张卡也不再自动接手？`, c.POPUP_TYPE.CONFIRM, '', { okButton: '改回去', cancelButton: '算了' });
+            if (!ok) return;
+            await undoAdopt(book);
+            const s = extSettings();
+            s.mvuAdoptSkip = [...new Set([...skipList(), book])];
+            c.saveSettingsDebounced?.();
+            vlog('变量', `世界书「${book}」别自动接手：改回原样，记进不再自动接手的名单`);
+            globalThis.toastr?.success?.('改回去了，这张卡以后不再自动接手', '变量');
+        }
     } catch (error) {
         globalThis.toastr?.warning?.(String(error?.message || error), '变量');
     }
     persist();
-}
-
-
-// 「变量」页里那排按钮（chat-tools.js 的弹窗把点击交给 watchAction）
-export async function watchAction(act) {
-    const book = cardBook();
-    if (act === 'adopt') await openAdopt();
-    else if (act === 'undo') {
-        const c = ctx();
-        const ok = await c.callGenericPopup(`把世界书「${book}」改回接手之前的样子？`, c.POPUP_TYPE.CONFIRM, '', { okButton: '改回去', cancelButton: '算了' });
-        if (!ok) return;
-        if (await undoAdopt(book)) {
-            vlog('变量', `世界书「${book}」撤销接手，改回原样`);
-            globalThis.toastr?.success?.('改回去了', '变量');
-        }
-        persist();
-    }
 }
 
 // 弹窗开着时有新进展就重画
@@ -421,8 +493,9 @@ export function initMvuWatch() {
     add(types.MESSAGE_RECEIVED || 'message_received', onReceived);
     add('mag_command_parsed', onCommands);
     add('mag_variable_update_ended', onEnded);
-    add(types.CHAT_CHANGED || 'chat_id_changed', () => { supportCache = { key: '', value: null }; });
+    add(types.CHAT_CHANGED || 'chat_id_changed', () => { supportCache = { key: '', value: null }; scheduleAutoAdopt(); });
     add(types.WORLDINFO_UPDATED || 'worldinfo_updated', () => { supportCache = { key: '', value: null }; });
+    if (chatId()) scheduleAutoAdopt();
 }
 
 export function cleanupMvuWatch() {
@@ -430,7 +503,8 @@ export function cleanupMvuWatch() {
     for (const [name, fn] of listeners) events?.removeListener?.(name, fn);
     listeners = [];
     clearInterval(pollTimer);
+    clearTimeout(adoptTimer);
     refreshers.clear();
 }
 
-export const __test = { classifyEntry, stripUvPlaceholder, hasUvPlaceholder, adoptHtml, applyAdopt, undoAdopt, rowText, load, noteToast, onCommands, onEnded, newRound, checkSupport, reset: () => { rounds = []; supportCache = { key: '', value: null }; } };
+export const __test = { classifyEntry, stripUvPlaceholder, hasUvPlaceholder, applyAdopt, undoAdopt, setPick, autoAdopt, tagOf, baseName, rowText, load, noteToast, onCommands, onEnded, newRound, checkSupport, reset: () => { rounds = []; supportCache = { key: '', value: null }; } };

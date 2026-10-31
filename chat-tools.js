@@ -172,9 +172,22 @@ async function openVarsPopup() {
             ? VAR_BUTTONS.map((name) => `<button type="button" class="menu_button tt-vars-act" data-name="${name}">${name}</button>`).join('')
             : '<small>这张角色卡没有变量按钮。</small>');
     const watchBox = box.querySelector('.tt-vars-watch');
-    const paintWatch = async () => { try { watchBox.innerHTML = await watchHtml(); } catch (error) { watchBox.textContent = `读不到变量记录：${error?.message || error}`; } };
+    const paintWatch = async () => {
+        // 重画时把点开的目录保持点开
+        const open = [...watchBox.querySelectorAll('details')].map((d) => d.open);
+        try { watchBox.innerHTML = await watchHtml(); } catch (error) { watchBox.textContent = `读不到变量记录：${error?.message || error}`; return; }
+        [...watchBox.querySelectorAll('details')].forEach((d, i) => { if (open[i]) d.open = true; });
+    };
     paintWatch();
     const stopWatch = onWatchChange(paintWatch);
+    // 「每条给谁看」目录：右边下拉一改就存（mvu-watch.js 的 setPick）
+    box.addEventListener('change', async (event) => {
+        const sel = event.target.closest?.('.tt-mw select[data-uid]');
+        if (!sel) return;
+        sel.disabled = true;
+        await watchAction('pick', { uid: sel.dataset.uid, pick: sel.value });
+        paintWatch();
+    });
     let popup = null;
     box.addEventListener('click', async (event) => {
         const watchAct = event.target.closest('.tt-mw-act');
