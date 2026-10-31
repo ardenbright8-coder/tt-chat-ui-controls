@@ -16,7 +16,9 @@ const ctx = () => globalThis.SillyTavern?.getContext?.();
 const OWN_WAND = ['tt-image-hub-wand'];
 // story-image.js 切了自动配图开关就发这个信号，这边重画一下名字
 const REFRESH_EVENT = 'tt-wand-refresh';
-const OWN_OPTIONS = ['option_tt_blank_opening', 'option_tt_summary_library', 'option_tt_story_summary', 'option_tt_test_log', 'option_tt_vars', 'option_tt_bottom', 'option_tt_prompts'];
+const OWN_OPTIONS = ['option_tt_blank_opening', 'option_tt_summary_library', 'option_tt_story_summary', 'option_tt_test_log', 'option_tt_vars', 'option_tt_bottom', 'option_tt_prompts', 'option_tt_more'];
+// v1.18.39 这几项收进 ≡「更多工具」那页（more-tools.js），菜单外面藏掉，功能不动
+const MORE_OPTIONS = ['option_tt_test_log', 'option_tt_vars', 'option_tt_summary_library'];
 // 别家的项用户指定的位置（2026-10-02）：这几项排最上面（从上往下）；这几项紧贴在本扩展那些上面（从上往下）。其余保持原样
 const WAND_TOP = ['inspect', 'vars', 'logs'];
 const WAND_ABOVE_OWN = ['sd', 'attach'];
@@ -63,8 +65,8 @@ const OPTION_ITEMS = [
     { key: 'impersonate', ids: ['option_impersonate'], match: ['AI帮答', 'Impersonate'], name: 'AI 帮答', desc: '让 AI 替你写一条你要说的话' },
     { key: 'continue', ids: ['option_continue'], match: ['继续', 'Continue'], name: '继续', desc: '让 AI 接着上一条往下写。底下已经有继续按钮' },
 ];
-// 用户 2026-10-04 定的：这几项默认收起来
-const DEFAULT_OPTIONS_HIDDEN = ['cfg', 'logprobs', 'checkpoint', 'close', 'regen', 'impersonate', 'continue'];
+// 用户 2026-10-04 定的：这几项默认收起来；2026-10-31 加作者注释（「完全没用过」），老设置补一次（optionsHiddenAn）
+const DEFAULT_OPTIONS_HIDDEN = ['cfg', 'logprobs', 'checkpoint', 'close', 'regen', 'impersonate', 'continue', 'an'];
 let panelTab = 'wand';
 
 let observer = null;
@@ -77,6 +79,11 @@ function settings() {
     const s = all[EXTENSION_KEY];
     if (!Array.isArray(s.wandHidden)) s.wandHidden = [...DEFAULT_HIDDEN];
     if (!Array.isArray(s.optionsHidden)) s.optionsHidden = [...DEFAULT_OPTIONS_HIDDEN];
+    if (!s.optionsHiddenAn) {
+        s.optionsHiddenAn = true;
+        if (!s.optionsHidden.includes('an')) s.optionsHidden.push('an');
+        save();
+    }
     return s;
 }
 
@@ -197,6 +204,10 @@ function apply() {
     for (const item of optionItems()) {
         const hide = optHidden.has(optionKey(item));
         if (item.classList.contains(HIDDEN_CLASS) !== hide) item.classList.toggle(HIDDEN_CLASS, hide);
+    }
+    for (const id of MORE_OPTIONS) {
+        const item = document.getElementById(id);
+        if (item && !item.classList.contains(HIDDEN_CLASS)) item.classList.add(HIDDEN_CLASS);
     }
     pinToBottom(document.querySelector('#options .options-content'), OWN_OPTIONS);
     observe();

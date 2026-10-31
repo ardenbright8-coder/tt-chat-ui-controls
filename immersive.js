@@ -6,6 +6,7 @@
 // 样子全在 style.css 的 v1.16.9 那段，这里只管开关几个 body 上的 class。
 
 import { tip } from './tip.js';
+import { vlog } from './var-log.js';
 
 const EXTENSION_KEY = 'chat-text-color';
 const SETTINGS_ID = 'tt-immersive-settings';
@@ -39,10 +40,21 @@ const input = () => document.getElementById('send_textarea');
 const drawerOpen = () => !!document.querySelector('#top-settings-holder .drawer-content.openDrawer');
 
 // 安卓上酒馆「全屏模式」开没开：问它自己的桥
+// v1.18.39 用户手机上全屏了顶上还露一截（10-31 截图），模拟器（TauriTavern 2.3.0）里是好的：
+// 全屏开关变了就记进测试日志「全屏」，看手机上认没认出全屏、顶上留了多少
+let lastFull = null;
 function checkSystemFullscreen() {
+    const bridge = globalThis.TauriTavernAndroidSystemUiBridge;
     let full = false;
-    try { full = !!globalThis.TauriTavernAndroidSystemUiBridge?.isImmersiveFullscreenEnabled?.(); } catch { /* 读不到当没开 */ }
+    try { full = !!bridge?.isImmersiveFullscreenEnabled?.(); } catch { /* 读不到当没开 */ }
     body()?.classList.toggle(SYS_FULL, full);
+    if (full === lastFull) return;
+    lastFull = full;
+    setTimeout(() => {
+        const css = getComputedStyle(document.body);
+        const top = Math.round(document.getElementById('top-bar')?.getBoundingClientRect().top ?? -1);
+        vlog('全屏', `酒馆全屏：${full ? '开' : '关'}；有没有全屏开关的桥：${bridge ? '有' : '没有'}；顶上留白 --tt-inset-top=${css.getPropertyValue('--tt-inset-top').trim() || '无'}；工具栏离屏幕顶 ${top}px；屏幕 ${screen.width}×${screen.height}，页面 ${innerWidth}×${innerHeight}；${navigator.userAgent.slice(0, 160)}`);
+    }, 400);
 }
 
 function setTop(open) {

@@ -3297,3 +3297,42 @@ body:is([data-generating="true"], [data-swiping="true"]) #chat .mes.last_mes .me
 .tt-hub .tt-hub-act { display: flex; width: 100%; box-sizing: border-box; gap: 8px; margin: 8px 0 0; padding: 10px; border-radius: 10px; justify-content: center; }
 .tt-hub .tt-hub-off { opacity: .4; }
 .tt-hub .tt-hub-off .tt-hub-card, .tt-hub .tt-hub-off .tt-hub-act { cursor: not-allowed; }
+
+/* v1.18.39 报错小点（error-dot.js）：输入框左边一个淡淡的马卡龙色小点，不占位置（浮在魔法棒右边），
+   有问题淡粉、正在更新变量淡黄，都没有就不显示。用户：「弄淡一点……马卡龙色……灰一点」 */
+#leftSendForm { position: relative; }
+#leftSendForm > #tt-error-dot {
+    position: absolute;
+    right: -14px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 22px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 2;
+}
+#leftSendForm > #tt-error-dot[hidden] { display: none; }
+#leftSendForm > #tt-error-dot > span {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #d8b4b8;
+    opacity: .55;
+}
+#leftSendForm > #tt-error-dot.tt-dot-busy > span { background: #ddd2a8; opacity: .45; }
+
+/* 报错清单 */
+.tt-err-list h3 { margin: 0 0 10px; }
+.tt-err-list .tt-err-item { border: 1px solid var(--SmartThemeBorderColor); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; text-align: left; }
+.tt-err-list .tt-err-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.tt-err-list .tt-err-count { opacity: .7; font-size: .9em; white-space: nowrap; }
+.tt-err-list .tt-err-meta { display: block; opacity: .6; margin-top: 2px; }
+.tt-err-list .tt-err-fix { margin-top: 6px; line-height: 1.45; color: #d8b4b8; }
+.tt-err-list .tt-err-raw summary { cursor: pointer; opacity: .7; margin-top: 6px; }
+.tt-err-list .tt-err-raw pre { white-space: pre-wrap; word-break: break-all; font-size: .82em; opacity: .8; margin: 6px 0 0; max-height: 40vh; overflow: auto; }
+.tt-err-list .tt-err-empty { opacity: .6; padding: 16px 0; }
+.tt-err-list .tt-err-bar { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.tt-err-list .tt-err-act { display: flex; width: 100%; box-sizing: border-box; gap: 8px; margin: 0; padding: 10px; border-radius: 10px; justify-content: center; }
