@@ -69,7 +69,7 @@ async function checkSupport() {
             const tagged = Object.values(data?.entries || {}).filter((e) => TAG.test(e.comment || ''));
             value = tagged.length
                 ? { ok: true, why: `世界书里有 ${tagged.length} 条带标签` }
-                : { ok: false, why: '这张卡世界书里没有 [mvu_update] 标签，变量由主模型自己写，额外模型不会跑' };
+                : { ok: false, why: `这张卡有变量，但世界书「${book}」里没有一条的名字写着 [mvu_update]，MVU 就当它不支持额外模型：变量由主模型自己写，额外模型不会跑` };
         } catch {
             value = { ok: false, why: `读不到世界书「${book}」` };
         }
