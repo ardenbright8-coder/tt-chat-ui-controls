@@ -3354,3 +3354,19 @@ body:is([data-generating="true"], [data-swiping="true"]) #chat .mes.last_mes .me
 .tt-mw .tt-mw-main { color: inherit; opacity: .85; }
 .tt-mw .tt-mw-row b, .tt-mw .tt-mw-row small { color: var(--SmartThemeBodyColor); }
 .tt-mw .tt-mw-empty { opacity: .6; }
+
+/* v1.18.46 「变量」页：让额外模型接手这张卡（mvu-watch.js） */
+.tt-mw .tt-mw-act { display: flex; width: 100%; box-sizing: border-box; gap: 8px; margin: 0; padding: 10px; border-radius: 10px; justify-content: center; }
+.tt-adopt { text-align: left; }
+.tt-adopt h3 { margin: 0 0 6px; }
+.tt-adopt .tt-ad-note { display: block; opacity: .75; line-height: 1.45; margin-bottom: 10px; }
+.tt-adopt .tt-ad-group { border: 1px solid var(--SmartThemeBorderColor); border-radius: 12px; padding: 8px 10px; margin-bottom: 10px; }
+.tt-adopt .tt-ad-group > b, .tt-adopt .tt-ad-group > summary { display: block; margin-bottom: 6px; cursor: pointer; }
+.tt-adopt .tt-ad-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0; border-top: 1px solid rgba(255,255,255,.06); }
+.tt-adopt .tt-ad-row > span { flex: 1; min-width: 0; word-break: break-all; line-height: 1.35; }
+.tt-adopt .tt-ad-row small { display: block; opacity: .6; font-size: .82em; }
+.tt-adopt .tt-ad-row em { font-style: normal; opacity: .55; font-size: .85em; margin-left: 6px; }
+.tt-adopt .tt-ad-row select { flex: 0 0 auto; width: auto; max-width: 46%; margin: 0; }
+.tt-adopt .tt-ad-locked { opacity: .6; font-weight: normal; white-space: nowrap; }
+.tt-adopt .tt-ad-strip { margin: 0 0 10px; align-items: flex-start; }
+.tt-adopt .tt-ad-empty { display: flex; width: 100%; box-sizing: border-box; gap: 8px; margin: 0; padding: 10px; border-radius: 10px; justify-content: center; text-align: center; line-height: 1.4; }

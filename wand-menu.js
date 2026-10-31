@@ -16,9 +16,9 @@ const ctx = () => globalThis.SillyTavern?.getContext?.();
 const OWN_WAND = ['tt-image-hub-wand'];
 // story-image.js 切了自动配图开关就发这个信号，这边重画一下名字
 const REFRESH_EVENT = 'tt-wand-refresh';
-const OWN_OPTIONS = ['option_tt_blank_opening', 'option_tt_summary_library', 'option_tt_story_summary', 'option_tt_test_log', 'option_tt_vars', 'option_tt_bottom', 'option_tt_prompts', 'option_tt_more'];
+const OWN_OPTIONS = ['option_tt_blank_opening', 'option_tt_summary_library', 'option_tt_story_summary', 'option_tt_test_log', 'option_tt_bottom', 'option_tt_prompts', 'option_tt_vars', 'option_tt_more'];
 // v1.18.39 这几项收进 ≡「更多工具」那页（more-tools.js），菜单外面藏掉，功能不动
-const MORE_OPTIONS = ['option_tt_test_log', 'option_tt_vars', 'option_tt_summary_library'];
+const MORE_OPTIONS = ['option_tt_test_log', 'option_tt_summary_library'];
 // 别家的项用户指定的位置（2026-10-02）：这几项排最上面（从上往下）；这几项紧贴在本扩展那些上面（从上往下）。其余保持原样
 const WAND_TOP = ['inspect', 'vars', 'logs'];
 const WAND_ABOVE_OWN = ['sd', 'attach'];

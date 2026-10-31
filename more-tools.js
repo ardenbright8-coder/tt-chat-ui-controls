@@ -4,7 +4,6 @@
 // 卡片点了就先关这页，再替用户点原来那一项，功能一点没改。样子跟魔法棒「出图」那页一套（.tt-hub）。
 
 import { openErrorList, errorSummary } from './error-dot.js';
-import { lastSummary } from './mvu-watch.js';
 
 const MENU_ID = 'option_tt_more';
 const ctx = () => globalThis.SillyTavern?.getContext?.();
@@ -124,7 +123,6 @@ const CARDS = [
     { key: 'mvu', icon: 'fa-microchip', name: '额外模型解析', desc: '变量用哪个模型、哪套预设来算；改接口、改预设', now: mvuSummary, open: openMvuPage },
     { key: 'errors', icon: 'fa-triangle-exclamation', name: '报错清单', desc: '后台出过的问题，能整份复制给 AI', now: errorSummary, open: openErrorList },
     { key: 'log', icon: 'fa-clipboard-list', name: '测试日志', desc: '每条消息的变量处理记录，查问题用', target: 'option_tt_test_log' },
-    { key: 'vars', icon: 'fa-sliders', name: '变量', desc: '每轮变量是谁算的、额外模型用没用；重新处理变量', now: lastSummary, target: 'option_tt_vars' },
     { key: 'library', icon: 'fa-box-archive', name: '总结库', desc: '存过的总结，换新聊天时接着用', target: 'option_tt_summary_library' },
 ];
 
@@ -168,7 +166,7 @@ function mountMenuItem() {
     if (document.getElementById(MENU_ID)) return true;
     const item = document.createElement('a');
     item.id = MENU_ID;
-    item.title = '报错清单、测试日志、变量、总结库';
+    item.title = '报错清单、测试日志、总结库';
     item.innerHTML = '<i class="fa-lg fa-solid fa-toolbox"></i><span>更多工具</span>';
     item.addEventListener('click', (event) => {
         event.preventDefault();

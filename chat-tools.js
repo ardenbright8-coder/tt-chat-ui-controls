@@ -10,7 +10,7 @@
 import { tip } from './tip.js';
 import { vlog } from './var-log.js';
 import { openPromptBook } from './text-editor.js';
-import { watchHtml, onWatchChange } from './mvu-watch.js';
+import { watchHtml, onWatchChange, watchAction } from './mvu-watch.js';
 
 const EXTENSION_KEY = 'chat-text-color';
 const SETTINGS_ID = 'tt-chat-tools-settings';
@@ -176,7 +176,9 @@ async function openVarsPopup() {
     paintWatch();
     const stopWatch = onWatchChange(paintWatch);
     let popup = null;
-    box.addEventListener('click', (event) => {
+    box.addEventListener('click', async (event) => {
+        const watchAct = event.target.closest('.tt-mw-act');
+        if (watchAct) { await watchAction(watchAct.dataset.act); paintWatch(); return; }
         const act = event.target.closest('.tt-vars-act');
         if (!act) return;
         const target = varButtons().find((b) => (b.textContent || '').trim() === act.dataset.name);
@@ -225,12 +227,12 @@ function mountMenuItem() {
         });
         list.append(item);
     }
-    const existing = document.getElementById(MENU_ID);
-    if (!settings().varsInMenu) { existing?.remove(); return true; }
-    if (existing) return true;
+    // v1.18.46 「变量」放回 ≡ 第一层、一直在（用户 10-31：「把这个变量这块单独摘出来，放到那个一级目录里边」）；
+    // varsInMenu 只管藏不藏输入框上面那排大按钮
+    if (document.getElementById(MENU_ID)) return true;
     const item = document.createElement('a');
     item.id = MENU_ID;
-    item.title = '重新处理变量、重新读取初始变量';
+    item.title = '变量是谁算的、让额外模型接手、重新处理变量';
     item.innerHTML = '<i class="fa-lg fa-solid fa-sliders"></i><span>变量</span>';
     item.addEventListener('click', (event) => {
         event.preventDefault();
