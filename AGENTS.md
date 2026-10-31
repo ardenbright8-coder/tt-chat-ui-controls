@@ -100,6 +100,8 @@
 
 **≡「更多工具」**（v1.18.39，`more-tools.js`）：测试日志、变量、总结库三项原菜单项还在，`wand-menu.js` 的 `MORE_OPTIONS` 藏掉；「更多工具」一页卡片（跟「出图」同一套 `.tt-hub`），点卡先关这页再替用户点原来那一项。外面留：转换为群聊、开始新聊天、管理聊天文件、删除消息、写法说明、到最底下、总结全文、空白开局。作者注释加进默认收起（老设置补一次，`optionsHiddenAn`），用户：「作者注释完全没用过」。v1.18.40 最前面加「额外模型解析」（MVU 的变量模型设置）：三层 = 更多工具 → 额外模型解析（`openMvuPage`）→ 改接口 / 改预设，第三层只指路：开扩展页、展开「MVU 变量框架」抽屉、打开「模型来源」那个 details，滚到那一块、加 `tt-mvu-flash` 框亮 2.5 秒。「模型来源」框里那个「与插头相同 / 自定义 / 更多」下拉之前的 `.mvu-field` 算预设，下拉和它后面的算接口（`mvuParts`）。用户在「自己做一页卡片替 MVU 改开关」和「只指路」里挑了只指路：「咱稳稳健点……功能稳最要紧」，别改成替 MVU 写设置。卡上的现状是从 MVU 页面上的下拉读出来的，MVU 改了页面结构就会读不到（只显示空，不会改坏东西）。
 
+**OpenCode 会话标记补丁**（v1.18.41，`opencode-session.js`，用户 2026-10-31：Command Code 到期，MVU 额外模型「先用 Open Code 吧，凑合凑合」）：OpenCode 2026-09 起每个请求要带 `x-opencode-session`，不带回 400 `MissingSessionID`。MVU「自定义」填不了请求头；酒馆助手（`applyCustomApiOverrides`）还会把它发成 `openai` 来源 + `reverse_proxy`，额外请求头整个丢掉（10-31 截请求实测）；MVU「更多」要酒馆后台的 CORS 转发，TauriTavern 没实现。所以包 `window.fetch`，只改 `/api/backends/chat-completions/generate` 里目标是 opencode.ai 的：custom 来源补请求头；openai + reverse_proxy 改成 custom 来源、钥匙放进 Authorization 再补标记。标记每次打开酒馆生成一个，存 sessionStorage。模拟器实测：MVU 用 `deepseek-v4.1-flash` 约 19 秒算出 5 条更新。另外：MVU 只对世界书里有 `[mvu_update]` / `[mvu_plot]` 条目的卡走额外模型，别的卡退回「随 AI 输出」。
+
 ## 🚨 面板统一规矩（2026-10-02 定，本扩展所有面板、弹窗都照这个）
 
 - **说明收进 ⓘ**：面板上不整段摆说明小字。名字后面放 `tip.js` 的 `tip('说明')`，点一下在那一行下面弹小气泡。ⓘ 放在 label 后面同一行（外面包 `.tt-tip-row`），别塞进 `<label class="checkbox_label">` 里。只有「没配好就用不了」这种必须马上看见的才直接显示（比如没模型可选）。用户：「如果都放一个面板里边，那面板都炸了」。

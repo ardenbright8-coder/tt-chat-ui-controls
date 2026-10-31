@@ -18,6 +18,7 @@ import { initChatTools, cleanupChatTools } from './chat-tools.js';
 import { initFormatFix, cleanupFormatFix } from './format-fix.js';
 import { initErrorDot, cleanupErrorDot } from './error-dot.js';
 import { initMoreTools, cleanupMoreTools } from './more-tools.js';
+import { initOpencodeSession, cleanupOpencodeSession } from './opencode-session.js';
 
 const EXTENSION_KEY = 'chat-text-color';
 
@@ -832,6 +833,7 @@ export async function init() {
     initFormatFix();
     initErrorDot();
     initMoreTools();
+    initOpencodeSession();
     if (initialized) {
         mountUi();
         return;
@@ -865,6 +867,7 @@ export async function cleanup() {
     cleanupFormatFix();
     cleanupErrorDot();
     cleanupMoreTools();
+    cleanupOpencodeSession();
     cleanupVarLog();
     cleanupContextLock();
     cleanupPromptDetachGuard();
